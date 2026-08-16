@@ -26,9 +26,21 @@ var services = new CoLocatedService[]
 return await CoLocatedHost.RunAsync(
     "hot-path",
     services,
-    // Container 6 exposes NO ports — the spec's table says "None (internal consumers only)". These
-    // are loopback-only so `/health/ready` is still reachable from inside the container, which is
-    // what the compose healthcheck curls; nothing outside can route to them.
+    // Container 6 publishes NO HOST ports — the spec's table says "None (internal consumers only)"
+    // and the compose file still declares no `ports:`. Loopback is right for the three consumers:
+    // `/health/ready` stays reachable from inside the container, which is what the healthcheck
+    // curls, and nothing outside can route to them.
     firstPort: 5200,
     bindAddress: "127.0.0.1",
-    args);
+    args,
+    // Δ C126 — EXCEPT fleet-health-svc, which is not a consumer: it serves
+    // `GET /v1/fleets/{fleetId}/health` (US-3.13, C044) and the gateway reaches it from ANOTHER
+    // container. gateway-routes.json has named `http://hot-path:5000/` all along and says why in
+    // as many words; binding it to 127.0.0.1 made that address unreachable, so the route answered
+    // 503 on every deployment until C126's live contract sweep asked it. 5000 rather than its
+    // positional 5202 so that the gateway's default is simply correct and the replica needs no
+    // override — one number in one place instead of the three different ones that were in flight.
+    published: new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["fleet-health-svc"] = "http://0.0.0.0:5000",
+    });

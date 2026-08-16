@@ -303,6 +303,38 @@
         "Metadata": { "RateLimit": "admin" }
       },
 
+      "iam-jwks": {
+        "ClusterId": "iam-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/.well-known/jwks.json" },
+        "//": [
+          "Δ C126. The public half of the RS256 signing key (D-29, D-21), which EVERY service fetches",
+          "to validate a bearer — and which nothing could reach before this route existed.",
+          "",
+          "In the Kubernetes layout each service is a pod and `http://iam-svc/.well-known/jwks.json`",
+          "resolves. In BOTH compose stacks iam-svc is one of 22 services co-located inside",
+          "app-services and CoLocatedHost binds it on 127.0.0.1, so the only cross-container HTTP",
+          "surface that container has is this gateway. env/.env.common.example asked for",
+          "`/v1/internal/iam/.well-known/jwks.json`, which is refused ahead of routing by",
+          "BlockedPathMiddleware and was never a route here: every JWT-validating service therefore",
+          "answered 500 to every authenticated request, in dev as much as on the replica. Nothing had",
+          "noticed because the fetch happens on the first request that carries a token, not at",
+          "readiness — and the smoke suite asserts 401s, which need no key.",
+          "",
+          "PATH REWRITE, and the /v1 prefix is why: RouteConfigurationTests holds the edge to",
+          "/v1, /public and /hubs, while the endpoint iam-svc actually serves (and that the JWKS",
+          "specification expects) is at the root. The gateway is the right place for that difference.",
+          "",
+          "VersionGate exempt: a service fetching a key sends none of D-31's client headers, and a 426",
+          "here would break authentication platform-wide rather than ask anybody to upgrade."
+        ],
+        "Metadata": {
+          "RateLimit": "default",
+          "VersionGate": "exempt"
+        },
+        "Transforms": [ { "PathSet": "/.well-known/jwks.json" } ]
+      },
       "iam-auth": {
         "ClusterId": "iam-svc",
         "Order": 50,

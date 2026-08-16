@@ -68,14 +68,15 @@ public static class CoLocatedHost
         IReadOnlyList<CoLocatedService> services,
         int firstPort,
         string bindAddress,
-        string[] args)
+        string[] args,
+        IReadOnlyDictionary<string, string>? published = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(container);
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(args);
 
         var started = new List<WebApplication>(services.Count);
-        var addresses = Addresses(services, firstPort, bindAddress);
+        var addresses = Addresses(services, firstPort, bindAddress, published);
 
         try
         {
@@ -149,8 +150,30 @@ public static class CoLocatedHost
     /// Public because Container 7's host needs the same map to point the gateway's clusters at, and
     /// computing it twice from the same rule is how the two would drift.
     /// </remarks>
+    /// <param name="published">
+    /// Δ C126 — the services another CONTAINER has to reach, mapped to the address they take instead.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// <b>Why an override rather than one bindAddress for the container.</b> "Publishes no host port"
+    /// and "binds loopback" were treated as the same thing, and they are not: `hot-path` correctly
+    /// declares no <c>ports:</c>, and fleet-health-svc still has to answer the gateway over the
+    /// compose network (US-3.13). `gateway-routes.json` has said so all along — "the gateway reaches
+    /// it over the compose network, which is why `hot-path` still declares no `ports:`" — while the
+    /// host bound every service to 127.0.0.1, so <c>GET /v1/fleets/{fleetId}/health</c> answered 503
+    /// on every deployment there has ever been. Found by C126's live contract sweep.
+    /// </para>
+    /// <para>
+    /// One service is opened rather than the container, so mqtt-bridge, position-processor and
+    /// persistence-writer stay loopback-only and the spec's "None (internal consumers only)" row
+    /// remains true of everything it is true of.
+    /// </para>
+    /// </remarks>
     public static Dictionary<string, string> Addresses(
-        IReadOnlyList<CoLocatedService> services, int firstPort, string bindAddress)
+        IReadOnlyList<CoLocatedService> services,
+        int firstPort,
+        string bindAddress,
+        IReadOnlyDictionary<string, string>? published = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -158,11 +181,15 @@ public static class CoLocatedHost
 
         for (var index = 0; index < services.Count; index++)
         {
-            map[services[index].Name] = string.Format(
-                CultureInfo.InvariantCulture,
-                "http://{0}:{1}",
-                bindAddress,
-                firstPort + index);
+            var name = services[index].Name;
+
+            map[name] = published is not null && published.TryGetValue(name, out var address)
+                ? address
+                : string.Format(
+                    CultureInfo.InvariantCulture,
+                    "http://{0}:{1}",
+                    bindAddress,
+                    firstPort + index);
         }
 
         return map;

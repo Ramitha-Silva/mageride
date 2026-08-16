@@ -19,6 +19,29 @@ name: ci
 on:
   push:
     branches: [main]
+    # THE LOOP GUARD. Without it, delivery feeds itself:
+    #
+    #   push to main -> ci -> cd -> images -> deploy.yml writes `sha-<7>` into
+    #   overlays/<env>/images/ and PUSHES THAT COMMIT TO MAIN -> ci -> cd -> ...
+    #
+    # and it does not converge, because the tag is `sha-${SHA::7}` of the commit being
+    # delivered: every cycle has a new sha, so a new tag, so a real diff, so another commit.
+    # deploy.yml's "already at $TAG; ArgoCD has nothing to do" early-exit never fires, and
+    # each iteration builds and pushes 34 images. cd runs dev AND staging, so it is
+    # potentially two promotion commits per turn, and cd's concurrency group is
+    # `cancel-in-progress: false` — runs queue rather than cancel, so stopping it means
+    # disabling a workflow rather than cancelling a run.
+    #
+    # A promotion commit touches nothing but these files, so it skips ci and the chain
+    # stops. `paths-ignore` only skips when EVERY changed path matches, so an ordinary
+    # commit that happens to touch an image list as well as code still runs in full.
+    #
+    # This never fired before 2026-08-14 for the same reason C124's TRUNCATE false positive
+    # never fired: cd had never once got past its own gate — GitHub Actions billing killed
+    # the 2026-08-12 runs, and before and after that ci on main was red, so the gate
+    # correctly declined every time.
+    paths-ignore:
+      - infra/k8s/overlays/*/images/**
   pull_request:
   workflow_dispatch:
     inputs:
@@ -184,9 +207,81 @@ jobs:
             tesseract-ocr libgtk-3-0t64 libatomic1 opencv-data
           tesseract --version
 
+      # A GitHub-hosted runner ships with tens of gigabytes of preinstalled toolchains, and this
+      # leg uses almost none of them. The backend test run needs ~5 GB of container images —
+      # timescaledb-ha:pg16 alone is 3.4 GB — plus a Release build of the whole solution, and
+      # without this the runner FILLS UP:
+      #
+      #   System.IO.IOException: No space left on device :
+      #     '/home/runner/actions-runner/cached/2.336.0/_diag/Worker_….log'
+      #
+      # That is the runner process dying while writing its own diagnostic log, which is why the
+      # job that hit it had no step logs at all — there was no space to write the log that would
+      # have said why. The run before it failed with `No such image:
+      # timescale/timescaledb-ha:pg16`, which was the same shortage wearing a different mask: a
+      # 3.4 GB pull onto a nearly-full disk fails partway, and the daemon then truthfully reports
+      # the image as absent.
+      #
+      # /usr/share/dotnet is NOT in this list and must not be — DOTNET_ROOT points at it and
+      # actions/setup-dotnet installs there. Everything below belongs to a language this leg does
+      # not build: the Android SDK is the android leg's and runs on its own runner.
+      - name: backend — reclaim runner disk
+        if: matrix.target == 'backend'
+        run: |
+          set -uo pipefail
+          echo "--- before ---"; df -h /
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/share/swift \
+            /usr/local/share/powershell
+          echo "--- after ---"; df -h /
+
       - name: backend — restore and build
         if: matrix.target == 'backend'
         run: dotnet build backend/MageRide.sln -c Release
+
+      # Pull the fixtures' images HERE rather than letting Testcontainers do it inline, for two
+      # reasons that are both about what the failure looks like.
+      #
+      # Testcontainers pulls on first use and, when the pull yields nothing, the daemon answers
+      # the *create* call — so the error is `No such image: timescale/timescaledb-ha:pg16` and
+      # the reason the pull failed is nowhere in the log. That is what took 136 tests down on
+      # PR #1: every collection fixture that needs Postgres, one indistinguishable message, and
+      # no way to tell throttling from a disk that filled. Pulling in its own step puts the
+      # daemon's own words on the screen.
+      #
+      # And it retries. timescaledb-ha:pg16 is ~3.4 GB and these are anonymous Docker Hub pulls
+      # from a shared runner address, which is exactly the shape of a transient 429.
+      #
+      # The list is `MageRide.TestKit/*Fixture.cs`, and it has to stay that way — a fixture
+      # whose image is missing from here still works, just without the retry and the clear
+      # error, which is the failure this step exists to prevent.
+      - name: backend — pre-pull the test fixtures' images
+        if: matrix.target == 'backend'
+        run: |
+          set -uo pipefail
+          images="timescale/timescaledb-ha:pg16 redis:7-alpine redpandadata/redpanda:v24.2.26 emqx/emqx:5.8 minio/minio:latest"
+          df -h / | tail -1
+          for image in $images; do
+            for attempt in 1 2 3; do
+              if docker pull --quiet "$image"; then
+                echo "::notice::pulled $image"
+                break
+              fi
+              if [ "$attempt" = "3" ]; then
+                echo "::error::could not pull $image after 3 attempts — the integration tests cannot run"
+                exit 1
+              fi
+              echo "attempt $attempt failed, retrying in 30s"
+              sleep 30
+            done
+          done
+          echo "--- disk and images after pulling ---"
+          df -h / | tail -1
+          docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}'
 
       - name: backend — test
         if: matrix.target == 'backend'

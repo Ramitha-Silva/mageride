@@ -1,0 +1,148 @@
+# =====================================================================================
+# ingress-nginx — the HTTP edge (C132). Helm values, production.
+#
+#   helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+#     --namespace ingress-nginx --create-namespace --version 4.11.3 \
+#     -f infra/k8s/platform/ingress-nginx/values.production.yaml
+#
+# This is a CLUSTER PREREQUISITE, not a MageRide workload — infra/k8s/CLAUDE.md: "Helm installs
+# the cluster prerequisites only". It is here because it is the thing D7' §8's launch row calls
+# "HAProxy + Keepalived", and the substitution needs an argument rather than a silence.
+#
+# =====================================================================================
+# WHY THERE IS NO KEEPALIVED, AND WHY THAT IS NOT A GAP
+# =====================================================================================
+# Keepalived is VRRP. VRRP works by two hosts on ONE LAYER-2 SEGMENT exchanging multicast
+# advertisements and moving a floating IP with a gratuitous ARP when the master stops sending
+# them. DOKS gives a pod none of the three: worker nodes are in a VPC with no L2 adjacency
+# between pods, multicast is not delivered, and a DigitalOcean Reserved IP is moved by an API
+# call, not by ARP. A Keepalived container on DOKS would start, elect itself master, advertise
+# to nobody, and fail over nothing — which is worse than not deploying it, because the failure
+# mode is a config that looks like HA and is not.
+#
+# The FUNCTION Keepalived provides — "the edge address survives the loss of the node serving
+# it" — is provided here by the DigitalOcean load balancer, which health-checks both controller
+# replicas and takes an unhealthy one out. ADD §10.5's own table already says this is the
+# intended progression:
+#
+#   MVP (1 VPS)        HAProxy on host, Keepalived VRRP with a spare VPS
+#   Pilot (3-10 nodes) HAProxy containers + Keepalived, Cloudflare for TLS offload
+#   Scale (K8s)        **Envoy / NGINX Ingress + cloud NLB** for MQTT (TCP passthrough)
+#
+# D7' §8's launch row was written from `stories.txt`'s two-VPS topology and predates the
+# 2026-07-05 decision to run production on DOKS. Recorded as a deviation with this argument in
+# docs/production/readiness-report.md §3.1; the row it deviates from is D7' §8's, and a
+# micro-change-set against it is raised in the C132 handoff.
+#
+# The parts of HAProxy's job that are NOT HTTP — MQTT 8883/8084 and the four tracker protocol
+# ports — do not pass through here at all. They are their own L4 Services in
+# overlays/production/loadbalancers.yaml, which is the same fence infra/CLAUDE.md draws for the
+# compose stack: "MQTT (8883) is TCP passthrough at HAProxy and is never routed through the API
+# gateway."
+# =====================================================================================
+
+controller:
+  # Two, as `stories.txt` §production has two HAProxy containers. One is a single point of
+  # failure for every HTTP request the platform serves; three costs a node's worth of headroom
+  # for no additional survivability at this node count.
+  replicaCount: 2
+
+  # Required, not preferred: two controller pods on one node means a node drain takes the whole
+  # HTTP edge, and DOKS drains a node on every patch upgrade.
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+              app.kubernetes.io/component: controller
+          topologyKey: kubernetes.io/hostname
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  service:
+    type: LoadBalancer
+    # `Local` is what makes the CLIENT'S address reach the gateway. With `Cluster`, a node that
+    # receives a connection may forward it to a pod on another node and SNATs it on the way, so
+    # every request arrives from a node IP — and the gateway's per-caller rate limits
+    # (C127-02's remediation) would bucket the whole internet together. See the note on
+    # `Gateway__ForwardedHeaders__*` in base/config/service-endpoints.yaml; this setting and
+    # that one are two halves of one control.
+    externalTrafficPolicy: Local
+    annotations:
+      service.beta.kubernetes.io/do-loadbalancer-name: mageride-production-http
+      # TCP and NOT https: TLS is terminated by ingress-nginx with the certificate cert-manager
+      # issued for api.mageride.lk (overlays/production/kustomization.yaml adds the
+      # `letsencrypt-prod-dns` issuer annotation). A load balancer that terminated TLS itself
+      # would need its own copy of the certificate and would break the ACME HTTP-01 path.
+      service.beta.kubernetes.io/do-loadbalancer-protocol: tcp
+      service.beta.kubernetes.io/do-loadbalancer-tls-passthrough: "true"
+      service.beta.kubernetes.io/do-loadbalancer-healthcheck-protocol: http
+      service.beta.kubernetes.io/do-loadbalancer-healthcheck-port: "10254"
+      service.beta.kubernetes.io/do-loadbalancer-healthcheck-path: /healthz
+      # PROXY protocol is OFF, matching loadbalancers.yaml's fence and for the same reason: a
+      # listener that is not expecting the header reads it as the first bytes of the request.
+      # Turning it on is TWO changes made together — this annotation and
+      # `config.use-proxy-protocol` below — and `externalTrafficPolicy: Local` already
+      # preserves the source address without it.
+      service.beta.kubernetes.io/do-loadbalancer-enable-proxy-protocol: "false"
+
+  config:
+    # THE OTHER HALF OF THE RATE-LIMIT CONTROL. `false` makes nginx SET X-Forwarded-For to the
+    # real remote address; `true` would make it APPEND to whatever the client sent, and a
+    # client that sends its own header could then choose which rate-limit bucket it lands in.
+    # The gateway trusts this header from any private address (service-endpoints.yaml), so the
+    # value it receives has to be one nginx produced.
+    use-forwarded-headers: "false"
+    use-proxy-protocol: "false"
+
+    # A SignalR hub carries nothing between position updates. D7' §5's Ingress annotation sets
+    # this per-Ingress for /hubs and `check_fences.py` asserts it; this is the controller-wide
+    # floor so that a new Ingress cannot be quietly worse.
+    proxy-read-timeout: "60"
+    proxy-send-timeout: "60"
+    # Driver documents and OCR uploads (D-36). The default 1m rejects a phone photo.
+    proxy-body-size: "20m"
+
+    # Real client addresses in the access log, which is what makes an incident traceable back
+    # to a caller rather than to the load balancer.
+    log-format-escape-json: "true"
+    enable-real-ip: "true"
+
+    # HSTS and modern TLS only. The apps pin nothing, so the browser surface (three portals) is
+    # what this protects.
+    hsts: "true"
+    hsts-max-age: "31536000"
+    ssl-protocols: "TLSv1.2 TLSv1.3"
+
+    # A worker that is being drained has 300 s to finish in-flight requests. Longer than the
+    # 60 s proxy timeout so a rolling upgrade never cuts a request that had time left.
+    worker-shutdown-timeout: "300s"
+
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: "1", memory: 512Mi }
+
+  metrics:
+    enabled: true
+    serviceMonitor:
+      # Off until Prometheus is in this cluster. C119 built the stack for the compose project
+      # and `Otel__Endpoint` is empty in every overlay for the same reason; turning this on
+      # against a Prometheus that does not exist creates a ServiceMonitor nothing reads.
+      enabled: false
+
+  # ingress-nginx watches every namespace by default. MageRide's three Ingresses are all in
+  # `mageride`, and scoping the watch means a future namespace cannot publish a route to
+  # api.mageride.lk by creating an Ingress in it.
+  scope:
+    enabled: true
+    namespace: mageride
+
+# The controller only serves Ingresses that name this class. `default: false` on purpose: an
+# Ingress with no class should fail to be served and be noticed, not be picked up silently.
+ingressClassResource:
+  name: nginx
+  enabled: true
+  default: false

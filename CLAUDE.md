@@ -29,6 +29,24 @@
   (scheduled). Never cross this boundary.
 - **Outbox pattern for all cross-service events.** No direct HTTP calls between services for state
   changes — use the transactional outbox (D6' §2.4).
+- **Geocoding is query-svc's, and the key is `Query__NominatimBaseUrl`.** The self-hosted Nominatim is
+  reached by `Query.Api/Geo/NominatimClient.cs` (registered as `IGeocoder`) behind
+  `GET /v1/geo/search` and `GET /v1/geo/reverse`, configured by `QueryOptions` reading
+  `Query:NominatimBaseUrl`.
+  - **`Transit__NominatimBaseUrl` does not exist in the code. Never create it.** C125 wired it and the
+    geocoder was deployed with nothing pointed at it: `/v1/geo/reverse` kept answering 503 and
+    `/v1/geo/search` kept falling back to the caller's saved and recent places — which `QueryOptions`'
+    own remarks describe as looking like a working search box with a thin index.
+  - **transit-svc's `/v1/geo/parse-maps-link` is a different thing and touches no geocoder.** It
+    resolves a short Google-Maps URL to a lat/lng (AL-20). It shares the `/v1/geo` prefix with
+    query-svc's two routes, which is exactly how the mistake above was made.
+  - **No Google Places fallback, ever** (D3' map hard rule, D-14). Unset means degrade and say so —
+    `/v1/geo/reverse` answers 503 and search falls back to saved/recent, announced at start-up.
+  - `infra/env/.env.app.example` sets `http://nominatim:8080/` — a CONTAINER hostname, right for a
+    stack that has nominatim in it (DOKS).
+  - **The lightweight replica must override it to `http://45.77.37.208:8080`** — a bare IP, no domain
+    name, because that geocoder is on its own VPS and `nominatim` does not resolve from the replica.
+    `infra/replica/nominatim/deploy-nominatim.sh` writes it into `.env.replica`.
 
 ## Build Manifest
 - The build plan lives in `build/manifest.yaml` — **133 components, waves 0–6**.

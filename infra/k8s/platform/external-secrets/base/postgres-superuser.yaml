@@ -11,9 +11,25 @@
 # --- Why the superuser at all ---------------------------------------------------------
 # Migration 1804 needs CREATEROLE and `COMMENT ON ROLE` needs superuser, so the migration
 # runner cannot be de-privileged without splitting that script out (C006 handoff). The
-# services then inherit it, which is more privilege than any of them uses. Narrowing it is a
-# real task and it is C132's, in the same change that points migrations at a managed or
-# Patroni-managed instance.
+# services then inherit it, which is more privilege than any of them uses.
+#
+# THAT INHERITANCE IS C127-01, A HIGH FINDING, AND IT IS STILL OPEN. `audit.events` is
+# mutable by the credential that appends to it and every RLS policy is inert under a
+# superuser. Migration 2001 has already created `mageride_app`, `mageride_migrate` and
+# `mageride_readonly` as NOLOGIN group roles; what is left is a deployment-time cutover —
+# a login role per environment, its password in Vault, `Username=mageride_app` in
+# `common-secret`'s template, and PgBouncer's `AUTH_USER`. The procedure is
+# docs/runbooks/database-roles.md §3 and it is item 4 of docs/production/go-live-checklist.md,
+# due BEFORE THE FIRST PRODUCTION WRITE. It is not performed here because a half-applied
+# credential change is how a platform ends up with half its services unable to connect, and
+# there is no production cluster to apply it to yet.
+#
+# --- The two roles Patroni creates at bootstrap ----------------------------------------
+# `replicator` streams WAL to the replicas; `rewind` is what lets a demoted primary rejoin
+# with pg_rewind instead of a full basebackup. Both are Patroni's own
+# (PATRONI_REPLICATION_*/PATRONI_REWIND_*), both are created when the cluster is initialised,
+# and both live here rather than in Vault under another name because rotating them is the
+# same operation as rotating the superuser: write Vault, roll the StatefulSet.
 # =====================================================================================
 ---
 apiVersion: external-secrets.io/v1
@@ -40,3 +56,7 @@ spec:
   data:
     - secretKey: password
       remoteRef: { key: common, property: postgres_superuser_password }
+    - secretKey: replication-password
+      remoteRef: { key: common, property: postgres_replication_password }
+    - secretKey: rewind-password
+      remoteRef: { key: common, property: postgres_rewind_password }

@@ -8,13 +8,22 @@ namespace MageRide.ApiGateway.Tests.Infrastructure;
 /// <param name="Cluster">The YARP cluster that must serve it, derived from <paramref name="Service"/>.</param>
 /// <param name="Template">Path as the contract spells it, with <c>{param}</c> placeholders.</param>
 /// <param name="RequiresAttestation">The operation declares the D-30 <c>X-Attestation</c> parameter.</param>
+/// <param name="IsInternalPlane">
+/// D3' §0's service-to-service plane, which the edge must refuse (Δ C127) — by <b>either</b> signal:
+/// the operation declares <c>security: [{ mtls: [] }]</c>, or it carries the
+/// <c>/v1/internal</c> prefix. Both are needed because neither is complete: three mTLS operations
+/// are outside the prefix, and twelve operations under the prefix declare no <c>security</c> block
+/// at all. Requiring both signals would publish the first three; requiring only the declaration
+/// would publish the other twelve.
+/// </param>
 internal sealed record ContractOperation(
     string Service,
     string Cluster,
     string Template,
     string Method,
     string OperationId,
-    bool RequiresAttestation)
+    bool RequiresAttestation,
+    bool IsInternalPlane)
 {
     /// <summary>A concrete path the gateway can be asked to route.</summary>
     public string ConcretePath => ContractCatalog.TemplateParameter().Replace(Template, "01JZZZZZZZZZZZZZZZZZZZZZZZ");
@@ -39,7 +48,17 @@ internal static partial class ContractCatalog
         ["version-check"] = null,
     };
 
-    /// <summary>Contracts whose paths the gateway must not forward (mTLS-only, D3' §0).</summary>
+    /// <summary>
+    /// The prefix D3' §0's service-to-service plane conventionally uses.
+    /// </summary>
+    /// <remarks>
+    /// <b>It is a convention, not the definition</b> — see <see cref="ContractOperation.IsInternalPlane"/>.
+    /// Until C127 this was what the gateway's blocked-path list and this catalog both keyed on, and
+    /// three operations that declare <c>security: [{ mtls: [] }]</c> without carrying the prefix
+    /// were therefore published to the internet: <c>POST /v1/fare/calculate</c>,
+    /// <c>GET /v1/content/templates/{key}</c> and <c>GET /v1/users/lookup</c>. The contract is the
+    /// normative statement of which plane an operation is on, so that is what is read now.
+    /// </remarks>
     public const string InternalPrefix = "/v1/internal/";
 
     private static readonly Lazy<IReadOnlyList<ContractOperation>> Cache = new(Load);
@@ -113,7 +132,9 @@ internal static partial class ContractCatalog
                         pathKey.ToString()!,
                         method.ToUpperInvariant(),
                         operation.TryGetValue("operationId", out var id) ? id.ToString()! : "(none)",
-                        DeclaresAttestation(operation)));
+                        DeclaresAttestation(operation),
+                        DeclaresMutualTls(operation)
+                        || pathKey.ToString()!.StartsWith(InternalPrefix, StringComparison.Ordinal)));
                 }
             }
         }
@@ -123,6 +144,22 @@ internal static partial class ContractCatalog
 
     private static bool IsHttpMethod(string value) =>
         value is "get" or "post" or "put" or "patch" or "delete" or "head" or "options";
+
+    /// <summary>
+    /// Whether the operation puts itself on the mTLS service-to-service plane (Δ C127).
+    /// </summary>
+    /// <remarks>
+    /// <c>security: [{ mtls: [] }]</c>. Read as "any of the declared schemes is <c>mtls</c>" rather
+    /// than "the only one is": an operation offering mTLS <em>or</em> a bearer is one a user can
+    /// legitimately reach, and none exists today — but the day one does, publishing it is correct
+    /// and this must not refuse it.
+    /// </remarks>
+    private static bool DeclaresMutualTls(Dictionary<object, object> operation) =>
+        operation.TryGetValue("security", out var node)
+        && node is List<object> schemes
+        && schemes.Count > 0
+        && schemes.OfType<Dictionary<object, object>>()
+            .All(static scheme => scheme.Keys.Any(static key => key.ToString() == "mtls"));
 
     private static bool DeclaresAttestation(Dictionary<object, object> operation) =>
         operation.TryGetValue("parameters", out var node)

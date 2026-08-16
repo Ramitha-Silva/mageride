@@ -1,0 +1,41 @@
+# =====================================================================================
+# postgres_exporter custom queries (C132).
+#
+# `quay.io/prometheuscommunity/postgres-exporter:v0.16.0` ships collectors for bgwriter,
+# databases, replication, locks and the rest — and NONE for `pg_stat_archiver`. So the two
+# alerts that watch the RPO (`PostgresWalArchiveFailing`, `PostgresWalArchiveStalled` in
+# rules/alerts.capacity.yml) have no series to evaluate against until this file is mounted.
+#
+# That is the whole reason it exists. WAL archiving is the control whose failure produces no
+# other symptom: the platform is fast, healthy and fully available, and the backup quietly
+# stops being able to recover anything after the last successful push. It cannot be the one
+# thing nobody is scraping.
+#
+# Wired in infra/observability/docker-compose.yml as PG_EXPORTER_EXTEND_QUERY_PATH.
+# =====================================================================================
+
+pg_stat_archiver:
+  query: |
+    SELECT
+      archived_count,
+      failed_count,
+      -- NULL until the first segment is archived, which is a real state on a cluster that has
+      -- just been built. -1 rather than 0: 0 would read as "archived a moment ago" and would
+      -- make the stalled alert silent for exactly as long as archiving has never worked.
+      COALESCE(EXTRACT(EPOCH FROM (now() - last_archived_time)), -1) AS seconds_since_last_archive,
+      COALESCE(EXTRACT(EPOCH FROM (now() - last_failed_time)), -1) AS seconds_since_last_failure
+    FROM pg_stat_archiver
+  master: true
+  metrics:
+    - archived_count:
+        usage: "COUNTER"
+        description: "WAL segments successfully archived since the last stats reset"
+    - failed_count:
+        usage: "COUNTER"
+        description: "Failed attempts to archive a WAL segment"
+    - seconds_since_last_archive:
+        usage: "GAUGE"
+        description: "Age of the last successfully archived WAL segment, -1 if none ever was"
+    - seconds_since_last_failure:
+        usage: "GAUGE"
+        description: "Age of the last archive failure, -1 if there has never been one"

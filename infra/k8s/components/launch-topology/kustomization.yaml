@@ -1,0 +1,82 @@
+# =====================================================================================
+# D7' §8's launch topology, the part of it that is Kubernetes (C132).
+#
+#   "EMQX 2-node, Redpanda 3-node RF=3, Redis Sentinel, Postgres Patroni 1P+2R + PgBouncer,
+#    HAProxy+Keepalived; LiveKit+coturn pinned SGP"
+#
+# Four of those seven are replica counts and configuration and were already set by the
+# production overlay (EMQX, Redpanda, PgBouncer, and the topic Job's RF=3). This component is
+# the two that are different software:
+#
+#   postgres-patroni.yaml   Patroni 1 primary + 2 replicas, Kubernetes as the DCS, pgBackRest
+#                           archiving to Wasabi
+#   redis-sentinel.yaml     3 Redis nodes each with a sentinel sidecar, quorum 2
+#
+# The remaining two are NOT here and each is deliberate:
+#
+#   HAProxy + Keepalived    Keepalived is VRRP, and VRRP needs two hosts on one L2 segment
+#                           passing multicast to move a floating IP by gratuitous ARP. DOKS
+#                           gives a pod neither. ADD §10.5's own table already answers this —
+#                           at the "Scale (K8s)" row the edge is "Envoy / NGINX Ingress + cloud
+#                           NLB", which is what platform/ingress-nginx/values.production.yaml
+#                           configures and what overlays/production/loadbalancers.yaml already
+#                           does for the L4 planes. Recorded as a deviation, with the argument,
+#                           in docs/production/readiness-report.md §3.1.
+#
+#   LiveKit + coturn        Host UDP (D6' §6): a relay needs 1,200 ports reachable as
+#                           themselves, and a LoadBalancer Service enumerating them is a
+#                           1,200-entry port list. C131 built them as `infra/sg/` for a
+#                           dedicated Singapore media host, and infra/k8s/README.md and
+#                           service-catalog.yaml both already say they are not cluster
+#                           workloads. docs/production/go-live-checklist.md §6 is the cutover.
+#
+# LISTED AFTER `retire-single-instance-data` IN EVERY OVERLAY THAT USES IT, always as a pair.
+# =====================================================================================
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - postgres-patroni.yaml
+  - redis-sentinel.yaml
+
+# Generated rather than authored, so the ConfigMap name carries a hash of its contents and
+# EDITING ONE OF THESE FILES ROLLS THE WORKLOAD THAT READS IT. A Patroni configuration or a
+# sentinel seed that changed without a restart would leave a cluster running settings that no
+# file in this repository describes — which is the failure C130 spent a drill discovering in a
+# different form.
+configMapGenerator:
+  - name: patroni-config
+    files:
+      - patroni.yml
+  - name: pgbackrest-config
+    files:
+      - pgbackrest.conf
+  - name: redis-sentinel-config
+    files:
+      - redis-entrypoint.sh
+      - sentinel-entrypoint.sh
+
+patches:
+  # ---------------------------------------------------------------------------------
+  # THE CLIENT SIDE OF THE SENTINEL CHANGE, in the same component as the topology.
+  #
+  # `redis:6379` no longer exists — `retire-single-instance-data` deleted that Service, and a
+  # Sentinel group has no single address to replace it with. Every service now discovers the
+  # primary through the sentinels, which for StackExchange.Redis is `serviceName=` plus the
+  # sentinel endpoints and no code change at all (redis-sentinel.yaml's header has the
+  # evidence).
+  #
+  # The three sentinel endpoints are named individually rather than through the headless
+  # Service: a headless record is resolved to ONE address by a client that treats it as a
+  # single endpoint, and the whole reason to give a client three sentinels is that it must
+  # survive one of them being gone.
+  # ---------------------------------------------------------------------------------
+  - target: { version: v1, kind: ConfigMap, name: common-config }
+    patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: common-config
+      data:
+        ConnectionStrings__Redis: >-
+          redis-0.redis-peers:26379,redis-1.redis-peers:26379,redis-2.redis-peers:26379,serviceName=mageride-primary

@@ -8,22 +8,27 @@
 # it reaches this because somebody approved it. The reasoning is in
 # platform/argocd/README.md §"Sync policies".
 #
-# --- WHAT THIS OVERLAY IS NOT ---------------------------------------------------------
-# It is NOT the launch topology. D7' §8's P1-P2 row reads:
+# --- WHAT THIS OVERLAY IS (C132) ------------------------------------------------------
+# D7' §8's P1-P2 row, in full:
 #
 #   EMQX 2-node, Redpanda 3-node RF=3, Redis **Sentinel**, Postgres **Patroni 1P+2R** +
 #   PgBouncer, HAProxy + **Keepalived**, LiveKit + coturn pinned SGP
 #
-# Four of those are replica counts and configuration, and they are set below. Three are
-# different software — Patroni, Sentinel and Keepalived each need an operator or a failover
-# controller, plus a restore procedure and a drill — and they are **C132
-# (production-readiness-doks)**, whose first deliverable is exactly that list and whose verify
-# command is `kubectl apply --dry-run=client -k infra/k8s/overlays/production`. This file is
-# what C132 grows; the data plane it inherits is single-instance, and saying so here is the
-# point. A green ArgoCD sync on this overlay does not mean the database survives a node loss.
+# Four of those are replica counts and configuration and are set below. Two are different
+# software and arrive as the `launch-topology` component: Patroni and Redis Sentinel. The last
+# two are NOT in this cluster and each has an argument rather than an omission:
 #
-# LiveKit and coturn are likewise absent: their media plane is host UDP (D6' §6) and cannot be
-# a normal Deployment behind a Service.
+#   HAProxy + Keepalived  VRRP cannot run on DOKS — no L2 segment, no floating IP a pod may
+#                         ARP for. ADD §10.5's own table replaces it at the K8s row with
+#                         "Envoy / NGINX Ingress + cloud NLB", which is `loadbalancers.yaml`
+#                         plus platform/ingress-nginx/values.production.yaml. Deviation
+#                         recorded: docs/production/readiness-report.md §3.1.
+#   LiveKit + coturn      host UDP (D6' §6). `infra/sg/` (C131) deploys them on a Singapore
+#                         media host; the cutover is go-live-checklist.md §6.
+#
+# So a green ArgoCD sync on this overlay now DOES mean a database that survives a node loss —
+# and `bash infra/k8s/verify-readiness.sh` is what says whether everything else about it is
+# ready. Capacity, and the node pool this needs, are docs/production/capacity-plan.md.
 # =====================================================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -33,9 +38,17 @@ namespace: mageride
 resources:
   - ../../base
   - loadbalancers.yaml
+  - pg-dump-wasabi.yaml
 
 components:
   - images
+  # D7' §8's launch topology. TWO components and always in this order — kustomize accumulates
+  # a component's `resources` before its `patches`, so the single-instance Postgres and Redis
+  # have to be gone before the Patroni cluster and the Sentinel group can take their names.
+  # `components/retire-single-instance-data/kustomization.yaml` has the error message that
+  # proves it.
+  - ../../components/retire-single-instance-data
+  - ../../components/launch-topology
 
 commonAnnotations:
   mageride.lk/environment: production
@@ -84,19 +97,24 @@ patches:
         path: /spec/template/spec/containers/0/env/1/value
         value: "6"
 
-  # --- Postgres: the size, not the topology ----------------------------------------
-  # More disk and more memory than staging, because the WAL, the Timescale hypertable and 90
-  # days of positions live here (T-06, T-10). The TOPOLOGY is still one instance — see the
-  # header. `pg_dump` to Wasabi and WAL archiving are C132's (RPO 5 min / RTO 30 min,
-  # NFR-12/13), and until they exist this volume is the only copy of the platform's data.
+  # --- Postgres: the size. The topology is the launch-topology component -------------
+  # ADD §10.2 sizes a launch member at "8 GB / 2 vCPU", and this is that number three times:
+  # one primary and two replicas, each able to BE the primary. requests == limits on purpose —
+  # that is Guaranteed QoS, and it is the one class the kubelet does not evict first when a
+  # node comes under memory pressure. A database that is evicted to save a stateless pod is a
+  # failover; a database that is evicted on all three nodes at once is an outage.
+  #
+  # 200 Gi PER MEMBER, not once: the WAL, the Timescale hypertable and 90 days of positions
+  # (T-06, T-10) exist on each of them. docs/production/capacity-plan.md §4 is the arithmetic,
+  # including what this does to the node pool.
   - target: { kind: StatefulSet, name: postgres }
     patch: |
       - op: replace
         path: /spec/template/spec/containers/0/resources/requests
-        value: { cpu: "2", memory: 6Gi }
+        value: { cpu: "2", memory: 8Gi }
       - op: replace
         path: /spec/template/spec/containers/0/resources/limits
-        value: { cpu: "3", memory: 8Gi }
+        value: { cpu: "2", memory: 8Gi }
       - op: replace
         path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
         value: 200Gi

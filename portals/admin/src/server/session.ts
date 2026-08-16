@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { randomUUID } from 'node:crypto';
+
 import { cache } from 'react';
 import { cookies, headers } from 'next/headers';
 
@@ -104,6 +106,13 @@ export async function signInWithPassword(email: string, password: string): Promi
     path: '/v1/admin/auth/login',
     method: 'POST',
     body: { email, password },
+    // The gateway refuses every POST mutation without one — 400
+    // `idempotency-key-required`, whose code is in no MESSAGE_KEYS entry, so it
+    // surfaced as `admin.error.unexpected` and sign-in was impossible. These four
+    // calls reach `apiFetch` directly and so bypass `api/client.ts`, which mints a
+    // key for every mutation that goes through it; the fleet portal's
+    // `portalSignIn` sets one for the same reason.
+    idempotencyKey: randomUUID(),
   });
   return data;
 }
@@ -119,6 +128,7 @@ export async function signInWithGoogleCode(
     // The contract's body is a `oneOf`: both arms or neither is a 400, so the
     // password fields are absent rather than empty.
     body: { googleAuthCode, redirectUri },
+    idempotencyKey: randomUUID(),
   });
   return data;
 }
@@ -173,6 +183,7 @@ export async function rotateTokens(refreshToken: string): Promise<TokenPair> {
     path: '/v1/auth/refresh',
     method: 'POST',
     body: { refreshToken },
+    idempotencyKey: randomUUID(),
   });
   return data;
 }
@@ -189,7 +200,12 @@ export async function revokeSession(): Promise<void> {
   const token = await accessToken();
   if (token) {
     try {
-      await apiFetch({ path: '/v1/auth/logout', method: 'POST', accessToken: token });
+      await apiFetch({
+        path: '/v1/auth/logout',
+        method: 'POST',
+        accessToken: token,
+        idempotencyKey: randomUUID(),
+      });
     } catch {
       // Deliberately ignored — see above.
     }

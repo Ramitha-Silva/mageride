@@ -1,0 +1,211 @@
+# =====================================================================================
+# Redis — 3 nodes with Sentinel (D7' §8's launch row, ADD §10.2 "Redis | 3 nodes (Sentinel)").
+#
+# This REPLACES the single instance in base/data/redis.yaml, whose header says the topology is
+# C132's. Everything that file called load-bearing is carried forward below and for the same
+# reasons — `appendonly`, `noneviction`, `notify-keyspace-events Ex`.
+#
+# --- THE CLIENT SIDE IS THE HALF THAT IS USUALLY WRONG -----------------------------------
+# A Sentinel cluster whose clients still connect to one address is a failover that nothing
+# follows: the old primary is demoted to a replica and every write to it is refused with
+# `READONLY You can't write against a read only replica` — or, worse, accepted for as long as
+# the demotion has not happened yet. So the clients change in the same commit as the topology,
+# and the change is a CONNECTION STRING and no C# at all:
+#
+#     ConnectionStrings__Redis: redis-0.redis-peers:26379,…,serviceName=mageride-primary
+#
+# `MageRide.Shared/Caching/RedisServiceCollectionExtensions.cs` does
+# `ConfigurationOptions.Parse(connectionString)` then `ConnectionMultiplexer.Connect(config)`,
+# and StackExchange.Redis switches to sentinel discovery when `ServiceName` is set. Verified
+# against the pinned 3.0.17, through that exact code path, with a real 3-node quorum and a real
+# `SENTINEL FAILOVER`: the client kept accepting writes and reported the new primary 11 seconds
+# later, with no restart and no reconfiguration. The transcript is in
+# docs/production/readiness-report.md §2.2.
+#
+# --- WHY SENTINEL IS A SIDECAR AND NOT ITS OWN STATEFULSET --------------------------------
+# Three sentinels and three Redis nodes, and the quorum only has to survive the same failures
+# the data does. One StatefulSet means one anti-affinity rule, one PDB, one PVC per member —
+# and the sentinel's own rewritten configuration lands on the SAME volume as the data it is
+# monitoring, which is what makes a restarted pod know who the primary was.
+#
+# --- WHAT A SENTINEL FAILOVER COSTS -------------------------------------------------------
+# Replication is asynchronous: a promotion loses whatever the old primary acknowledged and had
+# not yet replicated. ADD §15 prices Redis at RPO 0 because the data is "ephemeral,
+# rebuildable from stream replay", and that is true of the live geo index. It is NOT true of
+# `lock:driver:{driverId}` and `offer:{rideId}`, so `min-replicas-to-write` below makes an
+# isolated primary REFUSE writes rather than hand out a lock a second primary could also hand
+# out. D-03's active-session mutex and R-02's single-winner accept are the invariants that
+# would otherwise break, and they break silently.
+# =====================================================================================
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-peers
+  namespace: mageride
+  labels:
+    app: redis
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  # Stable per-pod DNS: `redis-0.redis-peers.mageride.svc.cluster.local`. Sentinel is
+  # configured to announce and resolve HOSTNAMES rather than pod IPs, so this record is the
+  # cluster's identity — see the ConfigMap below for why that choice is not cosmetic.
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: { app: redis }
+  ports:
+    - { name: redis, port: 6379, targetPort: redis, protocol: TCP }
+    - { name: sentinel, port: 26379, targetPort: sentinel, protocol: TCP }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: mageride
+  labels:
+    app: redis
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  serviceName: redis-peers
+  replicas: 3
+  # OrderedReady, NOT Parallel. On a cold start the first pod is the one that bootstraps the
+  # group, and three pods racing to decide who the primary is without a sentinel quorum to ask
+  # is the one situation this design cannot resolve on its own.
+  podManagementPolicy: OrderedReady
+  selector:
+    matchLabels: { app: redis }
+  template:
+    metadata:
+      labels:
+        app: redis
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/component: data
+        app.kubernetes.io/part-of: mageride
+      annotations:
+        prometheus.io/scrape: "false"
+    spec:
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile: { type: RuntimeDefault }
+      affinity:
+        podAntiAffinity:
+          # Required, as for Postgres: two of three sentinels on one node means a node drain
+          # takes the quorum, and a quorum of one cannot promote anything.
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels: { app: redis }
+              topologyKey: kubernetes.io/hostname
+      containers:
+        # -----------------------------------------------------------------------------
+        - name: redis
+          image: redis:7-alpine
+          command: ["/bin/sh", "/etc/redis/redis-entrypoint.sh"]
+          ports:
+            - { name: redis, containerPort: 6379, protocol: TCP }
+          env:
+            - name: POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - name: POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+          resources:
+            # ADD §10.2 sizes a launch Redis node at 2 GB / 1 vCPU. The live geo index for
+            # 10k vehicles is under 100 MB (§10.2's own note); the memory is for the SignalR
+            # backplane's pub/sub buffers and the AOF rewrite.
+            requests: { cpu: 500m, memory: 1Gi }
+            limits: { cpu: "1", memory: 2Gi }
+          readinessProbe:
+            exec: { command: ["redis-cli", "-p", "6379", "ping"] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 10
+          livenessProbe:
+            exec: { command: ["redis-cli", "-p", "6379", "ping"] }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: redisdata, mountPath: /data }
+            - { name: redis-config, mountPath: /etc/redis, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+        # -----------------------------------------------------------------------------
+        - name: sentinel
+          image: redis:7-alpine
+          command: ["/bin/sh", "/etc/redis/sentinel-entrypoint.sh"]
+          ports:
+            - { name: sentinel, containerPort: 26379, protocol: TCP }
+          env:
+            - name: POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - name: POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+          resources:
+            # A sentinel holds no data. This is a monitor loop and three sockets.
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+          readinessProbe:
+            exec: { command: ["redis-cli", "-p", "26379", "ping"] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 10
+          livenessProbe:
+            exec: { command: ["redis-cli", "-p", "26379", "ping"] }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            # The SAME volume as the data. Sentinel rewrites its own configuration file as it
+            # learns the topology, and that rewritten file is how a pod that restarts knows
+            # which member was the primary before it went away.
+            - { name: redisdata, mountPath: /data }
+            - { name: redis-config, mountPath: /etc/redis, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: redis-config
+          configMap: { name: redis-sentinel-config }
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: redisdata
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: redis
+  namespace: mageride
+  labels:
+    app: redis
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  # Two of three: the sentinel quorum. Below it nothing can be promoted, so a drain that would
+  # take a second member has to wait.
+  minAvailable: 2
+  selector:
+    matchLabels: { app: redis }

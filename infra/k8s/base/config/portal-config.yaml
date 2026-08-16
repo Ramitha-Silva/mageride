@@ -1,13 +1,32 @@
 # =====================================================================================
 # `portal-config` — the only configuration a Next.js surface gets.
 #
-# `NEXT_PUBLIC_*` ONLY, and that is a security boundary rather than a convention: a portal
-# is a browser bundle, so anything it can read a user can read. No Secret is mounted into
-# a portal pod anywhere in these manifests, and infra/scripts/k8s-verify.sh fails the build
-# if one ever is.
+# No Secret is mounted into a portal pod anywhere in these manifests, and
+# infra/scripts/k8s-verify.sh fails the build if one ever is. That part stands.
 #
-# The API base URL is the public edge, not a ClusterIP: the request is made by the browser,
-# from outside the cluster. The overlay sets the hostname; base carries the shape.
+# **This file used to say `NEXT_PUBLIC_*` ONLY. That rule was wrong twice over and the
+# portals could not start under it.** A MageRide portal is not a browser bundle that calls
+# the gateway: every call leaves the NEXT SERVER with the session cookie exchanged for a
+# bearer, and the browser never learns where the gateway lives or holds a token. Each portal
+# reads `MAGERIDE_API_BASE_URL` server-side and `src/config/env.ts` THROWS
+# `MissingConfigurationError` without it — absent, every request answers 503. It was absent
+# here, so a DOKS deploy of admin-portal, fleet-portal or web-passenger would have rendered
+# /login and then failed every call. The replica hit exactly this (fix 2c3970b).
+#
+# The four `NEXT_PUBLIC_*` entries this file used to carry are gone because NOTHING READ
+# THEM — `grep process.env.NEXT_PUBLIC_` over the whole portals workspace is empty, and each
+# portal's own fence test (e.g. portals/admin/test/fences.test.ts) FAILS the build if a
+# source file ever reads one. They could not have worked anyway: Next inlines `NEXT_PUBLIC_*`
+# at BUILD time, so supplying them at runtime through a ConfigMap is a no-op by design.
+#
+# `MAGERIDE_API_BASE_URL` is an in-cluster address, not the public edge, precisely because
+# the Next server makes that call — a hairpin out through the ingress would be slower and
+# would need the public cert for an internal hop. `api-gateway` is a Service on port 80
+# (targetPort 5000). It lives here rather than in service-endpoints.yaml, which the
+# convention table would suggest, because a portal pod mounts THIS ConfigMap and only this
+# one; service-endpoints carries the backend's `Xxx__YyyBaseUrl` names and is not mounted
+# into a portal. The map style URL is the opposite case and public for the opposite reason:
+# the BROWSER fetches it.
 # =====================================================================================
 ---
 apiVersion: v1
@@ -23,11 +42,20 @@ data:
   NEXT_TELEMETRY_DISABLED: "1"
   NODE_ENV: production
   TZ: Asia/Colombo
-  # Overwritten per environment. `https://api.mageride.lk` is production's (D7' §5).
-  NEXT_PUBLIC_API_BASE_URL: https://api.mageride.lk
-  # SignalR (R-06, D-23) connects to the same host on the `/hubs` path the Ingress routes
-  # to fanout-svc. wss, never ws — the hub carries a bearer token.
-  NEXT_PUBLIC_HUB_URL: wss://api.mageride.lk/hubs
-  # Si / Ta / En, in the order the language switcher offers them (trilingual, CLAUDE.md).
-  NEXT_PUBLIC_LOCALES: si,ta,en
-  NEXT_PUBLIC_DEFAULT_LOCALE: en
+  # REQUIRED, and read on the SERVER by all three portals — see the header. In-cluster,
+  # because the Next server makes this call, not the browser. `api-gateway` is a Service on
+  # port 80 (targetPort 5000). Not overwritten per environment: the Service name is the same
+  # in every cluster, which is the point of using it instead of the public edge.
+  MAGERIDE_API_BASE_URL: http://api-gateway
+  # D-14's `tile-cdn`, read by web-passenger (SCR-WT) and fleet-portal (SCR-FP-007).
+  #
+  # A MapLibre STYLE DOCUMENT, not the `.pmtiles` archive: a browser fetches the style over
+  # HTTP and follows its source, `pmtiles://https://tiles.mageride.lk/lk.pmtiles`, which the
+  # `pmtiles` npm Protocol resolves with range requests (`TrackMap.tsx` registers it). The
+  # native apps bundle the same cartography as an app resource and fetch only the archive.
+  #
+  # Public https for the same reason the API base URL above is: the browser makes this
+  # request, from outside the cluster. Both variables are optional and degrade to an empty
+  # canvas rather than an error, because a missing basemap must not read as a missing driver.
+  WEB_PASSENGER_MAP_STYLE_URL: https://tiles.mageride.lk/style.json
+  FLEET_PORTAL_MAP_STYLE_URL: https://tiles.mageride.lk/style.json

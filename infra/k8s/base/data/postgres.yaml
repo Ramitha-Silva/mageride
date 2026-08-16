@@ -74,10 +74,31 @@ spec:
       # seconds of shutdown.
       terminationGracePeriodSeconds: 120
       securityContext:
-        # The image's own `postgres` user. `fsGroup` is what makes the mounted volume
-        # writable by it; `runAsUser` is left to the image, which switches users in its
-        # entrypoint and must be allowed to.
+        # The image's own `postgres` user, spelled NUMERICALLY. `docker inspect` reports
+        # `User: postgres` — a name — and this namespace is `pod-security…/enforce:
+        # restricted`, so a pod that sets neither `runAsNonRoot` nor a numeric `runAsUser` is
+        # REFUSED at admission:
+        #
+        #   create Pod postgres-0 in StatefulSet postgres failed error: pods "postgres-0" is
+        #   forbidden: violates PodSecurity "restricted:latest": runAsNonRoot != true …,
+        #   seccompProfile … must set … to "RuntimeDefault"
+        #
+        # That is C132-01. The StatefulSet applies cleanly, ArgoCD reports it Synced, the PVC
+        # is even created — and no Postgres pod is ever created, because PSA is enforced when
+        # the CONTROLLER creates the pod and not when the StatefulSet is applied. Nothing in
+        # this repository would have caught it: `--dry-run=server` only warns, and the one CI
+        # job that runs it is `continue-on-error: true`. Reproduced on a real cluster and
+        # written up in docs/production/readiness-report.md §1.
+        #
+        # 1000 is `postgres` in this image (`id postgres` -> uid=1000 gid=1000), so this
+        # changes no behaviour at all — it only says out loud what the image already does, in
+        # the form kubelet is able to verify.
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        # `fsGroup` is what makes the mounted volume writable by that user.
         fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
       containers:
         - name: postgres
           image: timescale/timescaledb-ha:pg16

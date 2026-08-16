@@ -1,0 +1,220 @@
+# =====================================================================================
+# Alertmanager — PRODUCTION routing and escalation (C132). D7' §12: "→ PagerDuty + runbook".
+#
+# `alertmanager.yml` beside this file is the dev/replica configuration: three webhook receivers
+# that accept and discard, so the pipeline is provably wired without a real destination. This
+# file is the one production loads, and the difference is not cosmetic — it is where an alert
+# stops being a graph and becomes somebody's phone at 3 a.m.
+#
+#   docker compose -f infra/observability/docker-compose.yml \
+#     --env-file infra/observability/.env.production up -d alertmanager
+#   # or, in the DOKS cluster, mounted at /etc/alertmanager/alertmanager.yml
+#
+# --- NO SECRET IS IN THIS FILE ------------------------------------------------------------
+# Every PagerDuty routing key is read with `*_file` from /etc/alertmanager/secrets/, which is
+# an ExternalSecret in the cluster and a bind mount on the replica. infra/CLAUDE.md's rule is
+# absolute: `.env*` is gitignored and nothing with a credential in it is committed.
+#
+# --- THE ESCALATION MODEL, AND WHY IT HAS THREE SERVICES ----------------------------------
+# PagerDuty escalates within a service, so the three services below are three different
+# promises about response time — and putting them in one service would mean the loudest
+# promise governs everything.
+#
+#   mageride-safety     SOS. D-33's 5-second SLO, and the only alert on this platform whose
+#                       subject is a person in danger. Immediate, no grouping delay, and it
+#                       escalates to the second responder after FIVE minutes.
+#   mageride-platform   everything else that pages: the ride plane stuck, the database with no
+#                       leader, WAL not archiving. 15 minutes to the second responder,
+#                       30 to the engineering lead.
+#   mageride-tickets    business hours. Capacity triggers, a failed nightly dump, a pending
+#                       restart. These are `severity: ticket` and they must never wake anybody
+#                       — a rota that is woken to do capacity planning stops answering.
+#
+# --- WHAT CHANGES ON GO-LIVE DAY, AND ONLY THEN -------------------------------------------
+# `mute_time_intervals` is deliberately absent. A launch has no quiet hours: the platform
+# starts carrying real passengers at a known hour and every alert matters from that minute.
+# The first maintenance window is defined AFTER the first month of data says which alerts are
+# noisy, not before.
+# =====================================================================================
+
+global:
+  resolve_timeout: 5m
+  pagerduty_url: https://events.pagerduty.com/v2/enqueue
+
+templates:
+  - /etc/alertmanager/templates/*.tmpl
+
+route:
+  group_by: ["alertname", "plane", "service"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 24h
+  receiver: watch
+
+  routes:
+    # ---------------------------------------------------------------------------------
+    # SOS, first and alone. Same reasoning as the dev file: §13.3 says it "pages on-call
+    # immediately", so it must not wait behind another group's `group_wait` and must not be
+    # grouped with anything that could delay it. In production it also goes to its OWN
+    # PagerDuty service, because its escalation timer is three times faster than the
+    # platform's.
+    # ---------------------------------------------------------------------------------
+    - matchers: [slo = "sos-dispatch-latency"]
+      receiver: safety-page
+      group_wait: 0s
+      group_interval: 1m
+      repeat_interval: 15m
+      continue: false
+
+    # ---------------------------------------------------------------------------------
+    # The launch topology has lost its redundancy. Separated from the general page route so
+    # the notification says what it is in its own title — an operator woken by
+    # "PatroniClusterHasNoLeader" should not have to open a dashboard to learn that every
+    # write on the platform is currently failing.
+    # ---------------------------------------------------------------------------------
+    - matchers: [plane = "data", severity = "page"]
+      receiver: platform-page
+      group_by: ["alertname"]
+      group_wait: 15s
+      repeat_interval: 1h
+
+    - matchers: [business_slo = "true", severity = "page"]
+      receiver: platform-page
+      group_by: ["alertname", "stuck_state"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 1h
+
+    - matchers: [security = "true"]
+      receiver: platform-page
+      repeat_interval: 4h
+
+    - matchers: [severity = "page"]
+      receiver: platform-page
+      repeat_interval: 4h
+
+    # ---------------------------------------------------------------------------------
+    # Capacity. `capacity_trigger` is set by every ADD §10.2 scale-out rule and carries the
+    # ACTION as its value ("add-emqx-node"), so the ticket's title is the thing to do rather
+    # than the symptom. Grouped by the trigger and re-notified daily: a fleet that has grown
+    # does not un-grow, and a daily reminder is the right pressure.
+    # ---------------------------------------------------------------------------------
+    - matchers: [capacity_trigger =~ ".+"]
+      receiver: capacity-ticket
+      group_by: ["capacity_trigger"]
+      group_wait: 5m
+      group_interval: 1h
+      repeat_interval: 24h
+
+    - matchers: [severity = "ticket"]
+      receiver: ticket
+      repeat_interval: 24h
+
+# --- Inhibition ---------------------------------------------------------------------------
+# Everything the dev file inhibits, plus the pairs the launch topology creates.
+inhibit_rules:
+  - source_matchers: [alertname = "ServiceDown"]
+    target_matchers: [alertname =~ "SyntheticProbeFailing|SyntheticProbeSlow|ApiAvailabilityBudgetBurning"]
+    equal: ["service"]
+
+  - source_matchers: [alertname = "RedisDown"]
+    target_matchers: [alertname =~ "RedisEvictions|RedisMemoryHigh"]
+
+  - source_matchers: [alertname = "PostgresDown"]
+    target_matchers: [alertname =~ "PostgresLongRunningQuery|PostgresConnectionSaturation|StuckStateMetricsMissing"]
+
+  - source_matchers: [alertname = "RideTimerBacklogHigh"]
+    target_matchers: [alertname =~ "RideStuckOffered|RideStuckDriverArrived"]
+
+  - source_matchers: [alertname = "PositionPipelineSilent"]
+    target_matchers: [alertname =~ "PositionE2ELatency.*"]
+
+  # A cluster with no leader has no primary, so `patroni_sync_standby` is 0 and the archiver
+  # is not archiving. One page — the leader — and the rest is in its runbook.
+  - source_matchers: [alertname = "PatroniClusterHasNoLeader"]
+    target_matchers: [alertname =~ "PostgresSynchronousStandbyLost|PostgresWalArchiveStalled|PostgresReplicaLagAtScaleOutThreshold"]
+
+  # Fewer than three members explains the missing synchronous standby.
+  - source_matchers: [alertname = "PatroniTooFewMembers"]
+    target_matchers: [alertname = "PostgresSynchronousStandbyLost"]
+
+  # A Redis primary with no replica is the CAUSE of the sentinel quorum looking wrong, and it
+  # is the one with the actionable runbook.
+  - source_matchers: [alertname = "RedisPrimaryHasNoReplica"]
+    target_matchers: [alertname = "RedisSentinelQuorumAtRisk"]
+
+  # THE CAPACITY PAIRS. `ConsumerLagSecondsHigh` (2 min, page) and
+  # `ConsumerLagAtScaleOutThreshold` (30 min, ticket) watch the same series with different
+  # meanings. When both are firing the incident is the one to act on; the ticket would arrive
+  # tomorrow saying the same thing in slower words.
+  - source_matchers: [alertname = "ConsumerLagSecondsHigh"]
+    target_matchers: [alertname = "ConsumerLagAtScaleOutThreshold"]
+  - source_matchers: [alertname = "RedisMemoryHigh"]
+    target_matchers: [alertname = "RedisMemoryAtScaleOutThreshold"]
+
+  # And the blanket rule, last: a page always supersedes a ticket about the same thing.
+  - source_matchers: [severity = "page"]
+    target_matchers: [severity = "ticket"]
+    equal: ["alertname", "plane", "service"]
+
+receivers:
+  # -------------------------------------------------------------------------------------
+  # `severity: critical` on both paging receivers. PagerDuty's own severity drives whether a
+  # notification can be delivered outside working hours on some plans, and every alert that
+  # reaches these receivers has already been judged worth waking somebody for — the judgement
+  # is in the Prometheus rule, not here.
+  # -------------------------------------------------------------------------------------
+  - name: safety-page
+    pagerduty_configs:
+      - routing_key_file: /etc/alertmanager/secrets/pagerduty-safety-key
+        severity: critical
+        description: 'SOS · {{ .CommonAnnotations.summary }}'
+        client: MageRide Alertmanager
+        details:
+          runbook: '{{ .CommonAnnotations.runbook_url }}'
+          firing: '{{ .Alerts.Firing | len }}'
+          plane: '{{ .CommonLabels.plane }}'
+          # The one alert where the operator's first action is not diagnostic. The runbook
+          # opens with "call the passenger" and this puts that in the notification body so it
+          # is read before the laptop is open.
+          first_action: 'docs/runbooks/sos-dispatch-latency.md — dispatch by hand NOW, diagnose after'
+
+  - name: platform-page
+    pagerduty_configs:
+      - routing_key_file: /etc/alertmanager/secrets/pagerduty-platform-key
+        severity: critical
+        description: '{{ .CommonAnnotations.summary }}'
+        client: MageRide Alertmanager
+        details:
+          runbook: '{{ .CommonAnnotations.runbook_url }}'
+          firing: '{{ .Alerts.Firing | len }}'
+          plane: '{{ .CommonLabels.plane }}'
+          service: '{{ .CommonLabels.service }}'
+
+  - name: capacity-ticket
+    pagerduty_configs:
+      - routing_key_file: /etc/alertmanager/secrets/pagerduty-tickets-key
+        severity: warning
+        # The ACTION in the title. ADD §10.2's table is a list of actions, and a ticket called
+        # "add-emqx-node" is one somebody can pick up without reading anything first.
+        description: 'capacity · {{ .CommonLabels.capacity_trigger }} · {{ .CommonAnnotations.summary }}'
+        details:
+          runbook: '{{ .CommonAnnotations.runbook_url }}'
+          trigger: '{{ .CommonLabels.capacity_trigger }}'
+
+  - name: ticket
+    pagerduty_configs:
+      - routing_key_file: /etc/alertmanager/secrets/pagerduty-tickets-key
+        severity: warning
+        description: '{{ .CommonAnnotations.summary }}'
+        details:
+          runbook: '{{ .CommonAnnotations.runbook_url }}'
+
+  # Unlabelled alerts. Not silence — a route that drops what it does not recognise is how an
+  # alert added next year goes nowhere. `watch` is a low-urgency PagerDuty event, which shows
+  # up in the daily digest and in `alertmanager_notifications_total`.
+  - name: watch
+    pagerduty_configs:
+      - routing_key_file: /etc/alertmanager/secrets/pagerduty-tickets-key
+        severity: info
+        description: '{{ .CommonAnnotations.summary }}{{ if not .CommonAnnotations.summary }}{{ .CommonLabels.alertname }} (no summary — the rule needs one){{ end }}'

@@ -730,7 +730,10 @@ components:
         feedVersionId:
           $ref: './_shared.yaml#/components/schemas/Ulid'
         feedInfoVersion:
-          type: string
+          # Δ C126: nullable, because the response type emits it as `null` rather than
+          # omitting it (JsonIgnoreCondition.Never) — SCR-AP-016's history table renders a
+          # dash from a null and cannot tell an absent key from a value it failed to read.
+          type: [string, 'null']
         fileName:
           type: string
         sha256:
@@ -744,7 +747,15 @@ components:
           $ref: '#/components/schemas/FeedCounts'
         status:
           $ref: '#/components/schemas/FeedStatus'
+        # Δ C126: both nullable, because FeedVersionResponse emits them as `null` rather than
+        # omitting them (JsonIgnoreCondition.Never) — SCR-AP-016's history table renders a dash
+        # from a null and cannot tell an absent key from a value it failed to read. `oneOf` with a
+        # 'null' branch is the idiom this directory already uses for a nullable $ref.
         activatedAt:
-          $ref: './_shared.yaml#/components/schemas/Timestamp'
+          oneOf:
+            - $ref: './_shared.yaml#/components/schemas/Timestamp'
+            - type: 'null'
         archivedAt:
-          $ref: './_shared.yaml#/components/schemas/Timestamp'
+          oneOf:
+            - $ref: './_shared.yaml#/components/schemas/Timestamp'
+            - type: 'null'

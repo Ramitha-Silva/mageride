@@ -19,7 +19,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | 4a | C067–C084 (18) | both Android apps build and every owned SCR-* screen matches its wireframe |
 | 4b | C085–C102 (18) | both iOS apps build and test **on macOS**; parity with 4a confirmed screen-for-screen |
 | 4c | C103–C117 (15) | all three web surfaces lint + test + build; zero runtime CSS-in-JS in any bundle |
-| 5 | C118–C126 (9) | contract + E2E suites green against the deployed replica; day-0 GTFS feed active |
+| 5 | C118–C126 (9) | contract suite green against the deployed replica — **two exceptions granted 2026-08-12**: E2E in-process only, and the day-0 GTFS feed is an external dependency (see Planner findings). **C133's go-live gate still requires the feed.** |
 | 6 | C127–C132 (6) | no open high/critical security findings; load, chaos and SG acceptance reports signed off |
 
 ## Components
@@ -151,14 +151,14 @@ After completing a component, set its Status and append the 3-line handoff under
 | C122 | e2e-proxy-package | 5 | DONE | 2026-08-09 | **20 tests green** in `tests/E2E` (5 new scenario files, **100 in the assembly** with C120's and C121's); `dotnet test tests/E2E -c Release --filter Category=ProxyPackage` exits 0 in **~50 s**, twice consecutively against fresh containers, and the full assembly passes 100/100 in 7 m 54 s. **Ten services actually running** — ride-svc, iam-svc, dispatch-svc, reputation-svc, fare-svc, fanout-svc, content-svc, notification-svc, public-bff and safety-svc — with every worker on. **iam-svc is in this fleet for P-03, not for its bearers**: `GET /v1/users/lookup` is the registration oracle that chooses between the FCM round-trip and AL-45's SMS. **Both no-app paths are driven from the message the platform actually sent**: a `SmsGateway` speaking D6' §7.3's Notify.lk REST shape captures it, the token is parsed out of the `{{link}}` content-svc rendered, and the browser opens SCR-WT-003 and SCR-WT-002 with nothing else — a share token is mint-and-SMS (AL-44/AL-45), so reading `safety.trip_share_tokens` would have been asserting about a page no recipient could reach. §11.15's registered branch ends on the booker's real WebSocket; **the decline stores no coordinates in the row, the outbox payload or the socket frame**, asserted across all three plus a whole-table check; the 300 s window is asserted before `issued_at` is aged and ride-svc's own sweep expires it. Package: both P-07 gates, a correct code that spends no attempt, the five-attempt lockout with `package.otp_locked` and the photo-proof way out of it, P-10's `file://` artefact with its sha256 and captured geo. COD: P-08's tap settles and a second is refused, **P-14's 24 h clock lands the ride in `Disputed` with no penalty**, and the same clock correctly does nothing to a parcel still in transit. Web: all six SCR-WT screens, AL-48's unmasked `tel:` number, P-09's fare block with no instrument, a token-only SOS that reaches the booker through the real gateway, and **SCR-WT-006 asserted on the body — ride id, plate, driver, both numbers, state and coordinates all absent from the 410**. **One finding, ratcheted:** nothing writes `fares.ride_payments.CashOnDeliveryCollected`, so a COD receipt carries no figure. No service, spec, contract or migration file was changed |
 | C123 | e2e-money-flows | 5 | DONE | 2026-08-09 | **36 tests green** in `tests/E2E` (5 new scenario files, **136 in the assembly** with C120/C121/C122's); `dotnet test tests/E2E -c Release --filter Category=Money` exits 0 in **~1 m**, twice consecutively, and the full assembly passes 136/136 in 8 m 20 s with `dotnet build backend/MageRide.sln -c Release` clean. **Seven services actually running** — wallet-svc, subscription-svc, fare-svc, ride-svc, dispatch-svc, reputation-svc and fleet-svc — plus an `AcquirerGateway` speaking D6' §7.1's create-session shape and signing its own callbacks, which is the only honest way to reach the two rails AL-05 leaves. **The double-entry ledger is asserted balanced after every scenario**, by `MoneyScenario.RunAsync` rather than by the scenarios, in three statements: every entry sums to zero, every posting on the platform sums to zero, and every `billing.accounts`/`billing.wallets` balance equals the sum of its own legs. **Every rupee arrives through a rail the platform has** — drivers start empty and top up through OnePay or LankaQR with a signed callback. D-13's free first trip, the Rs 100 charged before the second, the single flat charge, **D-08's gate withholding an offer from a driver who could not pay**, and the Colombo-day key proved in both directions. R-19's two idempotency guards, the unsigned and the mis-valued callback, US-9.19's voucher at face value, US-9.13's transfer at par with a two-leg entry the database has no kind to add a fee to (AL-01), and `ck_topups_method` refusing a bank transfer (AL-05). D-10's three rails with cash and driver-QR asserted to move **no ledger at all** against a reachable wallet-svc, AL-47's claim/confirm/dispute with the Finance ticket carrying its evidence, E-10's tip. Epic 23's five methods end to end — the owner's own LankaQR on a signed link, the slip and the owner's confirm, US-23.6's cash — with **not one posting** and no column that could hold one (§18b). **Four findings, each asserted as a gap with a test that fails when it is fixed:** AL-57's passenger wallet has no funding route; `Overpaid` is unreachable since AL-57/AL-59 removed the ride callbacks; **E-05's reversal is refused by wallet-svc's own `kind` whitelist and answers 503 after committing the refund row**; and nothing calls `charge-before-trip`. No service, spec, contract or migration file was changed |
 | C124 | cicd-full-pipeline | 5 | DONE | 2026-08-09 | **`bash infra/scripts/k8s-verify.sh` → 39 passed, 0 failed, 0 skipped** (with a throwaway kind cluster for the `kubectl` clause; 36/0/1 without one), `actionlint` clean over all 8 workflows, `kubeconform -strict` clean over all three overlays, and **`kubectl apply --dry-run=client -k` passes for `overlays/{dev,staging,production}`**. All four DoD items are met by construction and the mechanisms are checked rather than asserted. **118 files under `infra/k8s/`, 65 of them generated from one catalog** — `service-catalog.yaml` is the single source for the 34 workloads, the 26 per-service ExternalSecrets, the three per-environment image lists AND the CI image matrix, so adding a service is one entry and never a workflow edit. **Seven new workflows**, none holding a cluster credential: the only write any of them makes is a commit to `overlays/<env>/images/` and ArgoCD does the rest. **The migration gate exists twice** — statically before the promotion commit exists (expand/contract rules over the delta against the SHA that environment is *running*, plus apply-twice against a real timescaledb-ha) and as ArgoCD sync wave 1, where a failed Job leaves wave 2 (every service) unapplied. **Images are cosign-keyless-signed over the digest** with an SBOM and provenance, and `nightly.yml` re-verifies every deployed image's signature against this repository's OIDC identity. **The internal-plane credential mesh is now enforced**: 20 options carry a "Must equal <other service>'s <key>" doc comment and the only thing keeping them equal was one flat env file with a repeated placeholder — the catalog's `aliases` table maps every name to one Vault property. **Findings: the printed verify command's `yaml.safe_load` cannot pass over any Kubernetes manifest directory** (43 of 107 files are multi-document; `safe_load_all` is the one-word fix); D7' §5's per-pod requests × 34 workloads need ~20 vCPU/40 GB against §8's 12 vCPU/24 GB pool (C132's capacity plan); **D-21's RS256/JWKS MQTT authenticator is not implemented**, so the shared HMAC `infra/CLAUDE.md` says "does not survive out of dev" is a production credential; D7' §10's five CronJobs are all in-process workers and adding them would double-run the work; six credentials the options classes require are absent from `.env.app.example`; `osm-pipeline` has no image and no component builds it |
-| C125 | replica-deployment | 5 | DONE | 2026-08-11 | **`bash infra/replica/deploy.sh --dry-run && bash infra/replica/smoke.sh` → dry run clean, smoke 23 passed 0 failed 0 skipped**, with all **eleven core containers healthy** on this box. Every DoD item is demonstrated rather than asserted: the smoke suite drives the golden paths **through the edge** (HAProxy 443, self-signed) — a Mode C ride, the Mode A session surface and the package sub-kind each reach their service and are refused by its own AL-06 authorization (401), which is the proof the request arrived; the three tracker ports and MQTTS accept connections through L4 passthrough; the `s3.` vhost reaches MinIO; and the edge returns **404** for `/health/*`, `/metrics` and `/v1/internal/**`. **`backup.sh --verify-restore`: dump 676 K / 193 tables → object store → restored into a throwaway database, `iam.users` 14 rows in the source and 14 in the restore.** The guardrail refuses to start while a heavy build is running (negative-tested) and reads its budget **from the spec's own resource table** rather than hardcoding a figure — the prompt's DoD says ~18.9 GB and the spec's totals are 16.7/19.7, so there is no number to copy. Live usage **1 305 MiB against 17 280 MiB**. **Two umbrella containers had to be built first** — `backend/src/AppServices` (22 services + YARP) and `backend/src/HotPath` (4) — referenced by docker-compose.dev.yml since C009 and never created; C118 went PARTIAL because of it. **Findings: ten defects the bring-up was the first thing ever to execute**, incl. a gateway config-precedence bug that would have 502'd every route in production, `Dockerfile.worker` unable to host any project in the repo, `Jwt__SigningKeyPem`'s placeholder crashing iam-svc, `Username=mageride` against a database with no such role, and `Jwt__RequireHttpsMetadata` missing beside an http JwksUrl. One spec conflict recorded as a visible deviation: redpanda's 1 GB row is unsatisfiable with `mode production`. Nominatim (its own VPS) is out of scope and named |
-| C126 | gtfs-day0-load | 5 | PENDING | | |
-| C127 | security-review-asvs | 6 | PENDING | | |
-| C128 | anti-spoof-hardening | 6 | PENDING | | |
-| C129 | load-test-suite | 6 | PENDING | | |
-| C130 | chaos-drills | 6 | PENDING | | |
-| C131 | voip-tracker-acceptance-sg | 6 | PENDING | | |
-| C132 | production-readiness-doks | 6 | PENDING | | |
+| C125 | replica-deployment | 5 | DONE | 2026-08-11 | **`bash infra/replica/deploy.sh --dry-run && bash infra/replica/smoke.sh` → dry run clean, smoke 23 passed 0 failed 0 skipped**, with all **eleven core containers healthy** on this box. Every DoD item is demonstrated rather than asserted: the smoke suite drives the golden paths **through the edge** (HAProxy 443, self-signed) — a Mode C ride, the Mode A session surface and the package sub-kind each reach their service and are refused by its own AL-06 authorization (401), which is the proof the request arrived; the three tracker ports and MQTTS accept connections through L4 passthrough; the `s3.` vhost reaches MinIO; and the edge returns **404** for `/health/*`, `/metrics` and `/v1/internal/**`. **`backup.sh --verify-restore`: dump 676 K / 193 tables → object store → restored into a throwaway database, `iam.users` 14 rows in the source and 14 in the restore.** The guardrail refuses to start while a heavy build is running (negative-tested) and reads its budget **from the spec's own resource table** rather than hardcoding a figure — the prompt's DoD says ~18.9 GB and the spec's totals are 16.7/19.7, so there is no number to copy. Live usage **1 305 MiB against 17 280 MiB**. **Two umbrella containers had to be built first** — `backend/src/AppServices` (22 services + YARP) and `backend/src/HotPath` (4) — referenced by docker-compose.dev.yml since C009 and never created; C118 went PARTIAL because of it. **Findings: ten defects the bring-up was the first thing ever to execute**, incl. a gateway config-precedence bug that would have 502'd every route in production, `Dockerfile.worker` unable to host any project in the repo, `Jwt__SigningKeyPem`'s placeholder crashing iam-svc, `Username=mageride` against a database with no such role, and `Jwt__RequireHttpsMetadata` missing beside an http JwksUrl. One spec conflict recorded as a visible deviation: redpanda's 1 GB row is unsatisfiable with `mode production`. **Nominatim is deployed** on its own VPS (45.77.37.208, Ubuntu 26.04, 7.2 GiB / 4 cores / 8 GiB swap): Docker installed from nothing, `mediagis/nominatim:4.4` importing the Sri Lanka extract, 8080 restricted by ufw to the replica's address, and `Query__NominatimBaseUrl` written into `.env.replica`. `infra/replica/nominatim/` holds the compose file and `deploy-nominatim.sh` (`--dry-run` / `--status` / `--reimport`), so it is reproducible from the repository rather than from a shell session |
+| C126 | gtfs-day0-load | 5 | PARTIAL | 2026-08-11 | **The pipeline, the runbook and the verify are built and exercised against the running replica; the feed itself has not been handed over, so the load is not done.** `bash infra/replica/gtfs-day0-verify.sh` exits 2 naming exactly what is missing. **Done and demonstrated:** the pre-first-import empty state is **observed and recorded** (`coverage: no_feed`, five live tables at 0, an empty history table — it cannot be reconstructed after the first activation, so `--observe-empty-state` captures it before the file arrives); the upload half of SCR-AP-016 is proven end to end through HAProxy and the gateway with a real Admin bearer (multipart `202`, the `Idempotency-Key` requirement, the validation stepper, the capped five-error summary, the CSV row-level report, the sha256 duplicate refusal, both audit rows); a runbook covering obtain → upload → report → preview → activate → verify → roll back, with the refresh checklist; a six-corridor sample set whose shape check decodes the polyline, holds it to the validator's own Sri Lanka bounding box and requires it to pass within 1200 m of both ends of its corridor. **Not done:** validate/activate/corridor-verify/rollback of a real feed — blocked on the externally provided file (AL-56 forbids synthesising one; there is no Sri Lanka feed in the Mobility Database catalogue either). **Findings: `Jwt__JwksUrl` pointed at `/v1/internal/iam/.well-known/jwks.json`, a path the gateway refuses ahead of routing and never had a route for — every JWT-validating service in BOTH compose stacks answered 500 to every authenticated request**, invisible until C126 became the first thing in this repository to present a real bearer to a deployed service. Also: `ApiGateway.Tests` has been failing 18 of 605 since C125 (AppServices' `appsettings.json` overwriting the gateway's in the test output — now 605/605); GTFS feed zips were stored on the container's writable layer, so every `deploy.sh` deleted every rollback target; and the feed-download HMAC was the repository's published `CHANGEME_…` constant |
+| C127 | security-review-asvs | 6 | PARTIAL | 2026-08-12 | **The review ran end to end and produced nine findings; eight are closed** (two fixed and verified live, four accepted with an owner and a date, two low fixes). The ninth — **C127-01, the one open HIGH** — is fixed in the repository and open **at deployment**: the cutover is one connection string plus PgBouncer's client auth, owned by C133 and due at go-live, and `bash security/run-asvs-checks.sh` stays red until it is done exactly as `gtfs-day0-verify.sh` is C126's closure check. `dotnet test tests/Security -c Release` **85/85**; `ApiGateway.Tests` 605/605; `tests/Contract` green; `infra/replica/smoke.sh` 24/24. **Two HIGH findings, and both were invisible from inside the process** — which is the argument for the shape this component took: a suite that reads what the assemblies *declare*, plus a harness that asks a *deployment* what it is actually doing. **C127-02 (HIGH, FIXED, verified live) — the edge shipped with no rate limit and an empty attestation policy.** The whole `Gateway` section was absent from the deployed `app-services` image, so every value fell back to its compiled default: `Attestation:SensitiveOperations` was `[]` while `Mode` defaults to `Enforce` — a deployment believing it enforced attestation would enforce it on **zero** operations, with the rejection metric at zero, which reads exactly like "nobody has tried" — and `RateLimits:Policies` was `{}`, so all **seventy** routes logged `policy … is not configured; applying no limit` at start-up, defeating four ADD §12.6 rows outright. The cause is a name collision: `AppServices` co-locates the edge with 22 services and one content root cannot hold 23 files called `appsettings.json`, so `DropCoLocatedAppSettings` removed api-gateway's — which is not a service's configuration but the edge's own policy. **The identical collision had already been found and patched in the *test* project**, which is what made it less likely anybody would look at the deployment; all 605 gateway tests passed throughout because they compose from the source directory. Fixed by moving it to `gateway-policy.json`, loaded `optional: false` so a gateway that cannot find its policy refuses to start. Redeployed: zero `policy not configured` lines, and 70 reads of a dead share token gave **67 × 404 then 3 × 429**. **C127-01 (HIGH, open at deployment) — every service connects to Postgres as a superuser.** Observed rather than inferred: `audit.events` accepted a `DELETE` from the server, and `row_security_active()` answered **false** for all nine policy-bearing tables — every fleet-scoping policy 1806/1807 ships was doing nothing. Migration 1305's own comment predicted it: *"Real immutability is the deployment's job"*. `2001__least_privilege_roles.sql` lands the mechanism (`mageride_app` with `SELECT`+`INSERT` and only those on `audit.events`, plus `FORCE ROW LEVEL SECURITY`), applied twice and verified under `SET ROLE`. **The cutover was deliberately not performed** — PgBouncer carries one credential for both client auth and its server connection, so it is a change to C125's wiring and C128–C132 all depend on that replica staying up. **C127-03 (MEDIUM, FIXED) — three mTLS-only operations were published to the internet**: 46 of the 49 `security: [{ mtls: [] }]` operations carry the `/v1/internal` prefix and were refused at the edge; `calculateFinalFare`, `renderNotificationTemplate` and `lookupUserByPhone` do not. Each failed closed on its own shared secret, so nothing was exploitable — what was missing is the second control that makes a shared secret tolerable on the other 46. The cause is a convention standing in for a declaration: the blocked-path list and both suites keyed on the prefix, while the contract's `security` block is what says which plane an operation is on. **The RBAC probe (the DoD's hard item) is green: 444 endpoints across 24 services, `Open` = 0**, read off the composed pipeline rather than the source, with the anonymous surface kept as a reviewed ledger ratcheted in both directions |
+| C128 | anti-spoof-hardening | 6 | PARTIAL | 2026-08-12 | **Three of the four DoD items are met and measured; the fourth is met on one path and the other is a HIGH that cannot be closed here.** `dotnet test tests/Security -c Release --filter Category=AntiSpoof` → **96 passed, 0 failed, 5 skipped** (180/6 with C127's), `dotnet build backend/MageRide.sln -c Release` clean, `security/run-asvs-checks.sh` unchanged at 41/3 (all three are C127-01). **DoD 1 — the corpus measures clean:** 35 labelled tracks, 1,051 samples, 17 hostile families, driven through `PlausibilityFilter` itself with thresholds bound from `.env.app.example` rather than the class initialisers — **828 honest samples 0 refused (0.000 % against a 1 % bound), 158 hostile 0 escaped**, on every one of the eight tiers. **No threshold was changed, and that is the finding**; `ThresholdConfigurationTests` mistunes each knob in turn so a corpus that cannot fail is not mistaken for a passing one. One modelling decision carries the number: receiver error is a **bounded random walk**, not an independent draw per fix — an earlier draft's 30 m disc was 216 km/h of pure noise and made the 80 km/h three-wheeler ceiling look unusable. **Four attacks the gate cannot see are named as ratchets rather than counted as covered** (a slow walk inside the tier ceiling, a reappearance past `VehicleMetaTtl`, a teleport inside a `pos/replay` backlog, a handset rewinding its clock); replaying a recorded track live **is** caught, 18 of 20. **DoD 2 — a cross-vehicle publish is refused on all three live listeners**, and **8084/WSS had never been driven by any suite** — the one a driver's handset actually connects to. `EmqxFixture` now publishes it; `BrokerPolicyTests` reads the deployed `.conf` files **with comments stripped**, which is exactly how C128-01 had hidden. D-17's ceiling is demonstrated to be paced rather than dropped, and one credential over four sessions beats it. **DoD 3 — a cloned IMEI quarantines both bindings** with `imei-duplicate`, stops the incumbent's credential validating and deletes the `imei:{imei}` cache entry (left behind, a 60 s budget quietly becomes the cache's 24 h); the window is asserted at the deployed 24 h from both sides by ageing the sighting trail rather than shortening the setting. **DoD 4 — revocation inside 60 s on the TCP path, NOT on the MQTT one (C128-01, HIGH, owner C133, before go-live):** a revoked certificate still completes the mutual-TLS handshake and the device goes on publishing. Everything platform-side works — binding REVOKED, `validate` refusing, the Redis signal inside ADD §7.7.3's one second, the serial on the CRL in budget — and what is missing is the broker reading it. **It cannot simply be switched on:** EMQX locates a CRL through the peer certificate's distribution-point extension, `EmbeddedStepCa` writes that only when `StepCa:CrlDistributionPoint` is set, and no environment sets it — so `enable_crl_check = true` before a fleet-wide re-mint takes the whole tracker plane off the air rather than tightening it. **C128-02 (MEDIUM, owner admin-bff/C061):** against a 39-pair synthetic month, `repeat_pair` recall 100 % / precision 67 % — a farming pair rides *less* than a commuter, so no threshold separates them, but correlating `repeat_pair` with `shared_device` names exactly the six farming pairs and nothing else; the detector computes all three signals and does not correlate them, so `PairRideThreshold` is left at 8 deliberately. **C128-03 (LOW):** ADD §12.6 prices `flex` at 200 km/h, above `sedan`'s 180, for a tier D5' §1 places below it. Two configuration gaps closed (`PositionProcessor__VehicleMetaTtl`, six `Reputation__Collusion__*`). The `tests/Security` no-container rule takes one scoped exception, argued in that project's CLAUDE.md, because C128-01 is the demonstration that every in-process assertion about revocation stayed green while a real broker accepted a revoked certificate |
+| C129 | load-test-suite | 6 | PARTIAL | 2026-08-13 | **The suite is built and runs against the deployed replica; three deliverables are blocked behind the defect it found, and no production target is reported as met.** `bash load/configure.sh` then `k6 run load/ingest.js --summary-export=load/out/ingest.json && k6 run load/dispatch.js`. **The ingest chain carries ~10 msg/s against ADD §3.2's 3,000.** A rate sweep at 20/40/80/160 msg/s carried 30.8 / 23.3 / 15.5 / 5.7 % — EMQX delivers a flat 12–14 msg/s to mqtt-bridge-svc at every step and discards the rest as `delivery.dropped.queue_full`, **after PUBACKing the publisher**, so k6 reported "99.5 % of target, 0 broker errors" while nine in ten samples were thrown away. Neither broker nor stream is the cause: a QoS-0 `svc-` subscriber on the same filter took **97.2 % at 100 msg/s**, Redpanda's produce latency is **16.9 ms over 13,693 requests**, and nothing was CPU-bound. EMQX's session view shows `inflight=32` permanently full — the bridge takes **2.5–4 s per acknowledgement against a 17 ms produce**, and `max_inflight`/`max_mqueue_len`/`retry_interval` are all EMQX defaults `emqx.conf` never sets. **D-19 misses by 7× at a thirtieth of the rate: p95 36.6 s, p99 36.9 s.** **The ride plane fails silently with it** — only `telemetry.normalized` advances `driver_presence.last_seen_at`, so drivers leave the candidate pool inside 60 s and `dispatch.candidate_scores` took 0 rows. **Three deployment defects, two fixed:** `Dispatch__RideServiceBaseUrl` was the NXDOMAIN placeholder `dispatch-needs-ride-svc`, so **no Mode C ride was ever dispatched** while the contract sweep stayed green (fixed); `fanout`/`tcp-adapter` were still on the pre-C126 `Jwt__JwksUrl` and answered **500 to every `/hubs/live` connection** (fixed); and the gateway's rate limiter **buckets every caller on the platform together** because `KnownProxies` is a hostname `IPAddress.TryParse` rejects — 40 distinct `X-Forwarded-For` values, 39 refused — leaving `/v1/rides/**` at 2 req/s platform-wide (C008/C125's). **Four spec findings:** §16.4 omits the hypertable write path (18× understated), A3's 80–120 B payload is 227 B, `mageride.fanout.frames` is not §16.3's send unit, and no budget exists for request → offer (E-09's outbox hop measured at 116 ms median against its 50 ms). Container logs are unbounded and ~1.6 GB/day of `Npgsql.Command`. Stock k6 throughout — MQTT and SignalR are implemented in `load/lib/` so the verify command needs no xk6 build |
+| C130 | chaos-drills | 6 | DONE | 2026-08-13 | **Twelve drills, 89 assertions, 0 failures, 14 findings, 14 m 22 s** — `bash chaos/run-drills.sh --env replica --report chaos/out/report.md` exits 0 with every fault rolled back and the stack healthy. **Most of ADD §14.1 holds and is now measured**: R-04's durable backstop survives a `FLUSHALL` (`rides.timers` fired **765 ms** after the deadline against a **305 ms** control, ride back to `Matching`, offer `EXPIRED`) — the DoD's headline item; `limited_live` is raised on a Redis outage and **clears itself 2.3 s** after Redis returns; "tracking continues" through a Postgres outage is true (map served from Redis, GT06 listener accepting, and both refusals came back in **under 100 ms**, which is what stops a database outage becoming an every-request one); the transactional outbox loses nothing across a broker outage (booking commits in **734 ms**, event held, drained **1.0 s** after recovery, ride `Offered` **211 ms** later); R-09's split costs the live lane **zero** acknowledgements under a **132–137 msg/s** replay flood and a **1,200-session** storm (delivery holds; the ack-latency tail reaches **4.3 s**, so timeliness does not); D-08 holds on both halves. **Five findings change how this platform is operated.** **(1) SOS reaches nobody** — `POST /v1/sos` answers `200 {smsStatus:"Failed"}` **with nothing broken** (both D-33 gateways absent: `Sms__SecondaryGateway` empty, notification-svc's log transport off outside Development), and **under a Redis or Postgres outage it is refused outright** — 503 in 91 ms, 500 in 83 ms. ADD §14.1 has **no SOS row at all**. **(2) R-15 is not wired anywhere:** `Dispatch__LastWillEnabled` appears in no env file, no compose file and no k8s overlay and defaults to `false`, so production would deploy with it off. EMQX does its half perfectly — **150/150** sockets dropped without DISCONNECT produced retained `offline` wills, median **811 ms** — and **0** `offer_release_grace` timers were armed. DT-04's filter clearing, T-04's stalled-tracker path and **R-16's four post-accept graces** take their input from the same fact, so **R-16 is recorded as untested rather than passing**. **(3) ADD §14.1's `data_age` does not exist** on any surface — `NearbyResponse` is `{vehicles, asOf, limitedLive}` and the SignalR `VehicleFrame` carries no timestamp at all, so under lag the map shows stale markers with a current clock. **(4) RPO is one backup interval, not §15's 5 minutes** — no pgBackRest and no WAL archive; the probe row and the ride booked after the backup were both gone. **RTO is met at 1 m 11 s** against 30 minutes (1 m 11 s / 1 m 25 s over three runs), on a 1.5–1.8 MB dump. **(5) `infra/replica/restore.sh` could never restore** — `psql -c "DROP DATABASE …; CREATE DATABASE …;"` is one query and one implicit transaction; it died there having already stopped five containers, leaving the platform down with the database intact. **Fixed here** (two `-c` flags), and `backup.sh --verify-restore` never caught it because it only ever runs `CREATE DATABASE` on a fresh scratch database. **Three failures produce no operator signal at all**: a wedged outbox dispatcher (`/health/ready` 200, and *neither* outbox alert can fire — `OutboxPublishFailing` needs a throw that never comes and `OutboxDispatchLagHigh` is a p95 over a histogram that goes quiet), a flushed-but-running Redis (`limitedLive:false` over an empty map), and a partitioned container (reports itself READY with every socket black-holed — on DOKS it keeps taking traffic). Plus `mageride.rides.timers_fired` declared and incremented nowhere while **two Grafana panels chart it**. **Two further defects came out of driving one ride all the way to completion**, which nothing else in this repository does against a deployment (`load/dispatch.js` cancels pre-acceptance by design): a **completed cash ride cannot be settled** (`POST /v1/fare/pay` answers `404 no computed fare yet` for a ride that has completed) so it sits in `PaymentPending`, which `ux_rides_open_passenger` does not exempt — the passenger *and* the driver are out of service permanently, a hazard `ride.yaml`'s own `/complete` description names verbatim; and the driver's next accept is then answered **`500` with a full stack trace, the constraint name and absolute build paths in the response body**, because `ux_rides_driver_busy`'s violation is uncaught where the contract documents `409`. `docs/runbooks/chaos-drills.md` gives each drill a detection signal and a first action |
+| C131 | voip-tracker-acceptance-sg | 6 | PARTIAL | 2026-08-13 | **The harness, the Singapore media plane and the report are built, self-tested and rehearsed; the acceptance run has not happened, because the Singapore region does not exist yet.** `bash acceptance/sg/run.sh --report acceptance/sg/out/report.md` exits **2** naming all five missing things — C126's shape, where a component blocked on something outside the repository states it in its exit code. Production is DOKS Singapore and **C132 builds it**, and C132 depends on C131, so there is no cluster, no media host, no Colombo client and no tracker bound in Sri Lanka; the build host is the Contabo box in Germany and **EU numbers are not acceptance evidence**, so nothing was run against the replica and reported as a region. **`selftest.py` is 100 checks and a hard gate** ahead of any probe, pinning every calculation against something true independently of this repository — G.107's published values, RFC 3550, RFC 5389's worked message types, and **GT06's documented login acknowledgement `78 78 05 01 00 01 D9 DC 0D 0A` reproduced byte for byte** — for C130's reason: this code meets something real exactly once. **Seven findings, six of them defects in the media plane, all region-independent, which is the argument for building the instrument before the region existed.** **C131-01 (HIGH): the SFU never tells any client the relay exists** — `livekit.yaml` has `turn.enabled: false` and no `rtc.turn_servers`, voip-svc's token response carries no ICE servers, and LiveKit's documented fallback is Google's public STUN, so coturn is deployed, hardened and offered to nobody; the failure is a call that rings and has no audio on exactly the CGNAT handsets the replica spec calls "the common case on Sri Lankan mobile carriers" — **and it would have made this component's own headline metric read 0 % relay share, which reads as "peer-to-peer works" and means the opposite**. **C131-02 (HIGH): 101 relay ports is 50 concurrent relayed calls against a target of 500** — D6' §6 pins `50000-50100`, one allocation is one port, a both-ends-relayed call is two; **demonstrated**, not derived: the 51st call was refused `508 Cannot create socket` while the 50 already up carried on at 0 % loss. That same range is claimed by both `livekit.yaml`'s `rtc.port_range` and `turnserver.conf` with both containers on host networking. **C131-03: 5349 has never listened anywhere** (no `cert=`/`pkey=`, and coturn says so every boot), **C131-04: `TURN_SECRET` is set nowhere** and `Turn__Realm` binds nothing, **C131-05: the replica's `voip` profile cannot start** — it bind-mounts a `livekit.replica.yaml` that does not exist, and Compose creates a missing bind source as a **directory** — and has no coturn container at all, **C131-06: the downlink command plane has no producer in any deployment** (`TripState__PublishCadenceHints` defaults false and is set nowhere — C130's `LastWillEnabled` shape; three of the five commands have no producer at all), **C131-07: C131 and C132 both own the SGP media plane** per `service-catalog.yaml`. The fence is structural with no override: `lib/region.sh` layers a refusal, a declaration and a **light-speed check** that refutes a claimed location (a Colombo client reaching a target in 40 ms is not reaching Europe). **Colombo TURN: recommended, on capacity and failure mode rather than geography** — the delay budget allows a 170 ms Colombo↔Singapore RTT before MOS 4.3, against a 28.8 ms floor |
+| C132 | production-readiness-doks | 6 | PARTIAL | 2026-08-13 | **See also the 2026-08-15 addendum in the Session Handoffs, which records what merging this component uncovered — the ingest ceiling (go-live blocker #5) CLOSED, and six pre-existing defects in the build and delivery pipeline that had never been reachable.** **The go-live package is built and the launch topology is proven on a real Kubernetes cluster; the launch is blocked on fifteen items, four of them HIGH findings this component's own fence gates on.** `kubectl apply --dry-run=client -k infra/k8s/overlays/production && bash infra/k8s/verify-readiness.sh` → clause 1 green, clause 2 **21 passed, 0 failed, exit 2** naming every blocker — C126's and C131's shape, where a component blocked outside the repository says so in its exit code. **D7' §8's launch row is now two kustomize components** (`retire-single-instance-data` then `launch-topology`, always as a pair — kustomize accumulates a component's `resources` before its `patches`, so the names have to be freed first): **Patroni 1P+2R with Kubernetes itself as the DCS**, no operator and no CRD, because C132's own verify command is `kubectl apply --dry-run=client` and a CRD would make it depend on what happened to be installed. `timescale/timescaledb-ha:pg16` already ships `patroni 4.1.3` and `pgBackRest 2.58.0`. **Measured on a 3-node cluster: leader pod deleted → `Service/postgres` repointed at the promoted member in 6 s** (ADD §14.1 promises 30), the old primary rejoined by `pg_rewind` on the new timeline, and the DSN hostname never changed because the leader is a POD LABEL and the Service selects it. **Redis Sentinel needed no C# at all** — `serviceName=` plus the sentinel endpoints, and StackExchange.Redis 3.0.17 followed a real failover in 11 s with no restart, tested through `RedisServiceCollectionExtensions`' exact code path; the connection string ships in the same component as the topology. **Four defects that would each have been a production outage, all found by RUNNING the manifests, none visible in a diff. C132-01 (HIGH):** the production Postgres pod was refused by its own namespace's `restricted` PSA (`runAsNonRoot != true`, no `seccompProfile`) — the StatefulSet applies, ArgoCD reports Synced, the PVC is created and **no pod is ever created**; `--dry-run=server` only warns and the CI job that runs it is `continue-on-error: true`. **C132-02 (HIGH):** nothing in `infra/k8s/` set `Gateway__ForwardedHeaders__*`, so behind an ingress every caller on the internet shares one rate-limit bucket — thirty logins a minute for 100,000 passengers, and C127-02's whole remediation inert again; fixed with RFC-1918 `KnownNetworks` **paired with** `use-forwarded-headers: false`, because either alone lets a client pick its own bucket. **C132-03 (HIGH):** the image bakes `PGBACKREST_CONFIG` to a path inside PGDATA, so the mounted `pgbackrest.conf` was never read and every `archive_command` failed — `archive_mode = on` and no WAL archive at all. **C132-04 (HIGH):** Patroni's pod selector is `kubernetes.labels` **plus a scope label it adds itself**, and without `cluster-name: mageride-pg` every member saw only itself: a leader elected, database serving, `/readiness` 200, and **no replica could ever be built** — a one-node database wearing a three-node topology. **The DR restore was executed end to end and timed** (`infra/scripts/dr-rehearsal.sh`, 15 checks): **RTO 122.2 s**, 1,000 rows from before the target restored and 0 from after it. **That number does not extrapolate** — the copy phase moved 29 MB in two minutes, so it is per-file cost against the object store, not throughput, and `--process-max=8` bought 12 %; re-running it against the real Wasabi repository is checklist item 9 and **that** is the RTO of record. **The capacity question C124 handed here is answered with arithmetic**: the rendered overlay asks for **43.45 vCPU / 97.8 GiB** at every HPA floor against §8's 12/24, so the pool is **9 nodes in two pools** — and the plan also prices the other answer, since `500m/1Gi` is D7' §5's template that nothing has measured and the replica runs all 21 domain services in one process at **324 MiB**. **ADD §10.2's six scale-out triggers are alerts, not prose** (17 rules, `promtool` clean, each with a runbook that exists and opens with a First action) with a production Alertmanager carrying three PagerDuty services and their escalation. **C132-05 (HIGH, open): none of it is deployed** — there is no Prometheus, no Alertmanager and no exporters in either DOKS cluster, and every runbook here assumes a page arrived. **C132-08: `security/remediation-backlog.md` assigns both open HIGH findings to "C133", which is `payout-svc`** — a wave-3 service that shipped weeks ago and has no fence, no deployment surface and nobody working on it; the component whose fence that sentence describes is C132. Re-owned in the checklist. **Deviations, each argued: Keepalived cannot run on DOKS** (VRRP needs L2 adjacency, multicast and an ARP-movable IP; ADD §10.5's own table already substitutes "NGINX Ingress + cloud NLB" at the K8s row) and **`create_replica_methods` is `basebackup` only**, because Patroni 4 does not fall through a failed method — listing pgbackrest first makes every rebuild impossible whenever the repository is empty, which it is on day one |
 
 ⭑ = walking-skeleton milestone (C020–C025): one booked ride end to end on Docker Compose.
 **REACHED 2026-07-28 (C025).** `bash e2e/walking-skeleton/run.sh` brings up
@@ -166,6 +166,42 @@ After completing a component, set its Status and append the 3-line handoff under
 through real EMQX, Redpanda, Redis and SignalR, using the KMP module the two Android apps use.
 
 ## Planner findings — spec gaps & conflicts (from C000)
+
+**Δ 2026-08-12 — wave-5 gate exception (granted by the project owner).** The gate read "contract +
+E2E suites green **against the deployed replica**". Half of it is now literally true: C126 built
+`tests/Contract/Live` and `infra/replica/contract-live-verify.sh`, and the sweep is green against the
+running replica (304 passed, 17 skipped, 0 failed, five findings ratcheted in `Live/LiveDrift.cs`).
+
+The **E2E half stays in-process** and the gate is met with that stated exception, so wave 6 is not
+blocked on it. The reason it is not a flag: all four fleets in `tests/E2E` mint their own tokens
+against a black-hole `Jwt:JwksUrl`, and several scenarios assert on Redpanda internals and ledger rows
+that only in-process composition can reach. Porting them is component-sized work.
+
+**Owed: a wave-6 slot for "E2E against the deployed replica."** Not created here, because adding a
+manifest entry means re-running `build/tools/generate_build_plan.py`, and that **resets the Status
+column and erases the Session Handoffs log** — 126 components' worth of record. Whoever schedules
+wave 6 should add it to the manifest and regenerate deliberately, moving the handoffs aside first.
+
+**Δ Second exception, same date, also granted by the owner: "day-0 GTFS feed active."** The feed is
+an externally provided file (AL-56) and its arrival is not an engineering task, so wave 6 is not
+blocked on it either. **C126 stays PARTIAL** until the file is uploaded through SCR-AP-016 and
+`bash infra/replica/gtfs-day0-verify.sh` passes; that command remains the closure check and needs no
+re-running of anything else.
+
+With both exceptions, **C127–C132 are unblocked.** Two boundaries this exception does NOT cross:
+
+- **C133's go-live gate still requires the feed**, in its own fences: "Go-live is gated on the day-0
+  GTFS feed being active (C126) and on no open high/critical security findings." That is a different
+  gate and is left alone deliberately — going live without a feed means Mode A route matching is dead
+  for every passenger, and AL-55 makes the no-coverage state a safety net rather than a launch
+  condition. Of C127–C132, none names GTFS at all; only C133 does.
+- **A synthetic fixture is active on the replica right now** (`SYNTHETIC-gampaha-v2-2026-08-11`, 15
+  halts, 4 routes), which is why transit routing answers `coverage: active` rather than `no_feed`
+  during wave-6 work. That lowers the risk of this exception and creates one of its own: **any wave-6
+  number derived from transit routing describes a 15-halt fixture, not a national feed.** C129's
+  load figures for `/v1/transit/options` in particular have to be re-run against the real feed before
+  they mean anything — the pattern index a national feed builds is three orders of magnitude larger.
+
 
 Recorded by the build planner. Each is already encoded as a fence in the affected prompts;
 the ones marked **micro-change-set** should be fixed in `specs/` rather than worked around.
@@ -20203,8 +20239,24 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `bash infra/replica/smoke.sh` **23 passed, 0 failed, 0 skipped** — with all eleven core containers
   healthy, synthetic data seeded, and `backup.sh --verify-restore` proving a dump restores (676 K, 193
   tables, `iam.users` 14 rows in the source and 14 in the restore). Live usage is **1 305 MiB against
-  the 17 280 MiB the spec budgets**. Nominatim is out of scope by instruction (its own 8 GB VPS at
-  45.77.37.208, which has no Docker installed).
+  the 17 280 MiB the spec budgets**. **Nominatim is deployed and in scope** — the earlier
+  session-scoped deferral was reversed by instruction on 2026-08-11. Its own VPS (45.77.37.208,
+  Ubuntu 26.04, 7.2 GiB, 4 cores, 8 GiB swap) had no Docker at all; `deploy-nominatim.sh` installs it,
+  copies the compose file to /opt/mageride-nominatim, generates the geocoder's internal Postgres
+  password ON THE TARGET (mode 600, never copied off it), starts the Sri Lanka import, restricts 8080
+  by ufw to the replica's address only — an open geocoder is a free service somebody else finds, and
+  the abuse is indistinguishable from traffic — and writes **`Query__NominatimBaseUrl`** into `.env.replica`. The import runs unattended for tens of minutes; `--status` follows it.
+
+  Two things about it are worth knowing before touching it. **Every compose subcommand on that box
+  needs `--env-file .env.nominatim`**, because NOMINATIM_PASSWORD is `${VAR:?}` — without it `ps` and
+  `logs` print an interpolation error rather than the thing you asked for, and my first `--status` and
+  my printed follow-hint both had that bug. And **nominatim is NOT in the replica's budget**:
+  `budget.py` lists it under ELSEWHERE, deliberately, because its 8 GB belongs to a different box —
+  the first version of that parser counted it and refused a replica deploy that fits.
+
+  `osm-pipeline` is still not deployed. The spec makes it a weekly one-shot that "is NOT part of the
+  always-on container set", so it belongs in a cron entry; `--reimport` covers the geocoder half of
+  that refresh and the tile half needs an R2 bucket nobody has provisioned.
 
   **Two containers had to be built before anything else could happen.** The replica's Container 6 and
   Container 7 are `backend/src/HotPath/` and `backend/src/AppServices/` — 4 and 22 co-located services
@@ -20281,3 +20333,1310 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   own VPS; and the seven `Storage__S3__*`-shaped pairings — anything the replica GENERATES needs both
   ends wired, and #7 shows one was missed while the other was found only by reading. Assume there are
   more until each shared secret is checked from both sides.
+
+- **Component:** C126 gtfs-day0-load — 2026-08-11
+- **Status:** PARTIAL — `bash infra/replica/gtfs-day0-verify.sh` exits **2**, and says why: the
+  pre-first-import baseline is recorded and green, and no feed has been activated because no feed has
+  been handed over. Four of the five definition-of-done items are blocked on an external input; the
+  pipeline that satisfies them is built, and every part of it that can be exercised without a feed has
+  been exercised against the running replica.
+- **Notes:**
+  **Why it is PARTIAL, and why that is the honest outcome.** The day-0 operation's input is the
+  national GTFS file, which AL-56 makes an **externally provided file** — the launch release and every
+  refresh alike, with no in-house sourcing or authoring workstream. It is not in this repository, not
+  on this box, and not in the Mobility Database catalogue (checked: zero Sri Lanka entries in 1.1 MB
+  of `sources.csv`). Manufacturing one would have turned "the full national feed validates, activates
+  and serves direct routes" into a statement about a fixture I had written, which is the one thing
+  this component's fences forbid. So the pipeline was built to run on the provider's file, and
+  everything that does not depend on that file was completed.
+
+  **What is done, and demonstrated rather than asserted.**
+  (a) **The pre-first-import empty state is observed and recorded** — the definition-of-done item that
+  had to be met *before* anything else, because it stops existing at the first activation:
+  `GET /v1/transit/options` answered **`coverage: no_feed`** with 0 options, `transit.gtfs_routes`
+  `_trips` `_stops` `_stop_times` `_shapes` were all 0, and the version ledger was empty (SCR-AP-016's
+  empty state). `--observe-empty-state` exists for exactly this: the file may arrive days later, and
+  the baseline has to be captured while it is still true. `AL-55` is why it is worth capturing — after
+  day-0 an empty options list means "no bus serves this corridor", and only the discriminator
+  separates that from "we cannot tell".
+  (b) **The upload half of SCR-AP-016 works end to end on a deployment**, which nothing had ever
+  shown. Driven through HAProxy → gateway → transit-svc with a real Admin bearer: multipart upload
+  → `202` + `feedVersionId`, the kernel's `Idempotency-Key` requirement, the status stepper polled at
+  the screen's own 2 s cadence, the five-error cap, the CSV row-level report, `409 feed-duplicate`
+  naming the existing version on a re-upload, and both audit rows — `GTFS_FEED_UPLOADED` with an
+  actor and `GTFS_FEED_VALIDATED` **without** one, which is `GtfsAuditActions`' documented shape
+  (a queued job reached the verdict, not a person). The input was a zip holding a single README
+  saying what it is; it contains no GTFS file, so BR-32.1 refused it and it can never be activated.
+  That is a malformed-input probe, not a feed, and the `FAILED` row it left is documented in the
+  runbook §9 with the SQL to remove it and the reason not to.
+  (c) **The runbook** — `docs/runbooks/gtfs-day0-load.md`: obtain → upload → read the report →
+  preview → activate → verify → roll back, the rollback timing table the run fills in, the
+  every-refresh checklist, and a symptom table whose rows are the failures this surface actually
+  produces.
+  (d) **The corridor sample set** — six real corridors chosen to fail for *different* reasons: the two
+  Colombo trunks, one leaving the district, one in Kandy (so a Colombo-only feed is caught — the exact
+  failure the retired corridor-first plan would have produced), one in the deep south (so the bounding
+  box is exercised near its floor), and Colombo–Kandy, which is a rail corridor as well as a bus one.
+  (e) **The shape check is a real check.** `gtfs_shape.py` decodes the polyline at the same 1e5
+  precision `EncodedPolyline` encodes at, holds every point to the same Sri Lanka bounding box BR-32.1
+  applies to *stops*, and requires the line to pass within 1200 m of both ends of the corridor that
+  produced it — which is what distinguishes a correct shape from a valid, well-formed, wrong one.
+  Negative-tested in all three directions (lat/lng transposition, a shape from the wrong corridor,
+  garbage).
+
+  **FINDING 1 — every authenticated request to either compose stack answered 500, and nothing knew.**
+  `infra/env/.env.common.example` set
+  `Jwt__JwksUrl=http://app-services:5000/v1/internal/iam/.well-known/jwks.json`. The
+  `/v1/internal/**` prefix is refused **ahead of routing** by the gateway's `BlockedPathMiddleware`
+  (mTLS-only, D3' §0) and no route of that shape had ever existed, so `JwksConfigurationManager`'s
+  fetch 404'd and every JWT-validating service threw `HttpRequestException` on **every request
+  carrying a bearer** — dev as much as the replica. It survived C125's ten fixes because the fetch
+  happens on the first *authenticated* request rather than at start-up or readiness, and because both
+  smoke suites assert **401s**, which need no key: C126's day-0 load is the first thing in this
+  repository's history to present a real token to a deployed service. Fixed at the source: a new
+  `iam-jwks` route in `gateway-routes.json` matching `/v1/.well-known/jwks.json`, exempt from the
+  D-31 version gate (a service fetching a key sends none of its headers) and **rewriting the path**
+  onto the root the JWKS specification expects — the /v1 prefix is required because
+  `RouteConfigurationTests` holds the edge to `/v1`, `/public` and `/hubs`. `.env.common.example` now
+  names it, `docs/runbooks/secret-rotation.md`'s step-4 verification (which used the same dead URL and
+  could never have passed) reads it from inside the cluster instead, and
+  `The_jwks_route_is_reachable_exempt_and_rewritten` pins all three properties. Production is
+  unaffected — `infra/k8s/base/config/common-config.yaml` uses per-pod Service DNS.
+  **And the gap that hid it is closed:** `smoke.sh` gained step 1a, which fetches the JWKS the way a
+  service does (no credential — that is the point of a JWKS) and fails if it is not 200 with a `kid`.
+  C125's suite is now **24 passed, 0 failed**. Everything else in it is deliberately unauthenticated,
+  so this is the one check that exercises the JWT path at all.
+  **Micro-change-set owed:** `GET /.well-known/jwks.json` is served by iam-svc (C020/C026), is now
+  routed at the edge, and is declared in **neither** D3' nor `backend/contracts/iam.yaml`. Every
+  service's own `appsettings.json` already points at `https://api.mageride.lk/.well-known/jwks.json`,
+  so the intent was always a public edge path; C007's contract set should say so.
+
+  **FINDING 2 — `ApiGateway.Tests` has been failing 18 of 605 since C125.** Both projects it
+  references ship an `appsettings.json` and the copy into the test output is last-one-wins, so
+  AppServices' file (Logging and AllowedHosts, no `Gateway` section) landed on top of the gateway's.
+  `RouteConfigurationTests` threw in its static initialiser (all ten cases) and the harness's gateway
+  came up with **no attestation list and no rate-limit policies**, so sixteen more cases in
+  `AttestationEnforcementTests` and `RateLimitTests` asserted a 401 and got a 200 — i.e. the tests that
+  prove D-30 enforcement and D6' §8.2 limiting were vacuous. Verified pre-existing by stashing my diff
+  and re-running (16 of 31 failed on pristine files). One root cause, one fix: a `Copy` target after
+  Build so the subject under test wins its own output directory. **605/605 now pass.**
+
+  **FINDING 3 — every `deploy.sh` was deleting every rollback target.** A rollback re-imports from the
+  archived version's stored zip (BR-32.3), `Transit__Gtfs__StorageRoot=/var/lib/mageride/gtfs`, and
+  nothing mounted it — so the zips lived on the container's writable layer and a recreate took them.
+  Now the `gtfsdata` volume, mounted at `/var/lib/mageride` and **not** at the storage root itself:
+  that is the directory `Dockerfile.appservices` creates as `app:app`, and a volume mounted onto a
+  path the image does not have is created root-owned and unwritable by a non-root container — C125's
+  defect #6, one layer down. Proven by writing a file, forcing a recreate, and reading it back.
+  `gtfs-day0-verify.sh` §6 now checks the mount *and* counts the stored zips against the number of
+  versions, so a lost rollback target is a failure rather than a surprise.
+
+  **FINDING 4 — the feed-download HMAC was a published constant.** `Transit__Gtfs__DownloadSigningKey`
+  was `CHANGEME_gtfs_download_signing_key_base64` on a publicly reachable edge. `TransitOptions`
+  accepts it (it only requires non-empty), and that signature **is** the whole credential on
+  `GET /v1/admin/transit/gtfs/objects/{id}` — the route a browser follows after the 302, carrying no
+  bearer. `deploy.sh` now generates it like `MQTT_JWT_SECRET`, and this deployment's has been
+  regenerated. This is the fifth instance of C125's own closing warning about generated values needing
+  both ends wired; assume there are more.
+
+  **Decisions.** (1) **The rollback rehearsal needs a second, genuinely different feed file**, and the
+  scripts take `--previous` for it: the upload dedupes on sha256 (BR-32.1), so a feed cannot be rolled
+  back to itself, and the rehearsal's target must be `archived`, which means it must have been active.
+  The sequence is therefore *previous → current → back → forward*, which is also the real one. Without
+  it the rehearsal is reported **NOT REHEARSED** and the verify fails — never silently skipped.
+  (2) **`expectRoutes` is a soft check.** "138 should appear on Pettah → Kottawa" is reported loudly
+  and is not fatal: route numbering is the feed's to state, not ours to require (AL-56), and a verify
+  that failed because a provider renamed 138 to 138/1 would be asserting against the wrong thing. The
+  hard checks are structural — a direct option exists, and its shape is geometrically possible.
+  (3) **The day-0 operator is provisioned into `.env.replica`, not into `seed.sql`.** The replica's
+  seed has no internal account at all (every synthetic actor is a passenger, driver or fleet owner),
+  so SCR-AP-016 had nobody who could open it; a committed seed would mean a committed PBKDF2 verifier
+  for a known password on a box with a public IP. `gtfs-lib.sh` derives the verifier exactly as
+  `Iam.Api/Auth/PasswordHasher` does (PBKDF2-HMAC-SHA256, 600 000 iterations, PHC-encoded) and signs
+  in through `POST /v1/admin/auth/login` — the same route the screen uses, so RBAC and the audit actor
+  are real. **Every other Wave 5/6 component that needs an admin bearer can `. gtfs-lib.sh` and call
+  `require_token`.**
+  (4) **The journal holds only what cannot be re-derived** — the empty state and the swap timings. The
+  verify re-asks the deployment for everything else, so a journal that claimed a corridor worked would
+  not make it pass.
+  (5) **Two script bugs worth naming**, because both produce false passes. `body=$(api …)` runs the
+  function in a **subshell**, so its assignment to `API_STATUS` was discarded and the caller branched
+  on whatever the last non-substituted call had left there — a stale 401 that made a successful
+  sign-in look like a refusal; `api` now returns through `API_BODY`/`API_STATUS` and is never
+  substituted. And psql performs **no** variable interpolation in a `-c` string (its own documentation
+  says so), which surfaces as a bare `syntax error at or near ":"` that reads like broken SQL;
+  `psql_v` feeds SQL on stdin with `-f -`.
+
+  **Files —** new: `infra/replica/{gtfs-lib.sh,gtfs-day0-load.sh,gtfs-day0-verify.sh,gtfs-corridors.json,gtfs_shape.py}`,
+  `docs/runbooks/gtfs-day0-load.md`. Changed: `backend/src/ApiGateway/gateway-routes.json` (the
+  `iam-jwks` route), `backend/src/ApiGateway.Tests/{ApiGateway.Tests.csproj,RouteConfigurationTests.cs}`,
+  `infra/env/.env.common.example` (the JwksUrl), `infra/replica/{docker-compose.light-replica.yml,deploy.sh,.env.replica.example}`,
+  `docs/runbooks/{README.md,secret-rotation.md}`, `infra/CLAUDE.md`, `.gitignore`.
+
+  **What the next session does when the file arrives:**
+  `cp <current>.zip infra/replica/gtfs/national.zip && cp <prior>.zip infra/replica/gtfs/national-previous.zip`
+  then `bash infra/replica/gtfs-day0-load.sh` and `bash infra/replica/gtfs-day0-verify.sh`, and fill
+  in the runbook's §6 timing table from the journal. Nothing else about C126 is outstanding.
+  **C133's go-live gate stays closed until that runs** — it is gated on the day-0 feed being active.
+
+- **Component:** C126 addendum — the wave-5 gate's live half — 2026-08-11
+- **Status:** the deployed-replica contract sweep LANDED and is green with a ledger:
+  `bash infra/replica/contract-live-verify.sh` → **304 passed, 17 skipped, 0 failed** over 321 live
+  cases. The in-process suite is untouched: `dotnet test tests/Contract -c Release` → 81 passed,
+  1 by-design skip, the 321 live cases skipping cleanly with no target.
+- **Notes:**
+  **What landed.** `tests/Contract/Live/` is the second transport C118's CLAUDE.md said the
+  `Runtime/` sweep would gain "when the Dockerfiles land (C124/C125)". Every contract operation is
+  driven over HTTPS through HAProxy with a real Admin bearer, and asserted for: **no 5xx**, a status
+  **the platform is entitled to answer**, and **2xx bodies validated against the declared response
+  schema**. Two extra facts get their own tests: the mTLS-only `/v1/internal/**` plane answers 404 at
+  the edge for **every** operation the contracts declare (C125's smoke checks one), and the JWKS is
+  published — the endpoint no contract declares and every bearer depends on.
+
+  **`bash` owns the credential, C# owns the assertions.** The runner signs in as the C126 day-0
+  operator via `gtfs-lib.sh` (`require_token`), exports `MAGERIDE_LIVE_{EDGE,HOST,TOKEN}`, and tells
+  the suite which optional profiles are **absent** so a 503 from an undeployed voip-svc is skipped
+  rather than ledgered as drift. Without `MAGERIDE_LIVE_EDGE` every live theory skips, so CI and the
+  C118 verify are unaffected.
+
+  **FIVE findings, none of them visible in-process, each ratcheted in `Live/LiveDrift.cs`** — the
+  ledger asserts the symptom is STILL there, so a fix fails the suite until the entry is deleted (the
+  discipline `RouteDrift` already applies).
+  1. **`GET /v1/fleets/{fleetId}/health` has never worked on any deployment.** fleet-health-svc binds
+     **127.0.0.1:5202** inside hot-path (`HotPath/Program.cs` passes `bindAddress: "127.0.0.1"` for
+     all four co-located services), so no other container can reach it on any port — and the
+     replica's cluster address names **5203** while `docker-compose.dev.yml`'s comment names **5000**.
+     Three places, three ports, none right. **Same root cause as the JWKS defect: a co-located
+     service bound to loopback cannot be a cluster destination.** US-3.13 is dead until both halves
+     are fixed. OWNER: C125.
+  2. **`GET /v1/drivers/{driverId}/level` and `…/stats` answer 500 on an unknown driver.** They are
+     "refresh-then-read", and the refresh does `INSERT INTO dispatch.driver_levels … ON CONFLICT DO
+     NOTHING`, which violates `driver_levels_driver_id_fkey` (23503) and returns a raw Npgsql
+     exception. `dispatch.yaml` declares only 200 and 401, so there is no 404 to return either:
+     contract **and** service need the micro-change-set. OWNER: C047 + C007.
+  3. **`GET /v1/admin/audit-log` is non-conforming on every page containing a system event.**
+     `actorId` is `required` in `admin-bff.yaml` and absent whenever the actor is a job — which
+     migration 1305 makes explicit ("a system-initiated action … has no actor") and
+     `GtfsAuditActions` calls "actor-less by construction". Found because C126's own
+     `GTFS_FEED_VALIDATED` rows are the actor-less ones. The fix is a nullable `actorId`, not an
+     invented actor. OWNER: C062/C065 + C007.
+  4. **`GET /v1/users/me` and `GET /v1/me/bootstrap` serve `phone: ""`** for a web-only internal
+     account, against `pattern: ^\+947\d{8}$` with no nullable branch — so **every** Admin/Fleet
+     Portal profile read is non-conforming. OWNER: C026/C027 + C007.
+  5. **`Fleet__NotificationBaseUrl=http://app-services:8080`, where nothing listens** (the gateway is
+     5000, as `Safety__NotificationBaseUrl` says two hundred lines up). **Fixed** in
+     `.env.app.example`; fleet-svc's departure reminders would have failed on connection refused.
+
+  **And one finding worth more than the five, for C127.** `ASPNETCORE_ENVIRONMENT=Development` on the
+  replica — set deliberately in `infra/env/.env.common.example` for the *dev* compose ("relaxes the
+  kernel's config validation, which is what a dev compose wants"), and the replica loads that same
+  file with nothing overriding it. Consequences, both observed: `ProblemDetailsExceptionHandler` adds
+  the **full exception** to any 5xx in Development, so a **publicly bound** edge serves stack traces
+  and SQL — that is how the JWKS and FK defects above were diagnosed, straight off HTTP; and every
+  `required outside Development` guard is switched **off**, which is how
+  `Transit__Gtfs__DownloadSigningKey=CHANGEME_…` survived. The list those guards cover includes
+  `Otp:PepperKey`, `Auth:PhoneHashKey`, `Jwt:SigningKeyPem` and notification-svc's PII logging.
+  **The one-line fix is `ASPNETCORE_ENVIRONMENT=Production` in `.env.replica.example`, and it is NOT
+  applied here**: flipping it turns those guards on, and a deployment missing any of them refuses to
+  start. Enumerating and generating them is C132's, with C127 judging the disclosure. (Checked and
+  **not** a hole: registry-svc's Development-only `POST /v1/dev/vehicles/{id}/approve` is not routed
+  at the edge.)
+
+  **Two mistakes of mine, both caught by the sweep itself.**
+  (a) The first version asserted "a 404 without problem+json means unrouted" — and **the gateway's
+  own 404 is problem+json too** (`/v1/definitely-not-a-route-anywhere` proves it), so the check could
+  never fire. An assertion that cannot fail reads as coverage; it is gone, and route existence is
+  named as `RouteTableTests`' job, which also gets the reverse direction.
+  (b) **The sweep changed state on its first run, which it had promised not to.** The kernel's
+  `Idempotency-Key` requirement covers POST only, so three no-id PUTs were accepted
+  (`/v1/users/me`, `/v1/admin/dispatch/directional-config`, `/v1/admin/drivers/level-config` — both
+  config rows were rewritten with the values they already held, which is luck: they were at their
+  migration defaults), and two idempotency-exempt POSTs filed **real PDPA obligations** against the
+  operator account (an erasure and an export, 30-day clocks, `PDPA_REQUESTED` in `audit.events`).
+  Both rows were deleted; the audit trail was left, being append-only and true. `LiveRequestPlan`
+  now drives PUT/PATCH/DELETE **only where the template carries an id**, and the PDPA family is in
+  the exclusion list. The class remark says plainly that the list was incomplete by inspection.
+
+  **Still open, and deliberately not started:** porting the four E2E fleets to a deployed target.
+  They configure `Jwt:JwksUrl` at a black hole and mint their own tokens, and some scenarios assert
+  on broker internals and ledger rows that only in-process composition can reach. That is a
+  component-sized piece of work, not a flag, and it should get its own slot rather than be
+  half-built here.
+
+  **Files —** new: `tests/Contract/Live/{LiveEdge,LiveRequestPlan,LiveConformanceTests,LiveDrift}.cs`,
+  `infra/replica/contract-live-verify.sh`. Changed: `backend/contracts/transit.yaml` (the three
+  nullable history fields, `oneOf` + `'null'` as this directory already spells it),
+  `infra/env/.env.app.example` (finding 5), `tests/Contract/CLAUDE.md`, `infra/CLAUDE.md`.
+
+- **Component:** C126 addendum 2 — fleet-health reachability, and the wave-5 gate exception — 2026-08-12
+- **Status:** finding 1 of the live ledger is **FIXED** and its entry deleted (the ratchet made that
+  mandatory): `GET /v1/fleets/{fleetId}/health` answers `404 "No such fleet organisation."` for an
+  absent id instead of `503 dependency-unavailable`. Live sweep still green — 304 passed, 17 skipped,
+  0 failed, now with **four** ledger entries instead of five. `ApiGateway.Tests` 605/605.
+- **Notes:**
+  **The defect was one word's worth of conflation.** `HotPath/Program.cs` bound all four co-located
+  services to `127.0.0.1` because "Container 6 exposes NO ports — the spec's table says None (internal
+  consumers only)". But *publishing no host port* and *binding loopback* are different things, and
+  fleet-health-svc is not a consumer: it serves US-3.13 and the gateway reaches it **from another
+  container**. `gateway-routes.json` had said so all along, in its own words — "the gateway reaches it
+  over the compose network, which is why `hot-path` still declares no `ports:`" — and named
+  `http://hot-path:5000/`. So the route had never worked on any deployment, and three documents each
+  named a different port (5000 in the gateway's default and the dev compose's comment, 5203 in the
+  replica's override, 5202 where it actually listened).
+
+  **Fixed so that one place says it.** `CoLocatedHost.Addresses`/`RunAsync` take an optional
+  `published` map; `HotPath` passes `fleet-health-svc -> http://0.0.0.0:5000`, which is the gateway's
+  existing default, so **the replica's override was deleted rather than corrected** — three numbers
+  became one. The other three services stay loopback-only, `hot-path` still publishes no host port,
+  and the compose healthcheck (which curls 5200, persistence-writer) is untouched. Verified: hot-path
+  logs `0.0.0.0:5000`, `curl http://hot-path:5000/health/live` from app-services answers 200, and the
+  edge route answers 404-for-absent-fleet.
+
+  **Wave-5 gate: met with a stated exception, granted by the owner** — contract suite live and green,
+  E2E in-process only. Recorded in the gate text itself (both in
+  `build/tools/generate_build_plan.py`, which is where the gates actually live, and in the generated
+  table in this file) plus a Planner-findings entry with the reasoning and what is owed.
+  **The generator was deliberately NOT re-run:** it resets the Status column and erases the Session
+  Handoffs log. Whoever adds the owed E2E slot to the manifest must move this log aside first.
+
+  **What the exception does not cover.** "day-0 GTFS feed active" is still open, so C127 is still
+  blocked on the feed upload unless that item is separately excepted. The E2E exception does not reach
+  it, and this addendum does not pretend otherwise.
+
+  **Geocoder re-confirmed** (2026-08-12, ~2 h after the import finished): `/v1/geo/reverse` →
+  "D. R. Wijewardene Mawatha, Suduwella, Slave Island, Colombo … 00200", `/v1/geo/search?q=Fort
+  Railway Station` → "Colombo Fort Railway Station halt, Olcott Mawatha, Fort … 01100", both
+  `source: nominatim`, `/status` → OK, container healthy.
+
+  **Files —** changed: `backend/src/HotPath/{CoLocatedHost,Program}.cs`,
+  `infra/replica/docker-compose.light-replica.yml` (override removed),
+  `tests/Contract/Live/LiveDrift.cs` (entry deleted, with a note saying what it was),
+  `build/tools/generate_build_plan.py` + `build/progress.md` (the gate).
+
+- **Component:** C126 addendum 3 — the second wave-5 gate exception — 2026-08-12
+- **Status:** the gate's "day-0 GTFS feed active" clause is excepted alongside the E2E one, both
+  granted by the project owner. **C127–C132 are unblocked. C126 stays PARTIAL** and
+  `bash infra/replica/gtfs-day0-verify.sh` remains its closure check.
+- **Notes:**
+  Recorded in the gate text itself (`build/tools/generate_build_plan.py`, where the gates live), in
+  the generated table in this file, in the Planner-findings entry beside the E2E exception, and in
+  `docs/runbooks/gtfs-day0-load.md` §9 — which is where an operator looks for what is true of the
+  replica rather than of the build plan. The generator was again **not** re-run.
+
+  **Two boundaries the exception does not cross, both checked rather than assumed.**
+  (a) Of C127–C132, **none** names GTFS in its scope, fences or definition of done — only **C133**
+  does, in its own fences: "Go-live is gated on the day-0 GTFS feed being active (C126) and on no
+  open high/critical security findings." That gate is left alone deliberately. Going live without a
+  feed means Mode A route matching is dead for every passenger, and AL-55 makes the no-coverage state
+  a safety net rather than a launch condition — excepting it would invert the premise Epic 28 exists
+  to serve.
+  (b) A **synthetic fixture is active** on the replica, so transit routing answers `coverage: active`
+  during wave-6 work rather than `no_feed`. That lowers this exception's risk and adds one:
+  **any wave-6 measurement taken through transit routing describes a 15-halt fixture, not a national
+  feed.** C129's load figures for `/v1/transit/options` specifically must be re-run against the real
+  feed — the pattern index a national feed builds is orders of magnitude larger, and the in-memory
+  matcher's cost is a function of exactly that.
+
+- **Component:** C127 security-review-asvs — 2026-08-12
+- **Status:** **PARTIAL.** The review ran end to end and produced nine findings; **eight are closed**
+  (two fixed and verified live, four accepted with an owner and a date, plus two low fixes). The
+  ninth — **C127-01, the one open HIGH** — is fixed in the repository and open **at deployment**: the
+  cutover is one connection string plus PgBouncer's client auth, owned by C133 and due at go-live.
+  `bash security/run-asvs-checks.sh` is C127's closure check and stays red until it is done, exactly
+  as `gtfs-day0-verify.sh` is C126's. `dotnet test tests/Security -c Release` is **85/85 green**;
+  `ApiGateway.Tests` 605/605; `tests/Contract` green; `infra/replica/smoke.sh` 24/24.
+- **Notes:**
+  **Two HIGH findings, and both were invisible from inside the process.** That is the whole argument
+  for the shape this component took — a suite that reads what the assemblies *declare*, plus a
+  harness that asks a *deployment* what it is actually doing.
+
+  **C127-02 (HIGH, FIXED, verified live) — the edge shipped with no rate limit and an empty
+  attestation policy.** The gateway's entire `Gateway` configuration section was absent from the
+  deployed `app-services` image, so every value fell back to its compiled default:
+  `Attestation:SensitiveOperations` was `[]` (nothing marked D-30 sensitive, while
+  `Mode` defaults to `Enforce` — so a deployment believing it enforced attestation would enforce it
+  on **zero** operations, with the rejection metric sitting at zero, which reads exactly like "no
+  attacker has tried"), and `RateLimits:Policies` was `{}`, so all **seventy** routes logged
+  `policy 'admin' is not configured; applying no limit` at start-up. That defeats four ADD §12.6 rows
+  outright — geo scraping, trip-share link abuse, the auth bucket and the SOS bucket.
+
+  The cause is a name collision. `AppServices` (C125) co-locates the edge with twenty-two services in
+  one process, and one content root cannot hold twenty-three files called `appsettings.json`, so its
+  `DropCoLocatedAppSettings` target removes every referenced project's — including api-gateway's,
+  which is not a service's configuration but the edge's own policy. **The identical collision had
+  already been found once and patched in the *test* project** (`GatewaySettingsWinTheOutputDirectory`,
+  Δ C126), which is precisely what made it less likely anybody would look at the deployment. Every
+  one of api-gateway's 605 tests passed throughout, because they compose the gateway from its source
+  directory where the file was present.
+
+  Fixed by moving the section to `backend/src/ApiGateway/gateway-policy.json` — its own file with a
+  name nothing else ships, loaded by `GatewayApplication.Build` with `optional: false` (a gateway
+  that cannot find its policy must refuse to start, not fall back to a permissive default) and pinned
+  to the output directory by the csproj. The same two lines `gateway-routes.json` has always had.
+  Rebuilt and redeployed: zero `policy not configured` lines, and 70 reads of a dead share token gave
+  **67 × 404 then 3 × 429** — the `public-track` bucket enforcing for the first time.
+
+  **C127-01 (HIGH, open at deployment) — every service connects to Postgres as a superuser.** On the
+  replica the connecting role is `mageride`, `usesuper = t`, and the owner of every table. Two shipped
+  controls are therefore inert, both observed rather than inferred: `audit.events` accepted a `DELETE`
+  from the server (D-35's immutable log is writable by the credential that appends to it), and
+  `row_security_active()` answered **false** for all nine policy-bearing tables — every fleet-scoping
+  policy migrations 1806/1807 ship was doing nothing. A table owner bypasses RLS without `FORCE`; a
+  superuser bypasses it unconditionally. **Migration 1305's own comment predicted this in as many
+  words** — *"Real immutability is the deployment's job"* — and no deployment had done that job.
+
+  `db/migrations/2001__least_privilege_roles.sql` lands the mechanism: `mageride_app` (DML on the
+  twenty-two business schemas; `SELECT`+`INSERT` and **only** those on `audit.events`),
+  `mageride_migrate`, `mageride_readonly`, and `FORCE ROW LEVEL SECURITY` on every policy-bearing
+  table. Applied twice to the replica (re-runnable) and verified under `SET ROLE mageride_app`: the
+  `telemetry.positions` hypertable insert works (chunk privileges propagate), the audit insert works,
+  update/delete/truncate are refused, and `row_security_active('registry.fleets')` is **true**.
+
+  **The cutover was deliberately not performed here.** PgBouncer on the replica carries a single
+  credential for both client auth and its server connection, so switching the application user is a
+  change to C125's deployment wiring — and C128–C132 all depend on that replica staying up.
+  `docs/runbooks/database-roles.md` is the procedure, `security/checks/40-database-privileges.sh` is
+  what fails until it happens, and the finding is HIGH on production and LOW as it stands, because the
+  only deployment that exists is the synthetic-data replica. **It is a go-live blocker, which C133's
+  own fence already expresses.**
+
+  **C127-03 (MEDIUM, FIXED) — three mTLS-only operations were published to the internet.**
+  `backend/contracts/` marks 49 operations `security: [{ mtls: [] }]`; forty-six carry the
+  `/v1/internal` prefix and were refused at the edge, three do not and were routed by an ordinary
+  per-service rule: `calculateFinalFare`, `renderNotificationTemplate`, `lookupUserByPhone`. Each
+  failed closed on its own shared-secret filter, so nothing was exploitable — what was missing is the
+  second, independent control that makes a shared secret tolerable on the other forty-six.
+
+  **The cause is a convention standing in for a declaration.** The gateway's blocked-path list and
+  *both* test suites keyed on the path prefix; the contract's `security` block is what actually says
+  which plane an operation is on. iam-svc's CLAUDE.md had flagged the lookup route in passing since
+  C027 and nothing acted on it, because nothing joined the two facts. Fixed in
+  `Gateway:BlockedPathPrefixes`, with three regression tests at three layers —
+  and `IsInternalPlane` now reads **either** signal in both suites, because neither is complete
+  (twelve prefixed operations declare no `security` block at all, C127-08).
+
+  **The RBAC probe (the DoD's hard item) is green: 444 endpoints across 24 services, `Open` = 0.**
+  63 name a URD §2.3 (area, capability) pair, 93 a role or fleet sub-role, 147 are anonymous with a
+  reviewed compensating credential, 141 rely on the kernel fallback plus a handler ownership check.
+  It reads the **composed pipeline** rather than the source, so a group-level policy and a
+  loop-mapped route are both seen, and it reports the built `FeaturePermissionRequirement` by name —
+  the evidence is the policy the server applies. An endpoint filter leaves no metadata, so the
+  anonymous surface is a **reviewed ledger** (`AnonymousSurface`) ratcheted in both directions.
+
+  **Three exceptions were investigated rather than excused, and each asserts its compensating
+  control.** `ocr` clears the deny-by-default fallback (no auth scheme, so it could never be
+  satisfied and every unmatched path would 500) — the price is a theory asserting nothing but health
+  probes and the key-gated plane may be mapped there. `public-bff` registers no bearer handler at all
+  (AL-44). And `/v1/pdpa/**` is authenticated and not feature-gated, correctly: URD §2.3's
+  account-management row is about operating on *other people's* accounts, so gating an own-account
+  statutory right on it would refuse every data subject their own data — the test asserts the
+  **boundary**, exactly those three routes, so the exception cannot spread.
+
+  **Spec gaps recorded, not closed.** (a) ADD §12.6 asks for RLS on "PII tables" and `iam.users`
+  (phone, email, emergency contact) and `registry.driver_profiles` (NIC) have none — defensible,
+  since a passenger's row has no tenant key to scope by, and the control that does exist is
+  admin-bff's audited `PII_READ`; written up under threat-matrix row 10 rather than quietly counted.
+  (b) ASVS V5 (output encoding, HTML sanitisation) and §12.6's portal XSS/CSRF row were **not
+  re-driven** — they need a DAST pass against a deployed portal, which the replica does not serve.
+  Owner C133, before go-live, named rather than counted as covered.
+
+  **Files —** new: `security/{README,asvs-l2-checklist,threat-matrix-coverage,remediation-backlog}.md`,
+  `security/{run-asvs-checks.sh,asvs-lib.sh}`, `security/checks/{10,20,30,40}-*.sh`,
+  `tests/Security/**` (+ `CLAUDE.md`), `backend/src/ApiGateway/gateway-policy.json`,
+  `db/migrations/2001__least_privilege_roles.sql`, `docs/runbooks/database-roles.md`.
+  Changed: `backend/src/ApiGateway/{appsettings.json,GatewayApplication.cs,ApiGateway.csproj}`,
+  `backend/src/ApiGateway.Tests/{Infrastructure/ContractCatalog.cs,RouteTableTests.cs,RouteConfigurationTests.cs}`,
+  `tests/Contract/{Model/ContractOperation.cs,MageRide.Contract.Tests.csproj}` (InternalsVisibleTo),
+  `.gitignore`, `backend/MageRide.sln`.
+
+- **Component:** C128 anti-spoof-hardening — 2026-08-12
+- **Status:** **PARTIAL.** Three of the four DoD items are met and measured; the fourth is met on one
+  of its two paths and the other is a **HIGH finding that cannot be closed here** — the MQTT half of
+  T-12 does not exist in any deployed configuration and turning it on requires a fleet-wide
+  credential re-mint first (C128-01, owner C133, due before go-live).
+  `dotnet test tests/Security -c Release --filter Category=AntiSpoof` is **96 passed, 0 failed,
+  5 skipped** — the skips are the four documented gaps, which are asserted by their own ratchet test
+  instead, plus the opt-in evidence dump. The whole suite is **180 passed / 6 skipped** with C127's;
+  `dotnet build backend/MageRide.sln -c Release` is clean;
+  `bash security/run-asvs-checks.sh` is unchanged at 41 passed / 3 failed (all three are C127-01).
+- **Notes:**
+  **DoD 1 — the corpus is rejected with a measured false-positive rate below the agreed bound.**
+  `tests/Security/AntiSpoof/Corpus/position-corpus.json`: 35 labelled tracks (16 honest, 19 hostile
+  across 17 families), 1 051 samples, driven
+  through `HotPath.PositionProcessor.PlausibilityFilter` itself with thresholds bound from
+  `infra/env/.env.app.example` rather than from the class initialisers — the fence says tuning is
+  configuration, so the class initialisers are the one place a measurement must not read.
+  **828 honest samples, 0 refused (0.000 %) against a 1 % bound; 158 hostile samples, 0 escaped
+  against a 0 % bound.** Zero on every one of the eight vehicle types and seventeen families.
+
+  **The number rests on one modelling decision and it is worth carrying forward.** Receiver error is
+  a **bounded random walk** (`CorpusLeg.JitterDriftM`), not an independent draw per fix, because GNSS
+  error is strongly autocorrelated. An earlier draft drew each fix independently from a 30 m disc —
+  up to 60 m of displacement per second, 216 km/h of pure noise — and reported a false-positive rate
+  on the three-wheeler tier that does not exist in the field. **The 80 km/h three-wheeler ceiling
+  looks unusable under the wrong error model and is comfortable under the right one.** Any future
+  retune should check which model a claimed false positive came from before changing a threshold.
+
+  **No threshold was changed, and that is the finding rather than the absence of one.** ADD §12.6's
+  table, D-18's 200 m and the 1 km/s jump backstop all measure clean against a corpus built to stress
+  them — the hardest honest track is the lowest ceiling (80 km/h), the fastest cadence AL-12 asks for
+  (1 sample/s inside 150 m of pickup) and the worst receiver on the platform (a GT06 in the Pettah
+  canyon), and it loses nothing. **A green corpus that cannot fail proves nothing**, so
+  `ThresholdConfigurationTests` mistunes each knob in turn and asserts the corpus notices.
+
+  **Four attacks the gate cannot see are named, not counted as covered**, and each is a ratchet that
+  fails when it is closed: a slow walk at a speed the tier allows (nothing in D-18/T-07 can see it —
+  the controls are identity, not physics); a reappearance past `VehicleMetaTtl` (the gate's own
+  horizon; dispatch's T-11 30 s freshness rule is what bounds it); a teleport inside a `pos/replay`
+  backlog (T-05's pacer and the `seq` watermark are the control); and a handset rewinding its clock
+  while driving plausibly (the clock gate is hardware-only by design — `seq` is the control, and the
+  residual is exactly `tierCeiling × MinStepInterval`, 50 m for a sedan). One good result worth
+  pinning: **replaying a recorded track live from a handset IS caught**, 18 of 20 samples, because a
+  replay rewinds position as well as time.
+
+  **DoD 2 — a cross-vehicle publish is refused in every tested configuration, and "every" now means
+  three.** The deployment has three live listeners sharing an ACL file and nothing else; the
+  principal comes from a verified JWT claim on two and from a certificate CN on the third.
+  **8084/WSS had never been driven by any suite** — `EmqxAuthTests` (C024) covers 1883 and
+  `EmqxDeviceCertificateTests` (C030) covers 8883, and the listener with no coverage is the one a
+  driver's handset connects to while 1883 is documented as never published past the docker network.
+  `EmqxFixture` now publishes 8084 and the matrix runs six assertions per plane against a real
+  broker; all refuse the cross-vehicle publish, the out-of-tree publish, the foreign command topic
+  and the `$share/posGroup` subscription, and all still allow a device its own two topics.
+  `BrokerPolicyTests` reads the deployed `.conf` files **with comment lines stripped** — a control
+  that exists only inside a commented-out block cannot satisfy an assertion, which is exactly how
+  C128-01 hid.
+
+  **D-17's ceiling is paced, not dropped, and one credential over four sessions beats it.** That is
+  not a failure — a listener limiter sees a socket, not a principal — but it is the entire reason the
+  bridge's and the processor's per-vehicle lines exist, and it is invisible from either of them
+  alone, so it is now demonstrated rather than argued.
+
+  **DoD 3 — a cloned IMEI holds both devices, well inside the budget.** Both bindings QUARANTINED
+  with reason `imei-duplicate`, the incumbent's legitimately-issued credential stops validating, and
+  the `imei:{imei}` cache entry is deleted (left behind, a reconnecting device would be resolved from
+  it for the cache's 24 h TTL without ever asking `validate` — which is how a 60 s budget quietly
+  becomes a day). **The window is asserted from both sides at the deployed 24 h** — 23 h apart is a
+  clone, 25 h apart supersedes — by ageing the sighting trail rather than shortening
+  `Provisioning:AntiCloneWindow`, because a test that redefined the window to two seconds would prove
+  the mechanism while saying nothing about D6' §4.3's number. Both detection paths are covered: the
+  bind-time collision and the adapter's report of two sockets under one identity.
+
+  **DoD 4 — revocation within 60 s on both paths: the TCP path yes, the MQTT path NO (C128-01,
+  HIGH).** `A_revoked_tracker_certificate_still_completes_the_mutual_tls_handshake` mints a
+  certificate from the CA the broker trusts, connects, revokes it, and connects again — **the second
+  handshake succeeds and the device goes on publishing positions for its vehicle.** Everything on the
+  platform side works: the binding goes REVOKED, `validate` refuses, the `prov:tracker` signal
+  reaches Redis inside ADD §7.7.3's one second with the right field names, and the serial is on the
+  CRL inside the budget. What is missing is the broker reading it — `enable_crl_check` and
+  `crl_cache.refresh_interval` are commented out in `infra/deploy/emqx/emqx.conf`.
+  **Two suites each proved their own half and neither owned the join**, the same shape as C127-03.
+
+  **It cannot simply be switched on, and that is why it is open rather than fixed.** EMQX locates a
+  CRL through the *CRL distribution point extension in the peer certificate*, and `EmbeddedStepCa`
+  writes that extension only when `StepCa:CrlDistributionPoint` is set — which **no environment
+  sets**. So every certificate the platform has ever minted carries no distribution point, and a
+  broker with `enable_crl_check = true` refuses a certificate whose CRL it cannot locate: turning it
+  on before re-minting the fleet does not tighten the tracker plane, it takes the whole of it off the
+  air. `emqx.conf`'s own comment warns about the ordering and gives the wrong reason (a start-up race
+  with provisioning-svc, real but secondary). The four-step order, the compensating controls in force
+  today and the owner are in `security/remediation-backlog.md`. **Both the measurement and the policy
+  assertion pin the current, wrong state**, so the day the control lands the suite fails and asks for
+  the entry to be deleted.
+
+  **E-07 — the deliverable, and the finding it produced.** Against a 39-pair synthetic population
+  shaped like a Sri Lankan ride-hailing month: **recall 100 % (asserted), `repeat_pair` precision
+  67 %** — nine flags, three of them honest commuters. **Raising the threshold is not the fix,
+  because a farming pair rides LESS than a commuter**: a passenger keeping one three-wheeler driver
+  on call, twice a day on weekdays, is 34 rides with one counterparty, over any threshold that would
+  still catch farming at 12–27. What separates them is the cross-check ADD §12.6 already names —
+  correlating `repeat_pair` with `shared_device` named **exactly the six farming pairs and nothing
+  else, 100 %**. The detector already computes all three signals; what it does not do is correlate
+  them, so the admin surface is three queues rather than one ranked one. Recorded as **C128-02**
+  (MEDIUM, owner admin-bff/C061) and `PairRideThreshold` left at 8 deliberately, because tightening
+  it would remove the very rows the correlation needs. The fence held throughout: every test that
+  raises a flag asserts `reputation.block_states` did not move, including the worst case where all
+  three detectors fire on one cluster.
+
+  **Two configuration gaps found and fixed, both instances of fence 1.**
+  `PositionProcessor__VehicleMetaTtl` had no line in `.env.app.example` although it is the step
+  gate's *horizon* — the setting that decides how long a spoofer must stay quiet to relocate for
+  free. All **six** `Reputation__Collusion__*` thresholds had none either, so a detector whose entire
+  output is a human review queue could not have its volume changed without a build.
+
+  **One spec gap recorded, not closed (C128-03).** ADD §12.6 prices `flex` at **200 km/h, the highest
+  in the table and above `sedan`'s 180**, for what D5' §1 lists as a passenger tier between
+  `three_wheeler` and `sedan`; nothing on a Sri Lankan road legally approaches it, and
+  `DefaultMaxSpeedKph` inherits the same value for the three types the table omits. The jump backstop
+  still applies, so LOW. Micro-change-set rather than an invented number — the corpus measures what
+  is deployed.
+
+  **The `tests/Security` container rule now has one scoped exception, and it is argued in that
+  project's CLAUDE.md.** C127's suite is docker-free because everything it asserts is a property of
+  composed code. Three of C128's four DoD items are not, and C128-01 is the demonstration: every
+  in-process assertion about revocation was green while a real broker accepted a revoked certificate.
+  So `Category=AntiSpoof` may take a fixture — the corpus, the threshold fences and the broker-policy
+  assertions still need nothing, every container-backed test **skips loudly**, and no C127 class may
+  take one.
+
+  **Files —** new: `security/anti-spoof-tuning.md`, `security/anti-spoof-{corpus,collusion}-run.md`
+  (GENERATED, `MAGERIDE_ANTISPOOF_DUMP=1`), `tests/Security/AntiSpoof/**` (corpus + model +
+  expansion + `position-corpus.json`, `DeployedConfiguration`, `AntiSpoofCollection`,
+  `Mqtt/{BrokerPolicy,BrokerPolicyTests,MqttDevice,CrossVehiclePublishTests,PublishCeilingTests}`,
+  `Trackers/{TrackerPlane,ImeiCloneTests,RevocationPropagationTests}`,
+  `Collusion/{CollusionPlane,RideFarmingTests}`).
+  Changed: `tests/Security/{MageRide.Security.Tests.csproj,CLAUDE.md}`,
+  `backend/src/MageRide.TestKit/EmqxFixture.cs` (publishes 8084),
+  `infra/env/.env.app.example` (`PositionProcessor__VehicleMetaTtl`, six `Reputation__Collusion__*`),
+  `security/{README.md,remediation-backlog.md,threat-matrix-coverage.md}`.
+  **No service, spec, contract or migration file was changed.**
+
+- **Component:** C129 load-test-suite — 2026-08-13
+- **Status:** PARTIAL — the suite is built and runs (`bash load/configure.sh`, then
+  `k6 run load/ingest.js --summary-export=load/out/ingest.json && k6 run load/dispatch.js`), and it
+  measured ingest, the D-19 latency SLO and the database write path against the deployed replica.
+  **Three of the deliverables could not be measured, and the reason is the finding**: the ingest
+  chain carries **~10 msg/s against ADD §3.2's 3,000**, so fan-out at §16.3's subscriber scale, the
+  offer-latency distribution and the atomic-accept race are all blocked behind it. Their profiles
+  are written, committed and unblocked by the fix. **No production target is reported as met.**
+- **Notes:**
+
+  **The headline, and it is a defect rather than a sizing shortfall.** A rate sweep
+  (`load/step.sh`) offered 20 / 40 / 80 / 160 msg/s and EMQX delivered a flat **360–420 messages per
+  30 s to mqtt-bridge-svc at every step** — 12–14 msg/s — carrying **30.8 % / 23.3 % / 15.5 % /
+  5.7 %** of what was published. The rest is `delivery.dropped.queue_full`: QoS-1 messages the broker
+  accepted, PUBACKed to the device, and then discarded. **The publisher is told nothing.** k6
+  reported `achieved 99.5 msg/s (99.5 % of target), 0 broker errors` while nine in ten samples were
+  being thrown away. Reproduced from a cold start after restarting `hot-path`: 3,000 published,
+  **329 forwarded**, 2,048 dropped.
+
+  **It is neither EMQX nor Redpanda, and both were ruled out by measurement rather than by
+  argument.** A second `svc-` subscriber on the same filter at **QoS 0**
+  (`load/lib/probe-subscriber.js`) took **2,971 of 3,057 — 97.2 % at 100 msg/s**, so the broker
+  routes fine. Redpanda's own `kafka_request_latency_seconds` is **16.9 ms mean over 13,693 produce
+  requests**. Nothing was CPU-bound. What EMQX's session view shows is `inflight=32,
+  enqueued_msgs=796, dropped_msgs=2048` — **the QoS-1 window is full and stays full**, so the bridge
+  is taking **2.5–4 s per acknowledgement against a 17 ms produce**. `mqtt.max_inflight` (32),
+  `max_mqueue_len` (1000) and `retry_interval` (infinity) are all EMQX defaults; `emqx.conf` sets
+  none of them, and `HotPath.MqttBridge/CLAUDE.md`'s acknowledge-after-produce rule — which is
+  correct — is what makes the window the ceiling. **The signal is
+  `delivery.dropped.queue_full`, and it is the only one there is**; `infra/observability` does not
+  scrape EMQX at all.
+
+  **D-19 fails by 7× at a thirtieth of the target rate: p95 36,558 ms, p99 36,903 ms against
+  5,000 / 8,000**, measured at 100 msg/s over 111 correlated observations from a real `/hubs/live`
+  subscriber. That is the §1 backlog, not the fan-out path — correlation was 100 %, and the 2 s
+  `Fanout:BatchInterval` accounts for at most 2 s of it. The platform's own
+  `mageride.positions.ingest.latency` agrees at a **115 s mean**.
+
+  **The ride plane fails silently with the telemetry plane, which is the consequence nobody had
+  written down.** After go-online, the only thing that advances
+  `dispatch.driver_presence.last_seen_at` is `telemetry.normalized`; D5' §3.2's freshness gate then
+  drops the driver within `Dispatch:PresenceTtl` and the ride rests in `Matching` for ever.
+  `dispatch.candidate_scores` took **0 rows** — and R-11 records one per candidate *considered* — so
+  the candidate set was empty before any eligibility gate ran. A platform losing 90 % of its
+  telemetry does not degrade to a stale map; it stops dispatching rides.
+
+  **Three deployment defects found, two fixed.**
+  **C129-03 (HIGH, fixed):** `Dispatch__RideServiceBaseUrl` was `http://dispatch-needs-ride-svc:8080`
+  — `.env.app.example`'s deliberate placeholder, never overridden, and **NXDOMAIN**. dispatch-svc
+  could not reach ride-svc to place an offer, so its `ride.events` consumer sat `Stable` with
+  `CURRENT-OFFSET -` and `TOTAL-LAG 8` while `reputation-svc` in the same container on the same topic
+  was at lag 0. **Every Mode C ride ever booked on this replica stayed in `Requested`.** The wave-5
+  contract sweep is green over it because `POST /v1/rides/request` still answers 202. Fixed in
+  `docker-compose.light-replica.yml` (`http://127.0.0.1:5106`, ride-svc's loopback port in
+  Container 7); the consumer drained to lag 0 and the stranded rides moved to `Matching` at once.
+  **C129-05 (MEDIUM, fixed):** `fanout` and `tcp-adapter` were still running the pre-C126
+  `Jwt__JwksUrl`, so **every authenticated `/hubs/live` connection answered 500** — C126 corrected
+  the file and only `app-services` was recreated. `/hubs/**` is routed by HAProxy straight to fanout
+  and is not one of the 382 contract operations, so nothing else would have found it.
+  `load/configure.sh` now asserts the value before a run.
+  **C129-04 (HIGH, not fixed — it is C008/C125's call):** the gateway's rate limiter buckets
+  **every caller on the platform together**. `Gateway__ForwardedHeaders__KnownProxies__0=haproxy` is
+  a hostname and `IPAddress.TryParse` rejects it silently, so `X-Forwarded-For` is ignored and the
+  bucket key is `route|HAProxy's address`. Proven: **40 requests with 40 distinct
+  `X-Forwarded-For` values, 39 refused with 429.** `auth` is then 30 requests/min and `write` —
+  which covers `/v1/rides/**` for **every method**, `/v1/fare/**` and `/v1/standby/**` — is
+  120/min, i.e. **2 requests/s for the whole platform**, or ~0.4 rides/s. The setting's own comment
+  states the failure mode exactly; the value set is not an address.
+
+  **Four spec/instrument findings.** ADD **§16.4 models the wrong write path** — it prices only the
+  1/min operational downsample and omits the `telemetry.positions` hypertable that takes *every*
+  sample, understating the launch write load by ~18× (167 WPS against 3,000). **§3.4 A3's 80–120 byte
+  wire payload is 227 bytes as landed** (a 36-char UUID and a 28-char ISO instant are 64 bytes of
+  text before a key is written), so every bandwidth and retention figure derived from it roughly
+  doubles. **`mageride.fanout.frames` counts frames per *group send*, not per-subscriber sends**, so
+  it cannot be divided by D-40's 10k sends/pod/s to size anything — the counter an operator would
+  scale on is not the quantity §16.3 is written in. And **no documented latency budget exists for
+  request → offer**: E-09's "< 50 ms" is the outbox hop alone (measured at **116 ms median, 676 ms
+  p95** — over it), and §13.3.1's 60 s is a stuck-state alarm.
+
+  **Also measured:** the replica's container logs are **unbounded and mostly SQL** — `app-services`
+  reached 2.2 GB in 1.4 days at idle, ~1.6 GB/day, almost entirely `info: Npgsql.Command`, with no
+  `logging:` options anywhere in the compose file. It is slow enough to matter: `docker compose logs
+  --since` takes **95 seconds** on that file and broke this suite's own account provisioning until it
+  was changed to `docker logs --tail`.
+
+  **How the suite is built.** Stock k6, no xk6 extension: MQTT 3.1.1 over the 8084 WSS listener and
+  the SignalR JSON hub protocol are both implemented in `load/lib/`, because a bespoke k6 binary
+  would make the manifest's verify command fail on a stock one with a message about a JavaScript
+  module. The CBOR encoder is the deployed codec's, so payload sizes are the real ones. Vehicle ids
+  are a pure function of an index (`10ad10ad-…`), so a VU, a shell script and a psql query name the
+  same vehicle without sharing state. **The res-7 cell is read back out of `veh:meta` rather than
+  computed**, so no H3 implementation here can disagree with the platform's. The fleet orbits in a
+  closed ~191 m circle at a 10 m step, which reads as 36 km/h at the anti-spoof filter's 1 s floor
+  whatever the publish rate and keeps every vehicle in the cell its subscriber joined. Bearers come
+  from the real OTP routes, read out of the dev SMS sender's log; `env.json` is gitignored at 0600.
+
+  **Files —** new: `load/` (`README.md`, `CLAUDE.md`, `report.md`, `configure.sh`, `run.sh`,
+  `step.sh`, `collect.sh`, `accept-race.sh`, `probe.js`, `warmup.js`, `ingest.js`, `dispatch.js`,
+  `fanout.js`, `lib/{mqtt,cbor,jwt,config,fleet,signalr,probe-subscriber}.js`).
+  Changed: `.gitignore` (`load/env.json`, `load/out/`),
+  `infra/replica/docker-compose.light-replica.yml` (C129-03's one-line topology override).
+  **No service, spec, contract or migration file was changed.**
+
+### C130 — chaos-drills
+
+- **Component:** C130 chaos-drills
+- **Status:** DONE — `bash chaos/run-drills.sh --env replica --report chaos/out/report.md` →
+  **12 drills, 89 assertions passed, 0 failed, 14 findings, 14 m 22 s, exit 0**, every fault rolled
+  back and the stack healthy at the end. Prerequisite: `bash chaos/configure.sh` (the bearers live
+  30 minutes and the suite refuses to start on an expired one).
+- **Notes:**
+
+  **The DoD's headline item holds, with a control beside it.** A `FLUSHALL` mid-offer takes the
+  Redis `offer:{rideId}` hint away in the fifteen seconds it is supposed to matter, and R-04's
+  durable backstop fires anyway: `rides.timers` marked fired **765 ms** after the deadline against a
+  **305 ms** control with Redis intact, the ride returned to `Matching` and the offer row settled
+  `EXPIRED`. **Both inside R-04's 1 s.** The control is not decoration — an expiry measured only
+  under a flush is a number nobody can read, and the same discipline caught a false HIGH earlier in
+  the session when a spent single-use refresh token was probed twice.
+
+  **Most of ADD §14.1 is true, and is now measured rather than asserted.** `limited_live` is raised
+  on a Redis outage and **clears itself 2.3 s** after Redis returns with no restart. "Tracking
+  continues" through a Postgres outage holds — the map serves from Redis, the GT06 listener keeps
+  accepting, and registration and history refuse in **under 100 ms**, which is what stops a database
+  outage becoming an every-request outage. The transactional outbox loses nothing across a broker
+  outage: the booking commits (**734 ms**, 202), the `ride.requested` waits in `rides.outbox`, the
+  ride parks in `Requested`, and on recovery the outbox drains **1.0 s** later with the held ride
+  reaching `Offered` **211 ms** after that. R-09's live/replay split costs the live lane **zero**
+  acknowledgements under a **132 msg/s** replay flood, and a **1,200-session** reconnect storm costs
+  the incumbent publisher zero. D-08 holds on both halves — first trip of the Colombo day offered
+  with a zero balance and no cache, second refused.
+
+  **Five findings change how this platform is operated.**
+
+  **SOS reaches nobody, and a Redis or Postgres outage refuses it outright.** With nothing broken,
+  `POST /v1/sos` answers `200 {smsStatus:"Failed"}` — which `safety.yaml` defines as *"every gateway
+  refused; the admin console has the alert and nobody has been SMSed"*. Both D-33 gateways are
+  absent (`Sms__SecondaryGateway` empty, notification-svc's log transport off by
+  `AllowLogTransportOutsideDevelopment=false`), so the dual path is one path that is not connected;
+  the five-second SLO is met and what it measures is the time to give up. Under fault it is worse:
+  **503 in 91 ms** with Redis stopped, **500 in 83 ms** with Postgres stopped. **ADD §14.1 has no
+  SOS row at all** — no queue, no retry, no documented degradation for the one request with a person
+  on the other end of it.
+
+  **R-15 is not wired in any environment.** `Dispatch__LastWillEnabled` appears in no environment
+  file, no compose file and no Kubernetes overlay, and `DispatchOptions` defaults it to `false` — so
+  **production would deploy with it off as well**. The drill separates the halves, which is what
+  makes it actionable: EMQX did its part exactly as R-15 and T-04 describe (**150 of 150** sockets
+  dropped without a DISCONNECT produced a retained `offline` on `veh/{vehicleId}/status`, median
+  **811 ms**), and **0** `offer_release_grace` timers were armed. dispatch-svc says so itself at
+  start-up. Three more mechanisms take their input from the same fact: DT-04's filter clearing,
+  T-04's stalled-tracker detection, and **R-16's four post-accept grace windows** — which is why
+  **R-16 is recorded as untested rather than passing**.
+
+  **ADD §14.1's only client-visible degradation signal does not exist.** The stream-lag row promises
+  *"Payload includes `data_age` field; app shows 'updating...' indicator"*. `NearbyResponse` is
+  `{vehicles, asOf, limitedLive}` and `VehicleFrame` — the SignalR frame — is
+  `{VehicleId, Lat, Lng, Heading, Speed, Type, Mode}`. Neither carries a sample timestamp, and
+  `asOf` is when query-svc *answered*, so under lag the map renders stale markers with a current
+  clock beside them and the client has nothing to compute an age from.
+
+  **RPO is one backup interval, not five minutes.** The drill wrote a probe row and booked a ride
+  after the backup and before the disaster; neither survived. There is no pgBackRest and no WAL
+  archive here — `backup.sh` is a `pg_dump -Fc` snapshot, which has no point-in-time component at
+  all — so on the runbook's nightly `15 2 * * *` schedule the real RPO is up to **24 hours**, and no
+  improvement in restore speed moves it. **RTO is met: 1 m 11 s** against §15's 30 minutes, end to
+  end from the drop to a passenger booking again — on a **1.5 MB** dump of a 13,000-row telemetry
+  table, a figure that is linear in that table and does not extrapolate.
+
+  **`infra/replica/restore.sh` could never restore, and is fixed here.**
+  `psql -c "DROP DATABASE …; CREATE DATABASE …;"` sends both statements as one query, which the
+  server wraps in an implicit transaction, and `DROP DATABASE` cannot run in one. It died there
+  having already stopped app-services, hot-path, fanout, tcp-adapter and pgbouncer — **the platform
+  down with the database intact**, the worst of both outcomes, and its step 4 never ran.
+  `backup.sh --verify-restore` never caught it because it restores into a *fresh scratch* database
+  and therefore only ever runs `CREATE DATABASE` on its own: that script's header says "a dump
+  nobody has restored is not a backup", and the corollary is that a restore script nobody has run is
+  not a recovery plan. Two `-c` flags now; the drill then completed end to end. **This is the only
+  file outside `chaos/` whose behaviour was changed, and the DoD it blocked could not be met around
+  it.**
+
+  **Three failures produce no operator signal at all**, which is the pattern running through the
+  report. A **wedged outbox dispatcher**: `/health/ready` 200, every container healthy, no log line,
+  and *neither* outbox alert can fire — `OutboxPublishFailing` needs a throw that never comes
+  (the drain returns zero rows because it lost the leader election) and `OutboxDispatchLagHigh` is a
+  p95 over a histogram that only takes an observation when a row *is* dispatched, so it goes quiet
+  rather than tall. A **flushed-but-running Redis**: `200 {limitedLive:false, vehicles:[]}`, because
+  `LiveVehicleIndex` raises the flag on `RedisException`/`TimeoutException` and an empty `GEOSEARCH`
+  is neither. A **partitioned container**: app-services answered its own `/health/ready` with 200
+  while every socket to Postgres, Redis, Redpanda, EMQX and MinIO was black-holed, and Docker's
+  health state never moved — on DOKS that pod keeps taking traffic. Related:
+  **`mageride.rides.timers_fired` is declared in the kernel and incremented by nothing** while two
+  Grafana panels chart it, so R-04's backlog is visible and its drain is not; and a stopped broker
+  produces no publish-failure signal for **19 s** (`Kafka:MessageTimeoutMs` is 15 s and each delivery
+  is awaited in turn).
+
+  **What the drills could not reach, stated rather than implied.** `max_conn_rate = "500/s"` was
+  never approached — the generator reached ~38 connections/s, sharing eight vCPU with the broker —
+  though what it *did* measure is worth having: CONNACK latency went from **404 ms** at rest to a
+  **5.4 s median / 8.4 s p95** under the storm, long enough for a client timeout to re-queue.
+  R-09's per-ASN guardrail cannot be observed where every connection has one source address.
+  **R-09's replay throttle is still untested**: `replay_throttled`/`replay_shed` did not move under
+  the flood because EMQX's `delivery.dropped.queue_full` moved by **4,543** first — load/report.md's
+  ~10 msg/s ceiling seen from a second angle, and the throttle cannot be exercised until it is
+  raised. Patroni, a second EMQX node and a Redpanda quorum do not exist on a stack ADD §14's MVP
+  column calls single-node by design; each drill says which half of its §14.1 row it could answer.
+
+  **Two further defects came out of driving one ride all the way to completion**, which nothing
+  else in this repository does against a deployment — `load/dispatch.js` cancels pre-acceptance by
+  design and `load/accept-race.sh` stops at the accept. Drill 70 had to go further because D-08's
+  second-trip rule only applies once `tripsToday >= 1`, and `DailyFeeRepository` counts that as
+  `dispatch.offers` rows that reached **ACCEPTED**, not offers sent. **A completed cash ride cannot
+  be settled here:** `POST /v1/fare/pay {method:"cash"}` answers `404 — Ride … has no computed fare
+  yet. It is priced when the ride completes` for a ride that has completed, `fares.ride_payments` is
+  empty, and all six `ride.events` including `ride.completed` were published — so the ride never
+  leaves `PaymentPending`, which `ux_rides_open_passenger` **does not exempt**. `ride.yaml`'s own
+  `/complete` description names that hazard verbatim ("a passenger who books a new ride inside that
+  window can wedge the old one"); the passenger and the driver are both out of service permanently.
+  **And the driver's next accept is answered `500`:** `ux_rides_driver_busy` — the O2
+  one-accepted-ride invariant — is violated and uncaught, so `POST /…/offer/{driverId}/accept`
+  returns `Npgsql.PostgresException … 23505` where `ride.yaml` documents `409`, with the ORM, the
+  schema and table names, the constraint name and absolute build paths
+  (`/src/backend/src/Ride.Api/Rides/RideService.cs:line 380`) in the response body. Wrong code and a
+  disclosure, on a path C127's ASVS suite does not reach.
+
+  **One measurement in this component was the generator's own fault and is recorded rather than
+  quietly fixed.** A run reported "the live lane lost 5 of 40 acknowledgements under the flood" and
+  raised a HIGH about R-09; it had not failed — the control session closed its socket on the heels
+  of its last publish and five in-flight PUBACKs never landed. `replay-flood.js` now drains for six
+  seconds before closing, and four runs since have kept every acknowledgement. That is the third
+  time a control caught an unearned finding here: the first was a spent single-use refresh token
+  read as "a Redis flush signs every user out", the second was drill 70 twice blaming D-08 for a
+  booking `ux_rides_open_passenger` had refused. The rule the suite is built on is in its CLAUDE.md:
+  **before recording a finding, check the thing that would make the observation innocent.**
+
+  **How the suite is built.** Bash, with the rollback **armed before the fault** and one trap
+  running the stack in reverse on any exit path — so a Ctrl-C leaves the replica as it was found,
+  and every rollback is idempotent because `drill_end` runs it on the happy path too. `drill_end`
+  also waits for health and records the recovery, because "we broke it and it came back" is a claim
+  about a duration. The surgical lever in drill 50 is the dispatcher's own leader election —
+  `pg_advisory_lock(FNV-1a("rides.outbox"))` held from outside makes every drain return "another
+  replica is draining" for ever, with no container touched and no data destroyed, and it self-heals
+  because the holder is a `psql` running `pg_sleep`. Client-side drills are stock k6 importing
+  C129's `load/lib/{mqtt,jwt,cbor}.js` rather than copying them; two additive changes were made
+  there — a `will` option on CONNECT and `abort()`, which drops the socket *without* a DISCONNECT,
+  because MQTT 3.1.1 §3.14 makes that the whole difference between a driver closing their app and a
+  driver losing coverage. Only `chaos/k6/lib/config.js` is chaos's own, because k6 resolves `open()`
+  against the calling module's directory. `--env replica` is a fence with no other accepted value,
+  and `replica.synthetic_marker` is re-checked at start-up and again immediately before the DR
+  drill's `DROP DATABASE`.
+
+  **Files —** new: `chaos/` (`README.md`, `CLAUDE.md`, `report.md`, `run-drills.sh`, `configure.sh`,
+  `lib/{common,drill,fixture}.sh`, `drills/{10-redis-flush,11-redis-loss,20-postgres-loss,
+  30-redpanda-loss,40-emqx-loss,50-outbox-stall,60-reconnect-storm,61-replay-flood,62-mass-lwt,
+  63-network-partition,70-wallet-degraded,90-dr-restore}.sh`,
+  `k6/{storm,replay-flood,lwt}.js`, `k6/lib/config.js`), `docs/runbooks/chaos-drills.md`.
+  Changed: `infra/replica/restore.sh` (the `DROP DATABASE` fix — the one behavioural change),
+  `load/lib/mqtt.js` (`will` + `abort()`, additive), `.gitignore` (`chaos/env.json`, `chaos/out/`),
+  `infra/CLAUDE.md` and `docs/runbooks/README.md` (a section and an index row).
+  **No service, spec, contract or migration file was changed.**
+
+### C131 — voip-tracker-acceptance-sg
+
+- **Component:** C131 voip-tracker-acceptance-sg — 2026-08-13
+- **Status:** **PARTIAL** — the harness, the media plane and the report are built, self-tested and
+  rehearsed; **the acceptance run itself has not happened, because the Singapore region does not
+  exist yet.** `bash acceptance/sg/run.sh --report acceptance/sg/out/report.md` exits **2** naming
+  all five missing things (no `env.json`, no TURN host, no tracker ingest host, no platform base
+  URL, no declared Colombo client). That is `infra/replica/gtfs-day0-verify.sh`'s shape and C126's
+  precedent: a component blocked on something outside the repository states the blockage in its
+  exit code, not in a paragraph a reader can skip. Production is DOKS Singapore and **C132 is what
+  builds it** — C132 depends on C131, so at the point this component runs there is no cluster, no
+  media host, no Colombo-side client and no tracker bound in Sri Lanka. The build host is the
+  Contabo box in Germany and **EU numbers are not acceptance evidence** (fence 1), so nothing was
+  run against the replica and reported as a region.
+- **Notes:**
+  **What was built.** `acceptance/sg/` — a python3 + bash suite (no k6: it speaks neither raw UDP
+  with STUN framing nor a binary tracker protocol). `selftest.py` is **100 checks and a hard gate**
+  that runs before any probe, pinning every calculation against something true independently of
+  this repository — ITU-T G.107's published values and the fixed points its formulae are
+  continuous at, RFC 3550's estimator on streams whose jitter and burst structure are known by
+  construction, RFC 5389's own worked message-type values and a hand-computed MESSAGE-INTEGRITY,
+  and **GT06's documented login acknowledgement `78 78 05 01 00 01 D9 DC 0D 0A` reproduced byte
+  for byte**. It is a gate for C130's reason: this code meets something real exactly once, and
+  `infra/replica/restore.sh` is what a script looks like when its own verification never exercises
+  the path that matters. Plus `infra/sg/` — LiveKit + coturn for Singapore, deployable from the
+  repository the way `deploy-nominatim.sh` made the geocoder reproducible.
+
+  **Seven findings, six of them defects in the media plane as it stands, and all region-independent
+  — which is the argument for having built the instrument before the region existed.**
+
+  **C131-01 (HIGH, owner C132) — the SFU never tells any client that the relay exists.**
+  `infra/deploy/livekit/livekit.yaml` sets `turn.enabled: false` and declares **no
+  `rtc.turn_servers`**; voip-svc's `VoipTokenResponse(RoomName, Token, WsUrl, Callee)` carries no
+  ICE servers either. LiveKit's documented fallback with neither configured is **Google's public
+  STUN**, so coturn is deployed, hardened with a full denied-peer list, given a shared-secret
+  scheme and a host UDP range — and offered to nobody. The failure is not an error: it is a call
+  that rings and then has no audio, on exactly the handsets `turnserver.conf`'s own header was
+  written for ("symmetric NAT, which on Sri Lankan mobile carriers is a large minority of them"),
+  and which the replica spec calls "the common case". **It also makes C131's own headline metric
+  meaningless** — "TURN relay share" would have read 0 % and 0 % would have been read as
+  "peer-to-peer works, no Colombo relay needed", the exact opposite of what it means. A relay share
+  of zero and a relay nothing can reach are indistinguishable from the client side, which is why
+  `collect.sh` reads the SFU's own declaration off the deployed file and says so in its output.
+
+  **C131-02 (HIGH, owner C132) — the relay range is 101 ports against a 500-call target, and it was
+  demonstrated rather than argued.** D6' §6 pins `50000-50100`; one allocation is one port and a
+  both-ends-relayed call (the CGNAT case) is two, so **101 ÷ 2 = 50 concurrent relayed calls**
+  against ADD §3.2's and D-24's **500** — a 10x shortfall. Driving 60 calls at a 101-port coturn:
+  **50 established and the 51st was refused `508 Cannot create socket`**, with the 50 already up
+  unaffected at 0 % loss and 399/399 packets returned each. The ceiling is hard and arrives without
+  warning; a sweep watching only quality would have seen a perfectly healthy relay. `livekit.yaml`'s
+  own comment noticed the range binds ("this is a guard rail, not the capacity plan") and did not do
+  the arithmetic against 500. **No document in `specs/` reconciles the two.** Separately, that same
+  `50000-50100` is claimed by **both** `livekit.yaml`'s `rtc.port_range` and `turnserver.conf`'s
+  `min-port`/`max-port` with both containers on `network_mode: host` — turnserver.conf's comment
+  says they must match; they must not, and two processes contend for one range in one namespace.
+
+  **C131-03 (MEDIUM) — coturn's TLS listener has no certificate and has never listened anywhere.**
+  `tls-listening-port=5349` is set and the comment says the certificate is "mounted from
+  infra/deploy/certs"; there is no `cert=`/`pkey=` line and nothing mounted. Running the deployed
+  file verbatim: *"cannot start TLS and DTLS listeners because certificate file is not set
+  properly"*. So the fallback for carriers that block plain UDP 3478 is absent, coturn starts
+  successfully, and it says so once at INFO. No compose file publishes 5349 either.
+
+  **C131-04 (MEDIUM) — `TURN_SECRET` is set nowhere**, so `use-auth-secret` has nothing to verify
+  against; its only occurrence in the repository is the comment naming it. Related and the same
+  shape as C127's dead-configuration findings: **`Turn__Realm` binds nothing** — it is in
+  `.env.app.example`, checked by `slim-verify.sh`'s D7' §4.2 list, absent from
+  `service-catalog.yaml`'s `unwiredSecrets` (where `LiveKit__ApiKey`/`Secret` are correctly
+  recorded), `VoipOptions` has no `Turn` section at all, and its value disagrees with the realm
+  coturn uses.
+
+  **C131-05 (MEDIUM, owner C125/C132) — the replica's `voip` profile cannot start and has no coturn
+  in it.** It bind-mounts `./livekit.replica.yaml`, **which does not exist** — and Compose creates a
+  missing bind source as a **directory** (verified: the container sees `/etc/livekit.yaml` as
+  `directory`), so LiveKit cannot read its configuration. There is no coturn container despite the
+  spec entry, the compose comment and the published `3478/udp`. And the relay range is published
+  **through docker-proxy on a bridge network**, which `docs/runbooks/voip-call-setup.md`
+  §"What not to do" forbids outright.
+
+  **C131-06 (MEDIUM, owner C132) — the downlink command plane has no producer in any deployment**,
+  which directly blocks one of this component's own deliverables. `tcp-adapter` subscribes
+  `veh/+/cmd` and translates all five commands; the only publisher anywhere is trip-state-svc's
+  `CadencePublisher` (`setPosRate`, R-07), behind `TripState:PublishCadenceHints`, which **defaults
+  to false and appears in no environment file, no compose file and no k8s overlay** — the same shape
+  as C130's `Dispatch__LastWillEnabled`. `pingNow`, `reboot` and `setGeofence` have **no producer at
+  all**. So `tracker/rtt_probe.py` offers two paths and labels them apart: `--downlink platform` is
+  the whole path and needs the flag on; `--downlink broker` publishes the envelope directly and every
+  figure it produces is stamped `leg: broker-to-device`, because publishing on a topic a platform
+  service owns stands in for a component rather than for the outside world — the line
+  `tests/E2E`'s fence draws.
+
+  **C131-07 (LOW, planner) — C131 and C132 both own the Singapore media plane.**
+  `service-catalog.yaml` and the production overlay both record that **C132** owns "LiveKit+coturn
+  pinned SGP"; C131's first deliverable is that same deployment, and C132 depends on C131. Resolved
+  by building it as artefacts under `infra/sg/` — the thing under test — and leaving host
+  provisioning and the voip-svc cutover to C132; `deploy-media-sg.sh` stops short of both and prints
+  them as next steps.
+
+  **Design decisions worth carrying forward.** (a) **The fence is structural and has no override.**
+  Every other suite refuses to run anywhere *but* the replica; this one refuses to record a figure
+  unless the target is Singapore, which is harder because "not the replica" is not "Singapore" and a
+  config declaration is evidence of nothing. `lib/region.sh` layers a refusal, a declaration and a
+  **physics check** — light in fibre bounds a round trip by great-circle distance, so a Colombo
+  client reaching a target in 40 ms proves it is **not** in Europe (Colombo→Frankfurt floor is
+  79 ms). It cannot prove a location; it refutes one, which is the direction that matters. A run
+  that does not clear it is titled `NOT EVIDENCE`, carries `evidence: not-evidence` in every
+  payload, and exits 2. (b) **A TURN client rather than a WebRTC endpoint**: a WebRTC stack would
+  measure its own jitter buffer and hand the E-model its own output, and would connect
+  peer-to-peer whenever it could — exercising the relay only by accident. (c) **MOS is computed and
+  every approximation travels with it**: no document in `specs/` gives a MOS floor, a jitter budget
+  or a loss budget, so the figure is G.107's; G.113 has no Opus row so the parameters are
+  G.711+PLC's, and the advantage factor is **0** rather than §B.2's 10 for "mobile in a moving
+  vehicle" — `A` is the one term that exists to excuse a bad connection. (d) **The probe's echo path
+  is two traversals of the call's one-way path**, so the network term is **half** the measured RTT;
+  the factor lives in one function and is pinned by the self-test, because getting it wrong in
+  either direction moves the Colombo-TURN recommendation across its own threshold.
+
+  **The Colombo TURN recommendation: yes — but on capacity and failure mode, not on geography.**
+  The E-model puts the delay budget at a Colombo↔Singapore RTT of **170 ms** before a relayed call
+  drops below MOS 4.3 (the full table is in report.md §5, reproducible from `emodel.delay_budget_ms`),
+  against a great-circle floor of 28.8 ms. Geography is comfortable and this component declines to
+  argue otherwise. What argues for Colombo is C131-02 — splitting the pool doubles a ceiling that is
+  currently a tenth of the target — and that a domestic relay removes the `2L` term entirely, buying
+  the whole budget back for loss and jitter, which are the terms a mobile network actually moves.
+  **The in-region run must fix C131-01 before measuring relay share**, or it will measure a
+  confident zero and draw the opposite conclusion.
+
+  **One limit of the instrument, found by running it.** The probe's send loop is single-threaded and
+  enters its own tail at concurrency: at 5 calls the p50 RTT was 4.7 ms and the p95 58 ms on a path
+  where both should be sub-millisecond. The p50 is trustworthy; the high-concurrency tail is partly
+  the probe's. **The 500-call target must be spread across several Colombo-side clients**, stated in
+  report.md §4 rather than discovered mid-run — `chaos/CLAUDE.md`'s rule about its own storm
+  generator.
+
+  **Verify:** `bash acceptance/sg/run.sh --report acceptance/sg/out/report.md` → **exit 2**, naming
+  the five blockers. `python3 acceptance/sg/selftest.py` → **100 checks passed**, exit 0.
+  Rehearsed end to end against a real coturn on this box (`--rehearse`, stamped NOT EVIDENCE,
+  exit 2): 5/5 calls established, 399/399 packets returned each, 0 % loss, jitter 6.8 ms,
+  MOS-CQE 4.409 — the unimpaired ceiling, which is the right answer for a same-box path and confirms
+  the model bottoms out where it should.
+
+  New: `acceptance/sg/**` (`run.sh`, `configure.sh`, `collect.sh`, `selftest.py`,
+  `lib/{emodel,rtpstats,turn,frames}.py`, `lib/region.sh`, `voip/{media,fallback}_probe.py`,
+  `tracker/rtt_probe.py`, `CLAUDE.md`, `README.md`, `report.md`), `infra/sg/**`
+  (`livekit.sg.yaml`, `turnserver.sg.conf`, `docker-compose.media-sg.yml`, `deploy-media-sg.sh`).
+  Changed: `.gitignore` (five entries), `infra/CLAUDE.md` (one section).
+  **No service, spec, contract or migration file was changed, and neither `infra/deploy/livekit/`,
+  `infra/deploy/coturn/` nor the replica compose was patched** — all six defects are recorded with
+  an owner instead.
+
+### C132 — production-readiness-doks
+
+- **Component:** C132 production-readiness-doks — 2026-08-13
+- **Status:** **PARTIAL** — the go-live package is complete and the launch topology is proven on a
+  real Kubernetes cluster; **two of the four DoD items cannot be met because no DOKS cluster
+  exists.** `kubectl apply --dry-run=client -k infra/k8s/overlays/production && bash
+  infra/k8s/verify-readiness.sh` → clause 1 green, clause 2 **21 passed, 0 failed, 1 skipped,
+  exit 2**, naming fifteen open go-live blockers. Exit 2 is deliberate and is C126's and C131's
+  precedent: a component blocked on something outside the repository states the blockage in its
+  exit code, not in a paragraph a reader can skip.
+- **Notes:**
+
+  **What is met.** "The DR restore procedure is executed once end to end and timed" —
+  `infra/scripts/dr-rehearsal.sh`, 15 checks, **RTO 122.2 s** with a correct point-in-time cut
+  (1,000 rows from before the target, 0 from after). "The scale-out triggers are wired to alerts,
+  not left as prose" — 17 rules covering all six ADD §10.2 rows, `promtool` clean, each with a
+  runbook that exists and opens with a First action.
+
+  **What is not.** "A staging DOKS cluster comes up from the manifests and passes the smoke
+  suite": creating one needs a DigitalOcean account and a decision to start paying for it. The
+  manifests were instead brought up on a **three-node Kubernetes cluster on the build host** and
+  the data plane was proven to form, fail over and recover — which does not exercise
+  `do-block-storage`, the DO load-balancer annotations, cert-manager against real DNS, or ESO
+  against a real Vault. "The go-live checklist is signed off": it is written, with an owner
+  against every item and **fifteen open**. A signature would be a fiction.
+
+  **Four defects, each a production outage, and every one found by RUNNING the manifests rather
+  than reading them.** None is visible in a diff, a `kustomize build` or `kubectl apply
+  --dry-run`.
+
+  **C132-01 (HIGH, fixed) — the production database could never have started.** `base/data/
+  postgres.yaml` set neither `runAsNonRoot` nor a `seccompProfile`, and `base/namespace.yaml` is
+  `pod-security.kubernetes.io/enforce: restricted`. On a real cluster: *`create Pod postgres-0 in
+  StatefulSet postgres failed error: pods "postgres-0" is forbidden: violates PodSecurity
+  "restricted:latest"`* — **zero pods, and everything else green**, because PSA is enforced when
+  the CONTROLLER creates the pod and not when the StatefulSet is applied. The StatefulSet applies,
+  ArgoCD reports Synced, the PVC is provisioned, and the database simply never exists. All 74
+  other pods in the overlay were admitted. Nothing here would have caught it: `--dry-run=server`
+  only *warns*, and `.github/workflows/k8s-validate.yml` runs that step
+  `continue-on-error: true`, so the warning was printed and discarded on every pull request.
+
+  **C132-02 (HIGH, fixed) — every caller on the internet would have shared one rate-limit
+  bucket.** `GatewayRateLimitMiddleware` buckets on `RemoteIpAddress`; behind an ingress that is
+  the controller's pod address. `gateway-policy.json` ships `KnownProxies: []`/`KnownNetworks: []`
+  because the addresses depend on the deployment, and **nothing in `infra/k8s/` set either**. The
+  `auth` policy is 30/min: thirty logins a minute for 100,000 passengers, with C127-02's whole
+  remediation inert again in a new way. Same shape as C129-04 (`KnownProxies__0=haproxy`, a
+  hostname, which `IPAddress.TryParse` discards **silently**) in a deployment where there is
+  nothing to spell wrong. Fixed with RFC-1918 `KnownNetworks` — one value that is right on DOKS
+  *and* K3s — **paired with** `use-forwarded-headers: false` on ingress-nginx, because without the
+  second a client can forge the header and pick its own bucket. C129-04's replica half is still
+  C008/C125's.
+
+  **C132-03 (HIGH, fixed) — WAL archiving would have failed on every segment.**
+  `timescale/timescaledb-ha:pg16` bakes in `PGBACKREST_CONFIG=/home/postgres/pgdata/backup/
+  pgbackrest.conf` — a path *inside PGDATA*, for Timescale's own orchestration — so the mounted
+  ConfigMap is never read and every `archive_command` fails with *"unable to open missing file"*.
+  A platform with `archive_mode = on`, a healthy `/readiness` and **no WAL archive at all**,
+  discovered at the moment somebody needs one. The path is also inside the directory a restore
+  destroys. Found by `dr-rehearsal.sh` on its first run, which is the entire reason that script
+  executes the committed configuration instead of describing it.
+
+  **C132-04 (HIGH, fixed) — a three-member Patroni cluster that can never build a replica.**
+  Patroni's Kubernetes DCS builds its pod selector as `kubernetes.labels` **plus a scope label it
+  adds itself** (`self._labels[scope_label] = config['scope']`). The pods carried `app: postgres`
+  and not `cluster-name: mageride-pg`, so the selector matched nothing and every member's view of
+  the cluster contained exactly one member: itself. From outside it looks like a cluster that
+  works — a leader elected, the database initialised and serving, `/readiness` 200 — while the
+  other two loop for ever 1 ms apart on *"trying to bootstrap from leader"* / *"failed to
+  bootstrap"* with `pg_basebackup` never invoked: the leader is known from the leader ConfigMap,
+  its `conn_url` comes from the MEMBER list, the member list is empty, and `create_replica` drops
+  every method that needs a replication connection. **A one-node database wearing a three-node
+  topology**, and `kubectl get statefulset` says `1/3` with no reason attached.
+
+  **What was proven, on a real cluster.** Three nodes, the staging overlay's data plane, the
+  manifests as committed (resources reduced to fit the box; nothing else changed). Leader + Sync
+  Standby + Replica, one per node, 0 lag. **Deleting the leader's pod repointed
+  `Service/postgres` at the promoted member in 6 seconds** against ADD §14.1's 30 — the DSN
+  hostname never changes because the leader is a pod LABEL and the Service selects `role: primary`,
+  so PgBouncer needs no failover awareness at all. The promoted member was the synchronous
+  standby, so no committed transaction was lost; the old primary rejoined by `pg_rewind` on the
+  new timeline and a new Sync Standby was elected with no operator action. On Redis, `SENTINEL
+  FAILOVER` promoted a new primary in **6 s** with all three sentinels agreeing.
+
+  **Redis Sentinel turned out to need no C# at all, and that was tested before it was designed
+  around.** `ConfigurationOptions.Parse` → `ConnectionMultiplexer.Connect` — the exact code path
+  `MageRide.Shared/Caching/RedisServiceCollectionExtensions.cs` uses — switches to sentinel
+  discovery when `ServiceName` is set. Against a real 3-node quorum and a real `SENTINEL
+  FAILOVER` on the pinned 3.0.17, the client kept accepting writes and reported the new primary
+  **11 s** later with no restart. So the whole client-side change is a connection string, and it
+  ships **in the same component as the topology** — either alone is a platform writing to a
+  demoted replica. `min-replicas-to-write 1` is set deliberately: an isolated primary must refuse
+  writes rather than keep handing out `lock:driver:{driverId}` while a quorum promotes another
+  one, which is D-03's mutex and R-02's single-winner accept breaking silently.
+
+  **The capacity question C124 handed here, answered with arithmetic.** The rendered production
+  overlay asks for **43.45 vCPU / 97.8 GiB of requests at every HPA floor** (147.75 / 306.8 at
+  every ceiling) against D7' §8's 12 vCPU / 24 GB — so the launch pool is **9 nodes in two pools**,
+  3 × `g-8vcpu-32gb` for the data plane (Postgres's required anti-affinity needs three nodes, and
+  an 8 GiB member needs a node that can hold it) and 6 × `s-8vcpu-16gb` for the rest, roughly
+  US$1,100–1,400/mo against ADD §16.2's "3–5 × €20–40/mo VPS". Both documents are describing
+  different things and the plan says so: §16.2 prices D7' §2.1's co-located layout, this prices
+  the per-service one the repository actually builds. It also prices the other answer —
+  `500m/1Gi` is D7' §5's template and **nothing has ever measured it**; the replica runs all 21
+  domain services in one process at **324 MiB**, and right-sizing halves both the pool and the
+  bill. That measurement needs the services under load per service, which needs C129's ingest
+  defect fixed first.
+
+  **C132-05 (HIGH, open) — nothing in the production cluster would deliver an alert.** 66
+  Prometheus rules, a production Alertmanager with three PagerDuty services and their escalation,
+  five runbooks — and **no Prometheus, no Alertmanager and no exporters in either DOKS cluster**.
+  Four of the new rules are additionally inert until the exporters exist. Go-live blocker 12.
+
+  **C132-08 (MEDIUM, open) — the two open HIGH security findings are assigned to a component that
+  cannot act.** `security/remediation-backlog.md` gives C127-01 and C128-01 to **"C133"**, "due at
+  go-live", and says "C133's own fence already gates go-live on no open high findings". **C133 is
+  `payout-svc`** — wave 3, shipped weeks ago, no deployment surface, no such fence. The component
+  whose fence that sentence describes is **C132**. Both were open, both due at a moment nobody was
+  watching for. Re-owned in `go-live-checklist.md` §A1 to the deployment owner and the
+  tracker-plane owner; **the backlog itself is deliberately not overwritten** — it is C127's and
+  C128's record, and quietly rewriting another component's ownership is how the next one gets lost.
+
+  **Two deviations, each argued rather than silent.** (a) **Keepalived cannot run on DOKS**: VRRP
+  needs two hosts on one L2 segment exchanging multicast and moving a floating IP by gratuitous
+  ARP, and a pod has none of the three — it would start, elect itself master, advertise to nobody
+  and fail over nothing, which is worse than absence because it looks like HA. ADD §10.5's own
+  table already substitutes "Envoy / NGINX Ingress + cloud NLB" at the K8s row, and D7' §8's row
+  predates the 2026-07-05 DOKS decision. **Micro-change-set raised against D7' §8.** (b)
+  **`create_replica_methods` is `basebackup` only**, changed from `[pgbackrest, basebackup]` after
+  watching it: **Patroni 4.1.3 does not fall through** — a first method that exits non-zero ends
+  the attempt 4 ms later with the second never invoked, so listing pgbackrest first does not buy a
+  cheaper rebuild with a safety net, it makes every rebuild impossible whenever the repository is
+  unreachable, misconfigured or simply *empty*, which it is on day one. (The same investigation
+  found `no_master` was renamed `no_leader` in Patroni 4, and that an entry still spelled the old
+  way is appended to the command as `--no_master=1`.)
+
+  **One trap fixed in another component's tool, because this session fell into it.**
+  `generate_manifests.py` wrote the placeholder tag into `overlays/*/images/` unconditionally, so
+  **regenerating manifests un-promotes every environment**: dev was on `sha-409493f`, one run
+  reverted it to `sha-0000000`, and `--check` then reported the *correct, promoted* file as stale
+  — so CI would have demanded the revert. The generator now preserves a tag that is already there;
+  the placeholder is still what a new environment and a new image get, which keeps the "must fail
+  to pull" property exactly where it belongs.
+
+  **Also recorded, not fixed.** pgBackRest's `conf.d` can only ADD options, never override one
+  (`ERROR: [031]: option 'repo1-s3-endpoint' cannot be set multiple times`) — which is why the
+  credentials are the only thing in the include. The backup repository is in the same region as
+  the cluster, which is ADD §14's P1–P2 posture and not an oversight; the remedy is `repo2-*` in a
+  second Wasabi region. `REDPANDA_BROKERS` names one broker in the topic Job (C124's file).
+  **`verify-observability.sh` fails on two checks that predate this component** — four runbooks
+  from C126/C127/C130 do not open with a First action and three of them are not in the
+  `NOT_ALERT_DRIVEN` list; C132 added `oncall.md` to that list (its own) and left the other three,
+  because half-fixing another component's regression is how the other half stops being visible.
+
+  **Verify:** `kubectl apply --dry-run=client -k infra/k8s/overlays/production && bash
+  infra/k8s/verify-readiness.sh` → **exit 2**, 21 passed / 0 failed / 1 skipped, 15 blockers named
+  (run against a throwaway kind cluster, as C124's own verify is). `bash
+  infra/scripts/k8s-verify.sh` → 41 passed, 0 failed. `bash infra/scripts/dr-rehearsal.sh` → 15
+  passed, 0 failed, RTO 122.2 s. `promtool check rules` → 17 rules. `amtool check-config` →
+  SUCCESS.
+
+  New: `infra/k8s/components/{retire-single-instance-data,launch-topology}/**`,
+  `infra/k8s/overlays/production/pg-dump-wasabi.yaml`,
+  `infra/k8s/platform/{ingress-nginx/values.production.yaml,external-secrets/base/backup-s3.yaml}`,
+  `infra/k8s/verify-readiness.sh`, `infra/scripts/dr-rehearsal.sh`,
+  `infra/observability/{alertmanager/alertmanager.production.yml,prometheus/rules/alerts.capacity.yml,postgres-exporter/queries.yaml}`,
+  `docs/production/{capacity-plan,go-live-checklist,readiness-report}.md`,
+  `docs/runbooks/{postgres-failover,redis-sentinel-failover,dr-restore,capacity-scale-out,oncall}.md`.
+  Changed: both DOKS overlays, `base/data/postgres.yaml` (C132-01), `base/config/service-endpoints.yaml`
+  (C132-02), `platform/external-secrets/base/postgres-superuser.yaml`, `tools/generate_manifests.py`,
+  `infra/observability/docker-compose.yml` (one exporter mount), `infra/scripts/verify-observability.sh`
+  (one list entry), four `CLAUDE.md`/`README.md` files.
+  **No service, spec, contract or migration file was changed.**
+
+### C132 — addendum, 2026-08-15: what the component's own merge uncovered
+
+The handoff above is the component. This is what happened when it was merged, and it is recorded
+here rather than in a new component because **none of it is new work — every item is a defect that
+already existed and had never been reachable.** Fixing each one exposed the next.
+
+- **Component:** C132 production-readiness-doks (follow-on) — 2026-08-14 / 2026-08-15
+- **Status:** C132 remains **PARTIAL**. `bash infra/k8s/verify-readiness.sh` still exits **2**;
+  the count is unchanged at fifteen because go-live blocker **#5 (the ingest ceiling) is now
+  CLOSED** and **#5a (1,200 msg/s sustained, not yet demonstrated)** took its place.
+- **Notes:**
+
+  **The chain, in the order it came out.** Each entry was invisible until the one above it was
+  fixed, which is the whole point of recording them together.
+
+  | | what it was | why nobody had seen it |
+  |---|---|---|
+  | `4fa4ffb` | `SSH.NET 2025.1.0` (transitive, via Testcontainers 4.13.0) is covered by GHSA-q939-rpr3-3284; `NuGetAudit` + `TreatWarningsAsErrors` made **restore** fail for every test project | the advisory was published after the code was written. A clock, not a change |
+  | `dc642e2` | Testcontainers pulls on first use and the daemon then answers the *create*, so a failed pull reads `No such image: timescale/timescaledb-ha:pg16` and the reason is nowhere in the log | never diagnosable, because the error names the wrong thing |
+  | `2d91c79` | the runner had **14 GB free** and the backend leg needs ~5 GB of images plus a Release build. It filled, and the runner process died writing its own diagnostic log | `ci` on `main` had never got far enough to run out |
+  | `5086966` `b48df1d` | **the ingest ceiling** — see below | C129's control was QoS 0 |
+  | `e9b582c` | `migration-gate.sh` read `REVOKE UPDATE, DELETE, TRUNCATE ON audit.events` as a data-removing TRUNCATE (bare substring match; its thirteen neighbours are anchored regexes) and blocked delivery of C127-01's own remediation | `cd` had never evaluated a migration |
+  | `174e0e9` | **a delivery loop.** `deploy.yml` pushes its promotion commit to `main`; `ci` had no `paths-ignore` and no actor guard; the tag is `sha-${SHA::7}` of the delivered commit, so every cycle makes a new tag, a real diff, another commit — 34 images per turn, and `cd`'s concurrency is `cancel-in-progress: false`, so runs queue rather than cancel | **fixing the gate is what would have closed the circuit** |
+  | `0f310d4` | `verify` failed a complete delivery because `api.dev.mageride.lk` does not resolve. No cluster exists — that is checklist item 8 | nothing had ever reached `verify` |
+  | `d8455d5` | two integration assertions that sampled a state instead of waiting for it | `main`'s backend leg had never run to completion, so its flakes had never been observed |
+
+  **The ingest ceiling (C129's go-live blocker #5, CLOSED).** C129 measured the chain at ~10 msg/s
+  against a 1,200 msg/s launch target and handed the cause to mqtt-bridge-svc — *"find the 2.5-4 s
+  inside `TelemetryForwarder.CompleteAsync`"*. **There was nothing wrong in the bridge.** The cause
+  was `messages_rate = "5/s"` on EMQX's **1883** listener: D-17's per-VEHICLE publish ceiling,
+  applied to the in-cluster listener no device reaches and mqtt-bridge-svc holds E-08's shared
+  subscription on. A per-connection limit there is a per-FLEET limit on ingest.
+
+  **C129 §1.2's control is exactly what hid it.** *"A second `svc-` subscriber received 97.2 % at
+  100 msg/s"* was taken at **QoS 0**, and the limiter is charged for **QoS-1 delivery** — the one
+  column it does not govern. Same broker, same publishers, one variable changed:
+
+  | subscriber | `5/s` | `10000/s` |
+  |---|---|---|
+  | QoS 1, manual ack (the bridge's shape) | 3.6 msg/s | 913 msg/s |
+  | QoS 1, auto ack | 5.0 msg/s | 1,005 msg/s |
+  | QoS 0 (§1.2's control) | 89.4 msg/s | 700 msg/s |
+
+  The bridge was instrumented **first**, because that is where the report pointed: produce 8-31 ms,
+  offset record 0 ms, PUBACK 0-36 ms, in-flight **1-12** against a window of 32 — starved, not
+  saturated. `inflight=32` in §1.3's session dump is EMQX holding a window it was not permitted to
+  drain. Measured on the replica after the fix: **100 msg/s → 0 dropped; 240 msg/s → 0 dropped**;
+  at 1,000 msg/s offered the generator itself only achieved 513 on this box. **1,200 msg/s
+  sustained is still not demonstrated** — that is #5a, and the levers are `mqtt.max_inflight`
+  32 → 512, more bridge replicas, and a load generator that is not on the box under test.
+
+  `MqttBridgeThroughputTests` is the regression test C129 §1.4 says nobody had. D-17 is unaffected:
+  the 5/s stays on 8883 and 8084 where devices connect; 1883 carries a fleet-scale
+  `messages_rate = "20000/s"` instead, above ADD §3.2's 15,000 burst budget.
+
+  **C128's tests caught the first attempt, and were right to.** Removing the limit from 1883
+  outright failed `BrokerPolicyTests.Every_live_listener_carries_the_five_messages_a_second_ceiling`
+  and `PublishCeilingTests(InClusterTcp)` — defence in depth given up on a listener that could one
+  day be exposed. The property was **split, not dropped**: the assertion count went UP. The device
+  listeners still carry D-17's 5/s; the service listener must NOT carry a per-vehicle ceiling (a
+  regression guard for this very bug) and must carry the fleet-scale one. **The miss was mine:** I
+  ran `HotPath.Tests` and the MqttBridge category — the tests nearest the change — and not
+  `tests/Security`, which is where the deployed broker policy is asserted platform-wide.
+
+  **The delivery pipeline is now end-to-end green, and it has never been before.** `cd` run
+  31866565107: 36 images built, pushed and signed; both migration gates passed; dev and staging
+  promoted; **`ready-for-production` executed for the first time**. Two promotion commits landed on
+  `main` (`d03695a`, `27be6be`) and neither re-triggered `ci` — the loop guard absorbing two commits
+  in one run. Both `verify` jobs skipped with the notice they were built to print:
+  *"api.dev.mageride.lk does not resolve — there is no dev environment to verify. Nothing was
+  checked: the images are built and the promotion commit is on main, and that is all this run
+  establishes."*
+
+  **A green `cd` now means "images built and tags promoted", not "deployed and verified"**, and the
+  summary's `verified` row is what says so. That is a deliberate trade and it is the cost of not
+  having `cd` permanently red on the absence of a cluster.
+
+  **Two prior `cd` failures were not code at all:** the 2026-08-12 runs died on GitHub Actions
+  billing — *"the job was not started because recent account payments have failed"* — and every run
+  before and after declined correctly because `ci` on `main` was red. `5392ccc` was the first green
+  `ci` on `main` in days.
+
+  **Findings that stay open.** C129-04's replica half (`KnownProxies__0=haproxy`, a hostname
+  `IPAddress.TryParse` discards silently) is still C008/C125's — only the DOKS half was fixed, as
+  C132-02. The `promote.yml` path to production has still never run. And the two flake fixes are
+  narrower than they look: three consecutive green runs each is **not** proof of a timing fix; what
+  is true is that the window each assertion can land in is now bounded by a wait rather than by
+  luck, and the mechanism is understood in both cases.
+
+  **Changed:** `backend/Directory.Packages.props`, `.github/workflows/{ci,deploy}.yml`,
+  `infra/deploy/emqx/emqx.conf`, `infra/k8s/base/data/emqx/emqx.conf`,
+  `infra/scripts/migration-gate.sh`, `tests/Security/AntiSpoof/Mqtt/{BrokerPolicyTests,PublishCeilingTests}.cs`,
+  `tests/E2E/Scenarios/OfflineGraceScenario.cs`,
+  `backend/src/TripState.Api.Tests/Integration/OutboxPipelineTests.cs`,
+  `backend/src/HotPath.Tests/Integration/MqttBridgeRateTests.cs`, `load/report.md` (a correction at
+  the head, not a rewrite), `infra/CLAUDE.md`, and C132's own three documents in `docs/production/`.
+  **New:** `backend/src/HotPath.Tests/Integration/MqttBridgeThroughputTests.cs`.
+  **No service, spec, contract or migration file was changed.**
+
+---
+
+### C132 — addendum 2, 2026-08-15: the ceiling behind the ceiling
+
+Go-live item 6 (re-measure end-to-end position latency now that item 5's EMQX cap is lifted) was
+attempted and **cannot be measured yet**. Chasing why produced the largest capacity finding on the
+checklist, and a correction to something this addendum's predecessor claimed.
+
+**The symptom.** The subscriber half of the load suite connected, held its socket 68 s, joined
+9 of 9 geocells — and received nothing. `D-19 e2e p95 0 ms over 0 observations`.
+
+**Three wrong answers, in order.** (1) *The join is being refused invisibly.* `lib/signalr.js` sent
+every invocation without an `invocationId`, so SignalR answered nothing and a thrown `JoinGeocells`
+was indistinguishable from a successful one. Adding COMPLETION handling **disproved the hypothesis
+it was built to test** — 9 of 9 confirmed by the hub. Committed anyway: a measurement that cannot
+fail is not a measurement, and this one could only ever report zero. (2) *The pump is not running.*
+`Fanout__PumpEnabled` is unset, the code default is `true`, and no tick logged an error. (3) *The
+pump is stuck at one of `DrainAsync`'s three early returns.* It is not.
+
+**The answer, from one metric.** fanout-svc serves metrics on **5001**, not 5000 — the port I had
+been scraping, which answered connection-refused and looked like "the counter was never emitted".
+On the right port exactly one fan-out series has a value:
+
+    mageride_fanout_filtered_total{reason="stale"} 58
+
+**Fan-out is correct and was correct throughout.** Cell-stream entries carried a `sampleTs`
+~3 h 10 min behind wall clock; `VehicleVisibility.Classify` returns `Stale` when
+`now - sampleTs > Fanout:FreshnessWindow` (60 s); the pump withheld every frame. US-7.17 requires
+exactly that — a vehicle whose last fix is that old must not be drawn on a public map. The pump
+never reached `SendAsync`, so `mageride_fanout_frames_total` was never emitted, which reads like a
+dead pump and is in fact a working filter.
+
+**Why the timestamps were old — the actual finding.** position-processor-svc had 38,045 messages of
+consumer lag on `telemetry.raw`. Measured as a pure drain, with nothing producing (log-end-offset
+constant across 71 s) and the container at 35% of its 1-CPU limit:
+
+    982 messages in 71 s = 13.8 msg/s
+
+It is not resource-bound. `MageRide.Shared/Messaging/KafkaTopicConsumer.cs` handles **one message at
+a time** and calls the synchronous `consumer.Commit(result)` **per message**;
+`PositionProcessor.ProcessAsync` then awaits five more round trips (four Redis, one Kafka
+produce-with-ack). Six serialised round trips ≈ 72 ms per message. Recorded as **go-live blocker
+5b**, and it is ~86× short of the 1,200 msg/s launch rate.
+
+**The correction.** This addendum previously closed item 5a as "measurement capacity, not a defect",
+on 490-550 msg/s carried with zero drops. The MQTT leg does carry that — that part stands. But the
+number came from `mageride_mqtt_bridge_forwarded_total`, which counts the bridge's hand-off **into**
+Kafka, not delivery to a subscriber. Everything above ~14 msg/s became lag. **Raising the EMQX
+ceiling moved the queue from the broker to Kafka; it did not raise the chain**, and C129's original
+"10 msg/s" was probably always this. Item 5a is rewritten to say so.
+
+**Item 6 stays open**, but it is no longer unexplained: it is measurable once 5b's backlog drains
+and the offered rate is below the processor's ceiling. The next attempt should offer **≤10 msg/s**
+to get a clean D-19 number, then repeat at launch rate only after 5b is fixed.
+
+**Secondary, not filed:** `mageride_positions_dropped_total` carries a `vehicle_id` label — 85
+series for ~55 synthetic vehicles. At 10,000 vehicles that is per-vehicle cardinality in a counter,
+which the capacity plan's Prometheus sizing does not account for.
+
+**Files:** `docs/production/go-live-checklist.md` (5a rewritten, 5b added, 6 rewritten, header),
+`docs/production/readiness-report.md` (fifteen → sixteen), `load/lib/signalr.js`, `load/ingest.js`.
+`verify-readiness.sh` picks the new blocker up by parsing the checklist — 16, unchanged exit 2.
+**No service, spec, contract or migration file was changed.**

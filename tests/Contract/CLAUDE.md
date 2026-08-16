@@ -21,6 +21,8 @@ contract disagree, the contract wins — fix the service, or file a micro-change
 | Route conformance | `Runtime/RouteTableTests.cs` | every operation is mapped by a running service, and every route a service maps is in a contract |
 | Drift | `Runtime/DriftTests.cs` | the validator has teeth: eleven deliberately drifted payloads and paths, each of which must fail |
 | Recorded drift | `Runtime/RouteDrift.cs` | the twelve real mismatches found on landing, ratcheted so the list cannot grow |
+| **Live conformance** (Δ C126) | `Live/LiveConformanceTests.cs` | every operation driven over HTTPS against a **deployed** replica: no 5xx, a status the platform may answer, 2xx bodies schema-valid, the internal plane refused, the JWKS published |
+| **Live drift** (Δ C126) | `Live/LiveDrift.cs` | the five findings the first live run produced, ratcheted the same way — a fixed entry fails the suite until it is deleted |
 
 ## The decisions
 
@@ -89,11 +91,27 @@ reproduced in the C118 handoff with the component that owns the fix.
 
 Named rather than absent; the C118 handoff carries the plan for each.
 
-1. **The response sweep.** Every operation is *reached* structurally; none is yet driven over HTTP
-   with its body validated against the declared response schema. The pieces are in place —
-   `ServiceComposition.Compose` takes a live Postgres/Redis and the validator is written and proven —
-   what is missing is `ServiceFleet` (start the composed apps on port 0 over TestKit containers) and
-   a per-operation request recipe.
+1. **The response sweep — LANDED for a DEPLOYED target (Δ C126), still open in-process.**
+   `Live/` drives every operation over HTTPS against a running replica and validates 2xx bodies
+   against the declared schema: `bash infra/replica/contract-live-verify.sh`. It skips wholesale
+   without `MAGERIDE_LIVE_EDGE`, so this project's own verify is unchanged.
+
+   What it proves that composition cannot: TLS terminates, the gateway's cluster addresses resolve,
+   the version gate lets a real client through, and **a bearer can be validated at all** — which is
+   how C126 found `Jwt__JwksUrl` pointing at a path the gateway refuses, a 500 on every
+   authenticated request in both compose stacks that every in-process assertion had stayed green
+   through.
+
+   What is still missing: the same sweep over the **in-process** fleet (`ServiceFleet` on port 0
+   over TestKit containers), which is the only way to cover it in CI where no replica exists. And
+   the live transport asserts *shape*, never behaviour — it must not change state, so it cannot
+   construct the business state a 2xx body needs. Most operations therefore answer a refusal, and
+   the schema half only fires where a 2xx comes back unaided.
+
+   **Read `Live/LiveRequestPlan.cs` before pointing it anywhere you care about.** Its first run
+   filed two real PDPA obligations against its own operator account and rewrote two configuration
+   rows; both holes are closed and both are written up there, because the next hole will be found
+   the same way.
 2. **Redpanda event-schema conformance** for `telemetry.raw`/`normalized`, `ride.events`,
    `dispatch.events`, `trip.events`, `audit.events` (D6' §2.2).
 3. **KMP client contract tests against the live stack.** `e2e/walking-skeleton` is the pattern and

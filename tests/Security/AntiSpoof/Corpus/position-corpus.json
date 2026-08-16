@@ -1,0 +1,473 @@
+{
+  "//": [
+    "C128 — the adversarial position corpus (D-18, T-05, T-07; D5' §13.1, ADD §12.6).",
+    "",
+    "Every track is either something the platform MUST accept or an attack it MUST refuse, and each",
+    "one says which. The measurement drives backend/src/HotPath.PositionProcessor's own",
+    "PlausibilityFilter with the thresholds infra/env/.env.app.example deploys — not a copy of the",
+    "rules, and not the class initialisers — so the numbers in security/anti-spoof-tuning.md are",
+    "about the gate the replica runs.",
+    "",
+    "Geography is Sri Lankan and deliberate: the honest tracks are the roads and cadences D5' §5.2",
+    "actually produces, and the receiver error on each is what that road does to a receiver. A",
+    "corpus of clean fixes on an empty highway would report a false-positive rate of zero about a",
+    "filter nobody deploys.",
+    "",
+    "jitterM = how far the fix wanders from truth. jitterDriftM = how far that error moves between",
+    "consecutive fixes, which is the quantity the step gate actually divides by the cadence. See",
+    "CorpusLeg.JitterDriftM for why modelling the second one wrongly invents false positives."
+  ],
+
+  "bounds": {
+    "maxHonestRefusalRate": 0.01,
+    "maxHostileEscapeRate": 0.0
+  },
+
+  "tracks": [
+    {
+      "id": "honest-sedan-galle-road-peak-traffic",
+      "label": "Honest",
+      "family": "urban-traffic",
+      "vehicleType": "sedan",
+      "source": "Mobile",
+      "note": "Galle Road southbound out of Kollupitiya at evening peak — 22 km/h, the driver app's 4 s moving cadence (D5' §5.1), suburban multipath.",
+      "start": [6.9101, 79.8500],
+      "legs": [
+        { "count": 40, "cadenceSeconds": 4, "speedKph": 22, "bearingDeg": 190, "accuracyM": 14, "jitterM": 15, "jitterDriftM": 4 }
+      ]
+    },
+    {
+      "id": "honest-sedan-e01-expressway-cruise",
+      "label": "Honest",
+      "family": "expressway",
+      "vehicleType": "sedan",
+      "source": "Mobile",
+      "note": "E01 Southern Expressway south of Kottawa at the 100 km/h limit. Open sky, so the cleanest fixes the platform ever sees — and the fastest legal step the sedan ceiling has to allow.",
+      "start": [6.8410, 79.9650],
+      "legs": [
+        { "count": 60, "cadenceSeconds": 2, "speedKph": 100, "bearingDeg": 200, "accuracyM": 7, "jitterM": 8, "jitterDriftM": 2 }
+      ]
+    },
+    {
+      "id": "honest-sedan-near-pickup-one-hertz-canyon",
+      "label": "Honest",
+      "family": "near-pickup-burst",
+      "vehicleType": "sedan",
+      "source": "Mobile",
+      "note": "AL-12's 1 call/s inside 150 m of pickup, in Colombo Fort. The fastest cadence the platform ever asks for, in the worst multipath it ever asks for it in — MinStepInterval is 1 s, so this is the case where receiver error and the step gate meet head on.",
+      "start": [6.9344, 79.8428],
+      "legs": [
+        { "count": 45, "cadenceSeconds": 1, "speedKph": 18, "bearingDeg": 75, "accuracyM": 22, "jitterM": 25, "jitterDriftM": 7 }
+      ]
+    },
+    {
+      "id": "honest-three-wheeler-pettah-crawl",
+      "label": "Honest",
+      "family": "urban-canyon",
+      "vehicleType": "three_wheeler",
+      "source": "Gt06",
+      "note": "A GT06 three-wheeler through the Pettah market. The lowest ceiling in ADD §12.6 (80 km/h) carried by the cheapest receiver on the platform, in the densest multipath in the country.",
+      "start": [6.9370, 79.8590],
+      "legs": [
+        { "count": 40, "cadenceSeconds": 4, "speedKph": 14, "bearingDeg": 100, "accuracyM": 45, "satCount": 6, "jitterM": 40, "jitterDriftM": 12 }
+      ]
+    },
+    {
+      "id": "honest-three-wheeler-canyon-one-hertz",
+      "label": "Honest",
+      "family": "near-pickup-burst",
+      "vehicleType": "three_wheeler",
+      "source": "Gt06",
+      "note": "The corpus's sharpest honest case, and the one that decides the bound: the lowest ceiling, the fastest cadence, the worst receiver. 14 m of drift across 1 s is 50 km/h of pure noise on top of 32 km/h of travel, against an 80 km/h ceiling.",
+      "start": [6.9330, 79.8500],
+      "legs": [
+        { "count": 60, "cadenceSeconds": 1, "speedKph": 32, "bearingDeg": 145, "accuracyM": 48, "satCount": 5, "jitterM": 45, "jitterDriftM": 14 }
+      ]
+    },
+    {
+      "id": "honest-three-wheeler-idle-in-candidate-pool",
+      "label": "Honest",
+      "family": "stationary",
+      "vehicleType": "three_wheeler",
+      "source": "Gt06",
+      "note": "AVAILABLE and parked at a Nugegoda stand — D5' §5.2's 2-5 s candidate cadence, which is explicitly NOT coalesced (scoring freshness). A stationary vehicle's whole apparent motion is receiver error.",
+      "start": [6.8649, 79.8997],
+      "legs": [
+        { "count": 50, "cadenceSeconds": 3, "speedKph": 0, "bearingDeg": 0, "accuracyM": 38, "satCount": 6, "jitterM": 35, "jitterDriftM": 10, "reportSpeed": true }
+      ]
+    },
+    {
+      "id": "honest-bus-a1-kandy-climb",
+      "label": "Honest",
+      "family": "intercity",
+      "vehicleType": "bus",
+      "source": "H02",
+      "note": "An SLTB bus on the A1 climbing towards Kandy. H02 is the ASCII bus-tracker family (D6' §4.1); 10 s cadence is Mode A standby-moving.",
+      "start": [7.2000, 80.4000],
+      "legs": [
+        { "count": 40, "cadenceSeconds": 10, "speedKph": 45, "bearingDeg": 95, "accuracyM": 18, "satCount": 9, "jitterM": 20, "jitterDriftM": 6 }
+      ]
+    },
+    {
+      "id": "honest-bus-expressway-express-service",
+      "label": "Honest",
+      "family": "expressway",
+      "vehicleType": "bus",
+      "source": "H02",
+      "note": "An expressway express bus at 95 km/h — comfortably under ADD §12.6's 120 km/h bus ceiling, and the case that says the bus tier is not accidentally tuned for city running.",
+      "start": [6.7500, 80.0500],
+      "legs": [
+        { "count": 40, "cadenceSeconds": 10, "speedKph": 95, "bearingDeg": 205, "accuracyM": 12, "satCount": 11, "jitterM": 12, "jitterDriftM": 4 }
+      ]
+    },
+    {
+      "id": "honest-flex-expressway-and-town",
+      "label": "Honest",
+      "family": "expressway",
+      "vehicleType": "flex",
+      "source": "Mobile",
+      "note": "The flex tier, which ADD §12.6 prices at 200 km/h — the HIGHEST ceiling in the table, above sedan's 180, for what D5' §1's enumeration lists as a passenger tier between three_wheeler and sedan. Nothing on a Sri Lankan road legally reaches it (the expressway limit is 100 km/h), so this track drives the tier at 105 and the ceiling it is measured against is one no honest vehicle can approach. Raised as a micro-change-set in the C128 handoff; the corpus measures what is deployed.",
+      "start": [6.8000, 80.0200],
+      "legs": [
+        { "count": 30, "cadenceSeconds": 2, "speedKph": 105, "bearingDeg": 200, "accuracyM": 9, "jitterM": 10, "jitterDriftM": 3 },
+        { "count": 20, "cadenceSeconds": 4, "speedKph": 28, "bearingDeg": 250, "accuracyM": 20, "jitterM": 20, "jitterDriftM": 6 }
+      ]
+    },
+    {
+      "id": "honest-motorbike-lane-filtering",
+      "label": "Honest",
+      "family": "urban-traffic",
+      "vehicleType": "motorbike",
+      "source": "Mobile",
+      "note": "A delivery motorbike filtering through Maharagama traffic — handset in a bar mount, so more antenna occlusion than a car cradle and a lot of heading change.",
+      "start": [6.8480, 79.9265],
+      "legs": [
+        { "count": 30, "cadenceSeconds": 2, "speedKph": 35, "bearingDeg": 280, "accuracyM": 20, "jitterM": 22, "jitterDriftM": 7 },
+        { "count": 30, "cadenceSeconds": 2, "speedKph": 38, "bearingDeg": 320, "accuracyM": 20, "jitterM": 22, "jitterDriftM": 7 }
+      ]
+    },
+    {
+      "id": "honest-van-katunayake-airport-run",
+      "label": "Honest",
+      "family": "expressway",
+      "vehicleType": "van",
+      "source": "Jt808",
+      "note": "An airport transfer van on the E03 at 70 km/h against a 130 km/h van ceiling. JT808 is the second hardware family and reports a satellite count on every frame.",
+      "start": [7.1808, 79.8841],
+      "legs": [
+        { "count": 40, "cadenceSeconds": 5, "speedKph": 70, "bearingDeg": 200, "accuracyM": 10, "satCount": 10, "jitterM": 12, "jitterDriftM": 4 }
+      ]
+    },
+    {
+      "id": "honest-mini-van-school-route-with-stops",
+      "label": "Honest",
+      "family": "stop-start",
+      "vehicleType": "mini_van",
+      "source": "Mobile",
+      "note": "A school van: drive, stop, drive. The stop is where a stationary receiver's error is the only motion there is, and the resumption is the step the gate sees straight after it.",
+      "start": [6.8800, 79.8800],
+      "legs": [
+        { "count": 20, "cadenceSeconds": 4, "speedKph": 30, "bearingDeg": 45, "accuracyM": 16, "jitterM": 18, "jitterDriftM": 5 },
+        { "count": 15, "cadenceSeconds": 4, "speedKph": 0, "bearingDeg": 45, "accuracyM": 16, "jitterM": 18, "jitterDriftM": 5 },
+        { "count": 20, "cadenceSeconds": 4, "speedKph": 34, "bearingDeg": 60, "accuracyM": 16, "jitterM": 18, "jitterDriftM": 5 }
+      ]
+    },
+    {
+      "id": "honest-gt06-reporting-no-satellite-count",
+      "label": "Honest",
+      "family": "device-quirk",
+      "vehicleType": "three_wheeler",
+      "source": "Gt06",
+      "note": "A GT06 location frame carries no satellite count at all, and GT06 is the largest tracker family in mqtt-topics.md §7. This track is what `RequireSatelliteCount = false` buys: with it on, the whole family is blinded rather than a spoofer caught.",
+      "start": [6.9000, 79.8700],
+      "legs": [
+        { "count": 30, "cadenceSeconds": 5, "speedKph": 25, "bearingDeg": 170, "accuracyM": 40, "satCount": null, "jitterM": 35, "jitterDriftM": 10 }
+      ]
+    },
+    {
+      "id": "honest-tunnel-gap-then-resume",
+      "label": "Honest",
+      "family": "coverage-gap",
+      "vehicleType": "sedan",
+      "source": "Mobile",
+      "note": "Four minutes of no signal — inside VehicleMetaTtl, so the vehicle still has a last accepted position — then a resumption 3 km further on. The step gate judges the whole gap at once: 3 km in 4 min is 45 km/h and passes, which is the right answer and worth pinning.",
+      "start": [6.9200, 79.8600],
+      "legs": [
+        { "count": 10, "cadenceSeconds": 4, "speedKph": 40, "bearingDeg": 90, "accuracyM": 15, "jitterM": 16, "jitterDriftM": 5 },
+        { "count": 15, "cadenceSeconds": 4, "speedKph": 45, "bearingDeg": 90, "accuracyM": 15, "jitterM": 16, "jitterDriftM": 5, "gapSeconds": 240, "jumpKm": 3.0 }
+      ]
+    },
+    {
+      "id": "honest-offline-backlog-replayed-after-reconnect",
+      "label": "Honest",
+      "family": "replay-stream",
+      "vehicleType": "sedan",
+      "source": "Mobile",
+      "note": "R-17 / US-15.1: the driver app buffered a track through a coverage hole and republishes it on veh/{id}/pos/replay. A backlog is the vehicle's own history arriving late, so the step gates must not judge it against where the vehicle is now — every sample here has to be accepted.",
+      "start": [6.8300, 79.8630],
+      "legs": [
+        { "count": 25, "cadenceSeconds": 4, "speedKph": 38, "bearingDeg": 15, "accuracyM": 18, "jitterM": 18, "jitterDriftM": 5, "onReplayStream": true }
+      ]
+    },
+    {
+      "id": "honest-hardware-fix-at-the-satellite-minimum",
+      "label": "Honest",
+      "family": "device-quirk",
+      "vehicleType": "van",
+      "source": "Jt808",
+      "note": "Four satellites is exactly what a 3-D fix needs and exactly MinSatellites. A boundary that refused it would take every tracker under thin sky off the map.",
+      "start": [7.0500, 80.0000],
+      "legs": [
+        { "count": 25, "cadenceSeconds": 5, "speedKph": 50, "bearingDeg": 130, "accuracyM": 55, "satCount": 4, "jitterM": 45, "jitterDriftM": 12 }
+      ]
+    },
+
+    {
+      "id": "hostile-teleport-colombo-to-jaffna",
+      "label": "Hostile",
+      "family": "teleport",
+      "vehicleType": "sedan",
+      "source": "Mobile",
+      "note": "The canonical spoof: a vehicle crossing the island between two fixes. 320 km in 4 s implies 288,000 km/h and is what ADD §12.6's 'jump < 1 km/s' backstop exists for.",
+      "start": [6.9344, 79.8428],
+      "legs": [
+        { "count": 10, "cadenceSeconds": 4, "speedKph": 30, "bearingDeg": 20, "accuracyM": 12, "jitterM": 10, "jitterDriftM": 3 },
+        { "count": 6, "cadenceSeconds": 4, "speedKph": 30, "bearingDeg": 20, "accuracyM": 12, "jitterM": 10, "jitterDriftM": 3, "jumpKm": 320, "hostile": true, "expect": "Jump" }
+      ]
+    },
+    {
+      "id": "hostile-teleport-across-colombo-under-the-jump-backstop",
+      "label": "Hostile",
+      "family": "teleport",
+      "vehicleType": "sedan",
+      "source": "Mobile",
+      "note": "A 3 km hop in 4 s — 2,700 km/h, which is UNDER the 3,600 km/h jump backstop. Only the per-tier ceiling catches it, which is the whole reason D-18 replaced a single global speed limit with a table.",
+      "start": [6.9101, 79.8500],
+      "legs": [
+        { "count": 10, "cadenceSeconds": 4, "speedKph": 25, "bearingDeg": 180, "accuracyM": 12, "jitterM": 10, "jitterDriftM": 3 },
+        { "count": 6, "cadenceSeconds": 4, "speedKph": 25, "bearingDeg": 180, "accuracyM": 12, "jitterM": 10, "jitterDriftM": 3, "jumpKm": 3.0, "hostile": true, "expect": "Speed" }
+      ]
+    },
+    {
+      "id": "hostile-three-wheeler-moving-at-sedan-speed",
+      "label": "Hostile",
+      "family": "tier-ceiling",
+      "vehicleType": "three_wheeler",
+      "source": "Gt06",
+      "note": "140 km/h in a three-wheeler. Plausible for the platform's fastest tier and impossible for this one — the case that fails if a tuning pass ever flattens the table into one number.",
+      "start": [6.9370, 79.8590],
+      "legs": [
+        { "count": 8, "cadenceSeconds": 4, "speedKph": 20, "bearingDeg": 90, "accuracyM": 30, "satCount": 7, "jitterM": 25, "jitterDriftM": 7 },
+        { "count": 10, "cadenceSeconds": 4, "speedKph": 140, "bearingDeg": 90, "accuracyM": 30, "satCount": 7, "jitterM": 25, "jitterDriftM": 7, "hostile": true, "expect": "Speed" }
+      ]
+    },
+    {
+      "id": "hostile-device-claiming-a-speed-above-its-tier",
+      "label": "Hostile",
+      "family": "tier-ceiling",
+      "vehicleType": "three_wheeler",
+      "source": "Gt06",
+      "note": "The device's own speedometer claims 300 km/h while it crawls. Refused on the reported-speed branch, which needs no second sample — a tracker making a claim it does not need two fixes to be wrong about.",
+      "start": [6.9200, 79.8650],
+      "legs": [
+        { "count": 12, "cadenceSeconds": 4, "speedKph": 15, "bearingDeg": 250, "accuracyM": 30, "satCount": 7, "jitterM": 25, "jitterDriftM": 7, "reportedSpeedKph": 300, "hostile": true, "expect": "Speed" }
+      ]
+    },
+    {
+      "id": "hostile-teleport-behind-a-fabricated-accuracy-circle",
+      "label": "Hostile",
+      "family": "fabricated-accuracy",
+      "vehicleType": "sedan",
+      "source": "Mobile",
+      "note": "Reported accuracy is self-asserted, so a spoofer claims a perfect 1 m fix to make the position look authoritative. It buys nothing: accuracy is a discard gate, never a licence, and the step gate refuses the jump regardless.",
+      "start": [6.9344, 79.8428],
+      "legs": [
+        { "count": 8, "cadenceSeconds": 4, "speedKph": 30, "bearingDeg": 45, "accuracyM": 1.0, "jitterM": 0 },
+        { "count": 6, "cadenceSeconds": 4, "speedKph": 30, "bearingDeg": 45, "accuracyM": 1.0, "jitterM": 0, "jumpKm": 55, "hostile": true, "expect": "Jump" }
+      ]
+    },
+    {
+      "id": "hostile-accuracy-circle-past-the-ceiling",
+      "label": "Hostile",
+      "family": "fabricated-accuracy",
+      "vehicleType": "sedan",
+      "source": "Mobile",
+      "note": "D-18's discard: a 450 m error circle is not a worse position, it is a different building. Reporting one is also how a spoofer would try to explain away a jump, so the gate refuses the sample outright rather than widening a tolerance around it.",
+      "start": [6.9344, 79.8428],
+      "legs": [
+        { "count": 12, "cadenceSeconds": 4, "speedKph": 25, "bearingDeg": 135, "accuracyM": 450, "jitterM": 0, "hostile": true, "expect": "Accuracy" }
+      ]
+    },
+    {
+      "id": "hostile-gnss-clock-an-hour-in-the-future",
+      "label": "Hostile",
+      "family": "clock-skew",
+      "vehicleType": "van",
+      "source": "Jt808",
+      "note": "A sample dated an hour ahead. Without the forward-skew guard it would become the monotonic watermark and every genuine sample behind it would read as non-monotonic — one frame taking a tracker off the map until veh:meta expired.",
+      "start": [7.1000, 79.9000],
+      "legs": [
+        { "count": 8, "cadenceSeconds": 5, "speedKph": 50, "bearingDeg": 180, "accuracyM": 12, "satCount": 9, "jitterM": 10, "jitterDriftM": 3 },
+        { "count": 8, "cadenceSeconds": 5, "speedKph": 50, "bearingDeg": 180, "accuracyM": 12, "satCount": 9, "jitterM": 10, "jitterDriftM": 3, "clockOffsetSeconds": 3600, "hostile": true, "expect": "Clock" }
+      ]
+    },
+    {
+      "id": "hostile-gnss-clock-walking-backwards",
+      "label": "Hostile",
+      "family": "clock-skew",
+      "vehicleType": "van",
+      "source": "Jt808",
+      "note": "T-07's monotonic GNSS UTC, directly: a hardware clock that goes backwards mid-track is either broken or being driven. `clockOffsetSeconds` cancels the leg-boundary cadence so the FIRST rewound sample already lands on the last accepted instant — otherwise the rewind's opening frame is genuinely still in the future and is correctly accepted, which would make the corpus's own run-up look like an escape.",
+      "start": [7.1000, 79.9000],
+      "legs": [
+        { "count": 8, "cadenceSeconds": 5, "speedKph": 50, "bearingDeg": 90, "accuracyM": 12, "satCount": 9, "jitterM": 10, "jitterDriftM": 3 },
+        { "count": 8, "cadenceSeconds": 5, "speedKph": 50, "bearingDeg": 90, "accuracyM": 12, "satCount": 9, "jitterM": 10, "jitterDriftM": 3, "clockRewind": true, "clockOffsetSeconds": -5, "hostile": true, "expect": "Clock" }
+      ]
+    },
+    {
+      "id": "hostile-gnss-clock-frozen-while-moving",
+      "label": "Hostile",
+      "family": "clock-skew",
+      "vehicleType": "bus",
+      "source": "H02",
+      "note": "Every frame stamped with one instant while the vehicle keeps moving. Speed is kept at an unremarkable 40 km/h on purpose: a fast frozen track is refused by the step gate and would prove nothing about the clock, so this one can only be caught by 'not after the last accepted'.",
+      "start": [7.0000, 80.0000],
+      "legs": [
+        { "count": 6, "cadenceSeconds": 4, "speedKph": 40, "bearingDeg": 0, "accuracyM": 15, "satCount": 8, "jitterM": 12, "jitterDriftM": 4 },
+        { "count": 10, "cadenceSeconds": 4, "speedKph": 40, "bearingDeg": 0, "accuracyM": 15, "satCount": 8, "jitterM": 12, "jitterDriftM": 4, "clockFrozen": true, "clockOffsetSeconds": -4, "hostile": true, "expect": "Clock" }
+      ]
+    },
+    {
+      "id": "hostile-hardware-fix-with-no-satellites",
+      "label": "Hostile",
+      "family": "satellite-anomaly",
+      "vehicleType": "van",
+      "source": "Jt808",
+      "note": "Zero satellites and a position anyway: the receiver is not solving, it is being told. T-07's minimum.",
+      "start": [6.9500, 79.9000],
+      "legs": [
+        { "count": 12, "cadenceSeconds": 5, "speedKph": 45, "bearingDeg": 60, "accuracyM": 15, "satCount": 0, "jitterM": 10, "jitterDriftM": 3, "hostile": true, "expect": "Satellites" }
+      ]
+    },
+    {
+      "id": "hostile-hardware-fix-below-the-satellite-minimum",
+      "label": "Hostile",
+      "family": "satellite-anomaly",
+      "vehicleType": "bus",
+      "source": "H02",
+      "note": "Two satellites cannot produce a 3-D fix; a device presenting one is extrapolating or fabricating. The boundary case for MinSatellites = 4, which no spec pins.",
+      "start": [7.2906, 80.6337],
+      "legs": [
+        { "count": 12, "cadenceSeconds": 10, "speedKph": 40, "bearingDeg": 270, "accuracyM": 20, "satCount": 2, "jitterM": 15, "jitterDriftM": 5, "hostile": true, "expect": "Satellites" }
+      ]
+    },
+    {
+      "id": "hostile-same-instant-burst-hiding-a-teleport",
+      "label": "Hostile",
+      "family": "teleport",
+      "vehicleType": "sedan",
+      "source": "Mobile",
+      "note": "Two fixes bearing one timestamp and 5 km apart — the attack MinStepInterval exists to refuse. Judging at the floor keeps it catchable; SKIPPING a zero-length gap would hand a spoofer the whole step gate by publishing samples with one instant.",
+      "start": [6.9344, 79.8428],
+      "legs": [
+        { "count": 6, "cadenceSeconds": 4, "speedKph": 30, "bearingDeg": 30, "accuracyM": 12, "jitterM": 8, "jitterDriftM": 2 },
+        { "count": 8, "cadenceSeconds": 0, "speedKph": 0, "bearingDeg": 30, "accuracyM": 12, "jitterM": 0, "jumpKm": 5.0, "clockFrozen": false, "hostile": true, "expect": "Jump" }
+      ]
+    },
+    {
+      "id": "hostile-teleport-on-a-tier-no-spec-prices",
+      "label": "Hostile",
+      "family": "tier-ceiling",
+      "vehicleType": "truck",
+      "source": "Jt808",
+      "usesDefaultCeiling": true,
+      "note": "`truck` is one of the three registry types missing from ADD §12.6's table (with mini_truck and train), so it falls to DefaultMaxSpeedKph. This is the assertion that the fallback is a ceiling and not a hole: 900 km/h is refused at 200, and the jump backstop is behind that.",
+      "start": [7.0000, 79.9500],
+      "legs": [
+        { "count": 8, "cadenceSeconds": 5, "speedKph": 60, "bearingDeg": 15, "accuracyM": 14, "satCount": 9, "jitterM": 12, "jitterDriftM": 4 },
+        { "count": 8, "cadenceSeconds": 5, "speedKph": 900, "bearingDeg": 15, "accuracyM": 14, "satCount": 9, "jitterM": 12, "jitterDriftM": 4, "reportSpeed": false, "hostile": true, "expect": "Speed" }
+      ]
+    },
+    {
+      "id": "hostile-recorded-track-replayed-as-live-from-hardware",
+      "label": "Hostile",
+      "family": "replayed-track",
+      "vehicleType": "van",
+      "source": "Jt808",
+      "note": "A captured track re-published later on pos/live. Every sample is internally consistent — it once was a real journey — so nothing about the positions is wrong. What refuses it is T-07's monotonic GNSS clock: the replayed instants are not after the last accepted one.",
+      "start": [6.9500, 79.8800],
+      "legs": [
+        { "count": 20, "cadenceSeconds": 5, "speedKph": 45, "bearingDeg": 120, "accuracyM": 14, "satCount": 9, "jitterM": 12, "jitterDriftM": 4 },
+        { "count": 0, "cadenceSeconds": 5, "speedKph": 0, "bearingDeg": 0, "replayOfLeg": 0, "hostile": true, "expect": "Clock" }
+      ]
+    },
+    {
+      "id": "hostile-recorded-track-replayed-as-live-from-a-handset",
+      "label": "Hostile",
+      "family": "replayed-track",
+      "vehicleType": "sedan",
+      "source": "Mobile",
+      "note": "The same attack from the mobile plane, where the monotonic-clock gate deliberately does not apply (D5' §13.1's 'hardware additionally' — a handset's clock is the user's to set). It is caught anyway, and by the step gate: a replay rewinds POSITION as well as time, so its opening sample lands back at the start of the recorded track while the vehicle's last accepted fix is at the end of it. The negative interval clamps to MinStepInterval and a kilometre across one second is refused. `minRefused` is 18 of 20 because the tail of the replay walks back to where the vehicle actually is — and a replay that has caught up with reality is a parked vehicle, which there is nothing to catch.",
+      "start": [6.9500, 79.8800],
+      "legs": [
+        { "count": 20, "cadenceSeconds": 4, "speedKph": 45, "bearingDeg": 120, "accuracyM": 14, "jitterM": 12, "jitterDriftM": 4 },
+        { "count": 0, "cadenceSeconds": 4, "speedKph": 0, "bearingDeg": 0, "replayOfLeg": 0, "hostile": true, "expect": "Speed", "minRefused": 18 }
+      ]
+    },
+    {
+      "id": "hostile-time-rewound-handset-track-continuing-in-place",
+      "label": "Hostile",
+      "family": "replayed-track",
+      "vehicleType": "sedan",
+      "source": "Mobile",
+      "knownGap": "This is the residual of the replay family, and it is narrow enough to state exactly: on the mobile plane the clock gate is off, so a rewound sample is judged over the MinStepInterval floor — which accepts ANY position within `tierCeiling x MinStepInterval` of the last accepted fix. For a sedan at 180 km/h and a 1 s floor that is 50 metres. So a handset can rewind its own timeline indefinitely as long as it keeps moving plausibly, and the control that refuses it is the R-17/T-05 `seq` watermark in position-processor-svc — `seq <= last_seen_seq` is discarded — not this gate. HotPath.Tests/PositionGateTests owns that assertion; measured here so the division of labour is visible rather than assumed.",
+      "note": "A handset rewinding its clock while continuing to drive from where it actually is. No teleport, so nothing for the step gate to see.",
+      "start": [6.9500, 79.8800],
+      "legs": [
+        { "count": 15, "cadenceSeconds": 4, "speedKph": 45, "bearingDeg": 120, "accuracyM": 14, "jitterM": 12, "jitterDriftM": 4 },
+        { "count": 15, "cadenceSeconds": 4, "speedKph": 30, "bearingDeg": 120, "accuracyM": 14, "jitterM": 12, "jitterDriftM": 4, "clockRewind": true, "clockOffsetSeconds": -4, "hostile": true, "expect": "None" }
+      ]
+    },
+    {
+      "id": "hostile-teleport-inside-a-backlog",
+      "label": "Hostile",
+      "family": "replay-stream",
+      "vehicleType": "sedan",
+      "source": "Mobile",
+      "knownGap": "A backlog deliberately skips the step gates: a vehicle's own history is by definition not where it is now, and judging it as a teleport would drop a whole offline buffer the moment the device reconnected (C039). What bounds pos/replay is T-05 — the 20 samples/s/device pacer in mqtt-bridge-svc and the `seq` watermark — not this gate. The per-sample gates (accuracy, satellites) do still apply, which is why a hostile backlog is not unbounded.",
+      "note": "A spoofer moving the attack onto the replay stream to buy the step gates' silence. It works, and the controls that answer it are elsewhere.",
+      "start": [6.9344, 79.8428],
+      "legs": [
+        { "count": 8, "cadenceSeconds": 4, "speedKph": 30, "bearingDeg": 200, "accuracyM": 14, "jitterM": 10, "jitterDriftM": 3, "onReplayStream": true },
+        { "count": 6, "cadenceSeconds": 4, "speedKph": 30, "bearingDeg": 200, "accuracyM": 14, "jitterM": 10, "jitterDriftM": 3, "onReplayStream": true, "jumpKm": 250, "hostile": true, "expect": "None" }
+      ]
+    },
+    {
+      "id": "hostile-silence-then-reappearance-past-the-meta-ttl",
+      "label": "Hostile",
+      "family": "coverage-gap",
+      "vehicleType": "sedan",
+      "source": "Mobile",
+      "knownGap": "VehicleMetaTtl is 10 minutes and it is also the step gate's horizon: a vehicle silent longer has no last accepted position, so its next sample is accepted unchecked. PositionProcessorOptions says so at the declaration. It is the right way round — the alternative is measuring a step over an unknown gap — but it means a spoofer who waits out the TTL relocates for free. Bounded by everything downstream that is not this gate: dispatch's 30 s tracker-freshness rule (T-11) will not offer a ride to a vehicle that has been dark for eleven minutes, and the reappearance is visible in telemetry.positions.",
+      "note": "Eleven minutes of silence, then a reappearance 200 km away. The gate accepts it, and the reason is a documented horizon rather than an oversight.",
+      "start": [6.9344, 79.8428],
+      "legs": [
+        { "count": 8, "cadenceSeconds": 4, "speedKph": 30, "bearingDeg": 20, "accuracyM": 12, "jitterM": 10, "jitterDriftM": 3 },
+        { "count": 4, "cadenceSeconds": 4, "speedKph": 30, "bearingDeg": 20, "accuracyM": 12, "jitterM": 10, "jitterDriftM": 3, "gapSeconds": 660, "jumpKm": 200, "hostile": true, "expect": "None" }
+      ]
+    },
+    {
+      "id": "hostile-slow-walk-to-a-fabricated-location",
+      "label": "Hostile",
+      "family": "slow-walk",
+      "vehicleType": "sedan",
+      "source": "Mobile",
+      "knownGap": "A spoofer who moves the vehicle at a speed its tier allows is, to a plausibility gate, a vehicle driving. Nothing in D-18/T-07 can separate them and nothing here pretends to: the controls are elsewhere and are about identity rather than physics — mTLS device binding, the EMQX topic ACL, T-08 anti-cloning, and for a ride in progress the passenger being in the vehicle. Recorded so a reader does not mistake a green corpus for 'GPS spoofing is solved'.",
+      "note": "The attack the gate cannot see: 60 km/h, in a straight line, to somewhere the vehicle is not.",
+      "start": [6.9344, 79.8428],
+      "legs": [
+        { "count": 40, "cadenceSeconds": 4, "speedKph": 60, "bearingDeg": 75, "accuracyM": 12, "jitterM": 10, "jitterDriftM": 3, "hostile": true, "expect": "None" }
+      ]
+    }
+  ]
+}

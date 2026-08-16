@@ -93,8 +93,25 @@ ok "stopped the services holding connections"
 dc exec -T postgres psql -U "$PG_USER_EFF" -d postgres -qtAX \
   -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${PG_DB_EFF}' AND pid <> pg_backend_pid();" \
   >/dev/null 2>&1
+# Δ C130 — TWO `-c` flags, not one with two statements in it.
+#
+# `psql -c "DROP DATABASE …; CREATE DATABASE …;"` sends both as ONE query string, which the server
+# wraps in an implicit transaction, and the answer is
+#
+#     ERROR:  DROP DATABASE cannot run inside a transaction block
+#
+# every time. Multiple `-c` flags are sent as separate queries and are the documented way to do
+# this. As printed, this script could never restore anything: it died here, having already stopped
+# app-services, hot-path, fanout, tcp-adapter and pgbouncer, and left the platform down with the
+# database intact — which is the worst of both outcomes and is what chaos/drills/90 found on its
+# first run.
+#
+# `backup.sh --verify-restore` did not catch it because it restores into a *fresh* scratch database
+# and therefore only ever runs `CREATE DATABASE` on its own. A dump nobody has restored is not a
+# backup; a restore script nobody has run is not a recovery plan.
 dc exec -T postgres psql -U "$PG_USER_EFF" -d postgres -qtAX \
-  -c "DROP DATABASE IF EXISTS ${PG_DB_EFF}; CREATE DATABASE ${PG_DB_EFF};" >/dev/null 2>&1 \
+  -c "DROP DATABASE IF EXISTS ${PG_DB_EFF};" \
+  -c "CREATE DATABASE ${PG_DB_EFF};" >/dev/null 2>&1 \
   || die "could not recreate ${PG_DB_EFF}"
 
 dc exec -T postgres psql -U "$PG_USER_EFF" -d "$PG_DB_EFF" -qtAX \

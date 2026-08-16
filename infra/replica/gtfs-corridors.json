@@ -1,0 +1,71 @@
+{
+  "_what": "The corridor sample set C126 checks a newly activated national GTFS feed against. Coordinate pairs and geography only — never feed content (AL-56).",
+  "_hardChecks": [
+    "the corridor answers coverage=active",
+    "at least one DIRECT option is returned (BR-23.2: one route's stop sequence covers a halt near the origin BEFORE a halt near the destination)",
+    "every direct leg carries a shape, that shape decodes, and every point of it is inside the validator's Sri Lanka bounding box",
+    "the shape passes within shapeToleranceM of both ends of the corridor"
+  ],
+  "_softChecks": [
+    "expectRoutes is a HINT, and a miss is a warning rather than a failure. Route numbering is the feed's to state, not the platform's to require — AL-56 makes the file the authority, and a verify that failed because a provider renamed 138 to 138/1 would be asserting against the wrong thing. A miss is still printed loudly: on day-0 a corridor that returns routes but not the one everybody in Colombo rides is a question to ask the feed's provider."
+  ],
+  "_bbox": {
+    "_note": "GtfsValidator.MinLat/MaxLat/MinLng/MaxLng — the same box BR-32.1 rejects stops outside of, so a shape and a stop are judged against one rule.",
+    "minLat": 5.7,
+    "maxLat": 10.0,
+    "minLng": 79.4,
+    "maxLng": 82.1
+  },
+  "shapeToleranceM": 1200,
+  "_shapeToleranceWhy": "The halt radius is 400 m (BR-23.2), so the boarding halt is within 400 m of the requested point; a shape vertex is sampled along the road rather than at the halt, which adds a few hundred metres. 1200 m passes a real corridor and still fails a shape from the wrong side of the island by an order of magnitude.",
+  "corridors": [
+    {
+      "id": "pettah-kottawa",
+      "label": "Pettah → Kottawa (High Level Road)",
+      "from": { "lat": 6.9366, "lng": 79.8524, "name": "Pettah / Bastian Mawatha bus stand, Colombo" },
+      "to": { "lat": 6.8412, "lng": 79.9647, "name": "Kottawa junction" },
+      "expectRoutes": ["138"],
+      "why": "The busiest bus corridor in the country and the one a Colombo passenger opens SCR-PA-009 for. If any corridor works, this one does."
+    },
+    {
+      "id": "pettah-moratuwa",
+      "label": "Pettah → Moratuwa (Galle Road)",
+      "from": { "lat": 6.9366, "lng": 79.8524, "name": "Pettah / Bastian Mawatha bus stand, Colombo" },
+      "to": { "lat": 6.7740, "lng": 79.8820, "name": "Moratuwa town" },
+      "expectRoutes": ["100", "101", "2"],
+      "why": "The second Colombo trunk, and a different geometry — coastal and nearly straight, where the High Level corridor bends. A router that scores by walk distance alone gets one of the two wrong."
+    },
+    {
+      "id": "pettah-negombo",
+      "label": "Pettah → Negombo",
+      "from": { "lat": 6.9366, "lng": 79.8524, "name": "Pettah / Bastian Mawatha bus stand, Colombo" },
+      "to": { "lat": 7.2086, "lng": 79.8380, "name": "Negombo bus stand" },
+      "expectRoutes": ["240"],
+      "why": "Leaves the Colombo district, ~37 km. Catches a feed whose stop_times were truncated at a row limit: the far end of a long route is the first thing to go missing."
+    },
+    {
+      "id": "kandy-peradeniya",
+      "label": "Kandy → Peradeniya",
+      "from": { "lat": 7.2925, "lng": 80.6345, "name": "Kandy Goods Shed bus terminal" },
+      "to": { "lat": 7.2599, "lng": 80.5977, "name": "Peradeniya junction" },
+      "expectRoutes": ["1", "644", "654"],
+      "why": "A short urban corridor outside the Western Province. This is the check that a feed is national rather than Colombo-only — the failure mode the retired corridor-first acquisition plan would have produced (AL-55/AL-56)."
+    },
+    {
+      "id": "galle-matara",
+      "label": "Galle → Matara",
+      "from": { "lat": 6.0367, "lng": 80.2170, "name": "Galle bus stand" },
+      "to": { "lat": 5.9485, "lng": 80.5353, "name": "Matara bus stand" },
+      "expectRoutes": ["2", "32", "349"],
+      "why": "The Southern Province, and the southern extreme of the bounding box. A shape here is the strongest test of the bbox check: 5.9 °N is 0.2° from the validator's floor."
+    },
+    {
+      "id": "pettah-kandy",
+      "label": "Pettah → Kandy",
+      "from": { "lat": 6.9366, "lng": 79.8524, "name": "Pettah / Bastian Mawatha bus stand, Colombo" },
+      "to": { "lat": 7.2925, "lng": 80.6345, "name": "Kandy Goods Shed bus terminal" },
+      "expectRoutes": ["1"],
+      "why": "115 km, the longest sample, and a rail corridor as well as a bus one — so it is where a train route legitimately appears among the direct options (Mode A covers bus and train, AL-18)."
+    }
+  ]
+}

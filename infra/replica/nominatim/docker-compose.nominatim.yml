@@ -1,0 +1,131 @@
+# =====================================================================================
+# MageRide — self-hosted Nominatim geocoder (C125's optional container, on its own VPS).
+#
+# `specs/lightweight-production-replica.md` §"Optional Container — nominatim": 8 GB / 1 vCPU,
+# `mediagis/nominatim:4.4`, port 8080, and an explicit instruction to host it separately —
+# "Nominatim requires 8 GB RAM for the Sri Lanka OSM extract, which is a third of the 24 GB budget.
+# Recommended for light replica: host Nominatim on a separate cheap VPS."
+#
+# This file lives on the NOMINATIM VPS, not the replica. `deploy-nominatim.sh` copies it there and
+# drives it over SSH, so the deployment is reproducible from the repository rather than from
+# somebody's shell history.
+#
+# ------------------------------------------------------------------------------------
+# WHY THE IMPORT IS THE WHOLE JOB
+# ------------------------------------------------------------------------------------
+# The container is trivial; the one-off import of the OSM extract is what takes the time and the RAM.
+# `mediagis/nominatim` runs it on first boot when the data volume is empty and then serves, so the
+# first `up` is long (tens of minutes for Sri Lanka) and every later one is seconds. The volume is
+# what must survive — `deploy-nominatim.sh --reimport` is the only thing that should ever discard it.
+#
+# ------------------------------------------------------------------------------------
+# WHAT IS DELIBERATELY NOT HERE
+# ------------------------------------------------------------------------------------
+# No `osm-pipeline`. The spec makes it a weekly one-shot (diff -> osm2pgsql -> tippecanoe -> PMTiles
+# -> R2 sync) that "is NOT part of the always-on container set", so it belongs in a cron entry rather
+# than in a compose file that describes steady state. `--reimport` covers the geocoder half of that
+# refresh; the tile half needs an R2 bucket nobody has provisioned yet.
+# =====================================================================================
+
+name: mageride-nominatim
+
+services:
+  nominatim:
+    image: mediagis/nominatim:4.4
+    restart: unless-stopped
+
+    environment:
+      # The extract. Sri Lanka only — the whole point of self-hosting rather than calling the public
+      # instance is that the platform operates in one country, and a planet import needs 64 GB+.
+      PBF_URL: ${NOMINATIM_PBF_URL:-https://download.geofabrik.de/asia/sri-lanka-latest.osm.pbf}
+      REPLICATION_URL: ${NOMINATIM_REPLICATION_URL:-https://download.geofabrik.de/asia/sri-lanka-updates/}
+
+      # Import threads. 4 cores, and the import is I/O bound past that.
+      THREADS: ${NOMINATIM_THREADS:-4}
+
+      # Nominatim's own Postgres tuning, sized for a 7.2 GiB box with 8 GiB of swap. Left explicit
+      # because the image's defaults assume it owns a much larger machine and the import gets OOM
+      # killed silently — the container simply restarts and begins the import again, for ever.
+      NOMINATIM_SHARED_BUFFERS: ${NOMINATIM_SHARED_BUFFERS:-1GB}
+      NOMINATIM_MAINTENANCE_WORK_MEM: ${NOMINATIM_MAINTENANCE_WORK_MEM:-2GB}
+      NOMINATIM_WORK_MEM: ${NOMINATIM_WORK_MEM:-64MB}
+      NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD:?the geocoder needs an internal postgres password}
+
+      # No address search UI, no reverse-proxy assumptions. QUERY-SVC calls /search and /reverse —
+      # not transit-svc, whose /v1/geo/parse-maps-link touches no geocoder at all.
+      #
+      # `full`, NOT `address`. The styles are cumulative and `address` stops at what an address
+      # needs — boundaries, places, streets, house numbers — and drops every POI class. Imported
+      # that way the database held four classes (highway, place, landuse, boundary) and could not
+      # find Galle Face Green, Bandaranaike International Airport or the Temple of the Tooth,
+      # while osm.org found each instantly. A passenger setting a destination types exactly those
+      # names into `/v1/geo/search`, so the geocoder has to carry amenity, tourism, shop, leisure,
+      # aeroway and the rest. `full` is what the public instance runs.
+      #
+      # The style is fixed AT IMPORT TIME. Changing it means `--reimport`, not a restart.
+      NOMINATIM_IMPORT_STYLE: ${NOMINATIM_IMPORT_STYLE:-full}
+
+    ports:
+      # 8080 on the host. Reachable only from the replica: `deploy-nominatim.sh` installs an
+      # nftables/ufw rule allowing the replica's address and dropping the rest, because an open
+      # geocoder is a free service somebody else will use and the abuse looks like traffic.
+      - "${NOMINATIM_BIND:-0.0.0.0}:8080:8080"
+
+    volumes:
+      # The imported database. This is the expensive artefact — protect it.
+      - nominatim-data:/var/lib/postgresql/16/main
+      # NO FLATNODE MOUNT, deliberately. `/app/config.sh` in the image enables the flatnode file
+      # on nothing more than the directory existing:
+      #
+      #   if [ -d "${PROJECT_DIR}/flatnode" ]; then sed -i '…NOMINATIM_FLATNODE_FILE=…' …; fi
+      #
+      # so mounting a volume there IS the switch. A flatnode file is osm2pgsql's node index sized
+      # against the planet's id space — a planet-import optimisation. Against a 100 MB country
+      # extract it bought nothing and cost **105 GB of real disk** (not sparse), on a 150 GB box,
+      # for a database that is 1.4 GB. Without the mount the directory does not exist, the image
+      # leaves the setting empty, and osm2pgsql keeps its node cache in RAM as it should for an
+      # extract this size.
+
+    shm_size: 1gb
+
+    healthcheck:
+      # `/status` answers 200 with "OK" only once the import has finished and the service is
+      # answering queries. During the import it is either refused or 500, which is what keeps this
+      # container "starting" for as long as the import runs rather than reporting healthy early.
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/status | grep -q OK || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # The import, not the service.
+      #
+      # Δ measured 2026-08-11: the Sri Lanka import on this box (4 cores, 7.4 GiB) was still indexing
+      # at **2 h 08 m** — rank 26 of ~30 at a steady 150 objects/second — with `restarts=0`,
+      # `OOMKilled=false` and no OOM in dmesg. The old 5400 s (90 min) came from the spec's "tens of
+      # minutes" and is simply short of reality, so compose flipped a HEALTHY import to `unhealthy`
+      # (failing streak 76) an hour before it could possibly pass.
+      #
+      # That is cosmetic — Docker does not kill an unhealthy container, and nothing here watches the
+      # status — but it is expensive in the other currency: `--status` reported "unhealthy" and
+      # port 8080 refused connections, which reads exactly like a crashed geocoder and cost a full
+      # investigation to rule out. Three hours, so the honest states are `starting` then `healthy`.
+      start_period: 10800s
+
+    deploy:
+      resources:
+        limits:
+          # The spec's row is 8 GB; this box has 7.2 GiB, so the limit is the box less a reserve for
+          # the OS. NOT declared in infra/replica/budget.py's ACCEPTED_DEVIATIONS, and deliberately
+          # so: that file governs the REPLICA's 24 GB box, where nominatim is listed under ELSEWHERE
+          # and counted against nothing. A deviation belongs where the budget it deviates from lives,
+          # and this container's budget is this VPS.
+          #
+          # It is also why the box wants swap: the import's peak is far above steady state, and
+          # swapping through it beats an OOM kill, which restarts the import from the beginning.
+          memory: 6144M
+          cpus: "3.5"
+
+volumes:
+  nominatim-data:
+  # `nominatim-flatnode` is gone with its mount — see the note there. Declaring it would be
+  # harmless but misleading: the volume's existence is not what enabled the file, the mounted
+  # DIRECTORY was.

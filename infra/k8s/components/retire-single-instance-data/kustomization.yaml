@@ -1,0 +1,63 @@
+# =====================================================================================
+# Remove the single-instance Postgres and Redis that base carries (C132).
+#
+# base/data/postgres.yaml and base/data/redis.yaml are D7' §5's shape — one node each — and
+# both of their headers say the launch topology is C132's. This component takes them out so
+# that `launch-topology` can put a Patroni cluster and a Sentinel group in their place.
+#
+# --- WHY THIS IS A SEPARATE COMPONENT FROM THE ONE THAT ADDS THE REPLACEMENT -------------
+# Not taste, and not organisation. Kustomize accumulates a component's `resources` BEFORE it
+# applies that component's `patches`, so a single component that both deleted `Service/postgres`
+# and added its own fails while it is still reading files:
+#
+#     accumulating resources: may not add resource with an already registered id:
+#     Service.v1.[noGrp]/postgres.[noNs]
+#
+# Components are processed in the order the overlay lists them, so the deletion has to be a
+# component of its own, listed first. Both overlays list them as a pair and neither is useful
+# alone — retiring without replacing leaves a platform with no database.
+#
+# base itself is untouched and still renders as a complete single-node platform, which is what
+# `overlays/dev` (K3s, one node, D7' §8's first row) needs and what `k8s-verify.sh` §3 builds.
+# =====================================================================================
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+patches:
+  - target: { group: apps, version: v1, kind: StatefulSet, name: postgres }
+    patch: |
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: postgres
+        namespace: mageride
+      $patch: delete
+  - target: { version: v1, kind: Service, name: postgres }
+    patch: |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: postgres
+        namespace: mageride
+      $patch: delete
+  - target: { group: apps, version: v1, kind: StatefulSet, name: redis }
+    patch: |
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: redis
+        namespace: mageride
+      $patch: delete
+  # `Service/redis` goes too, and nothing replaces it under that name. A Sentinel group has no
+  # fixed address for its primary — that is the whole point of it — so a Service called `redis`
+  # could only ever point at one member chosen at random, and a client that used it would
+  # write to a replica and be refused, or worse, be accepted right up until the demotion.
+  # Clients reach the group through the sentinels; `redis-peers` is the headless record.
+  - target: { version: v1, kind: Service, name: redis }
+    patch: |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: redis
+        namespace: mageride
+      $patch: delete

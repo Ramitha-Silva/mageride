@@ -80,4 +80,15 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!--
+    Δ C127. The ASVS L2 suite reads the same twenty-five route tables to answer a different
+    question — "does every endpoint state a permission" rather than "does every endpoint match its
+    contract" — and `ServiceCatalog` is the only place the per-service start-up settings are
+    written down. Sharing it rather than copying it is what stops a security probe from silently
+    reporting a service it can no longer compose as having no endpoints at all.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="MageRide.Security.Tests" />
+  </ItemGroup>
+
 </Project>

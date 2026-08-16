@@ -26,13 +26,30 @@ Read `infra/CLAUDE.md` first, then `README.md` in this directory for the layout 
   `why` in the catalog, or the fence check refuses it.
 - **A comment says why, not what.** `replicas: 2` needs no comment; `replicas: 1` on
   provisioning-svc needs the paragraph the catalog gives it.
+- **The two launch-topology components are listed as a PAIR, retire first** (C132). Kustomize
+  accumulates a component's `resources` before its `patches`, so one component cannot delete
+  `Service/postgres` and add its own — it fails while reading files with *"may not add resource
+  with an already registered id"*. Neither component is useful alone.
+- **A pod that Patroni manages must carry `cluster-name: <scope>`.** Patroni's Kubernetes DCS
+  selector is `kubernetes.labels` plus a scope label it adds itself, and without it every member
+  sees only itself: a leader is elected, the database serves, and no replica can ever be built.
+  `verify-readiness.sh` §2 asserts the label equals `patroni.yml`'s `scope`.
+- **Anything the namespace's `restricted` PSA rejects is a workload that never produces a pod** —
+  the StatefulSet applies, ArgoCD reports Synced, the PVC is created, and there is no pod and no
+  error anywhere except a controller event. `--dry-run=server` only warns. `verify-readiness.sh`
+  §3 is the check; C132-01 is what it was written for.
 
 ## Verify
 ```bash
-bash infra/scripts/k8s-verify.sh                                  # 39 checks, no cluster
+bash infra/scripts/k8s-verify.sh                                  # the manifests, no cluster
+bash infra/k8s/verify-readiness.sh                                # C132: production readiness
 python3 infra/k8s/tools/generate_manifests.py --check             # drift only
 kubectl kustomize infra/k8s/overlays/staging | less               # what the cluster receives
 ```
+`verify-readiness.sh` has **three** exit codes and the middle one is the point: 0 ready, 1 a broken
+manifest, **2 the manifests are correct and go-live is blocked on something outside this
+repository** — it names each blocker. Same shape as `infra/replica/gtfs-day0-verify.sh` (C126) and
+`acceptance/sg/run.sh` (C131).
 The printed C124 verify command's second clause (`kubectl apply --dry-run=client -k …`) needs a
 reachable API server even though it says `client` — kubectl builds a RESTMapper from the server's
 discovery document. `.github/workflows/k8s-validate.yml` runs it against a kind cluster on every pull

@@ -1,0 +1,168 @@
+# =====================================================================================
+# The nightly logical dump to Wasabi (D7' §8's Backups row: "Wasabi nightly pg_dump (+ WAL
+# archiving prod)").
+#
+# --- WHY THIS EXISTS WHEN PGBACKREST ALREADY BACKS THE DATABASE UP ----------------------
+# They fail differently, and that is the entire argument for having both.
+#
+# pgBackRest takes a PHYSICAL copy: the data files, byte for byte, plus every WAL segment. It
+# is what gives ADD §15's 5-minute RPO and it restores fast. It also copies a corrupted page
+# faithfully, restores only to the same major version, and restores only the WHOLE cluster —
+# you cannot pull one table out of it after somebody deleted it.
+#
+# `pg_dump -Fc` takes a LOGICAL copy: SQL that reconstructs the schema and the rows. It costs
+# a long read on the primary, it is not point-in-time, and at 200 GB it is slow both ways. In
+# exchange it survives a corrupted page (the read fails loudly instead of copying it), it
+# restores into a different major version, and `pg_restore -t billing.journal_postings` is a
+# single table.
+#
+# --- PRODUCTION ONLY --------------------------------------------------------------------
+# This file is in overlays/production and not in the launch-topology component, so staging
+# does not run it. Staging's data is disposable by design and a nightly dump of synthetic
+# rows into a metered object store is a monthly bill for nothing. Staging still exercises the
+# path that matters — pgBackRest archiving and a restore — because that is the one whose
+# failure is invisible.
+# =====================================================================================
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pg-dump-wasabi
+  namespace: mageride
+  labels:
+    app: pg-dump-wasabi
+    app.kubernetes.io/name: pg-dump-wasabi
+    app.kubernetes.io/component: job
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    # After the data plane and after the applications: a dump taken mid-migration is a dump of
+    # a schema that existed for four minutes.
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  # 02:15 Asia/Colombo — the same hour the replica's own backup runs
+  # (docs/runbooks/replica-operations.md §4), and the trough in a Sri Lankan ride-hailing day.
+  # `timeZone` and not a UTC schedule: D-13 makes Asia/Colombo the platform's business day, and
+  # a dump that drifts across the daily-fee reset by half a year of DST somewhere else is a
+  # dump taken in the middle of the fee run.
+  schedule: "15 2 * * *"
+  timeZone: Asia/Colombo
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 7
+  # If the cluster was unavailable at 02:15, run late rather than skip: a missed night is a
+  # missing restore point, and 6 hours is still the same business day.
+  startingDeadlineSeconds: 21600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      # A dump that has run for four hours is a dump that will not finish before the next one
+      # starts. Fail, alert (`PgDumpJobFailing`), and let the operator decide.
+      activeDeadlineSeconds: 14400
+      template:
+        metadata:
+          labels:
+            app: pg-dump-wasabi
+            app.kubernetes.io/name: pg-dump-wasabi
+            app.kubernetes.io/component: job
+            app.kubernetes.io/part-of: mageride
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: pg-dump
+              # The same image the database runs, so `pg_dump` is the same major version as the
+              # server — a 15 client against a 16 server refuses outright — and `curl` with
+              # `--aws-sigv4` is already in it (curl 7.81). One image, no S3 client to pin.
+              image: timescale/timescaledb-ha:pg16
+              command: ["/bin/bash", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+                  file="/tmp/mageride-${stamp}.dump"
+
+                  # -Fc: the custom format, which is compressed and is the only one
+                  # `pg_restore -t` can extract a single table from.
+                  # THE PRIMARY, not a replica: pg_dump holds its snapshot open for the whole
+                  # run, and on a hot standby that conflicts with WAL replay — the dump is
+                  # cancelled by the server partway through, nightly, with a message about a
+                  # recovery conflict. Moving it to `postgres-replicas` needs
+                  # `max_standby_streaming_delay` raised to longer than the dump takes, which
+                  # is a trade against replication lag. capacity-plan.md §6 has the trigger.
+                  echo "▸ pg_dump -> ${file}"
+                  time pg_dump \
+                    --host=postgres --port=5432 --username=postgres --dbname=mageride \
+                    --format=custom --compress=6 --no-password \
+                    --file="${file}"
+                  bytes="$(stat -c %s "${file}")"
+                  echo "▸ dump is ${bytes} bytes"
+
+                  # A dump of an empty database also exits 0. pg_restore --list is what makes
+                  # this a check rather than an exit code: it reads the archive's own table of
+                  # contents, so a truncated or unreadable file fails HERE and not in six
+                  # months. The floor is deliberately low — it catches "nothing came out",
+                  # which is the failure this has.
+                  entries="$(pg_restore --list "${file}" | grep -c '^[0-9]' || true)"
+                  echo "▸ archive lists ${entries} objects"
+                  if [ "${entries}" -lt 100 ]; then
+                    echo "✗ only ${entries} objects in the archive — this is not a backup of this platform" >&2
+                    exit 1
+                  fi
+
+                  key="pg_dump/${stamp}/mageride-${stamp}.dump"
+                  echo "▸ PUT s3://${WASABI_BUCKET}/${key}"
+                  curl --fail --silent --show-error \
+                       --aws-sigv4 "aws:amz:${WASABI_REGION}:s3" \
+                       --user "${WASABI_ACCESS_KEY}:${WASABI_SECRET_KEY}" \
+                       --header "x-amz-content-sha256: UNSIGNED-PAYLOAD" \
+                       --upload-file "${file}" \
+                       "https://${WASABI_BUCKET}.${WASABI_ENDPOINT}/${key}"
+
+                  # Read it back. An upload that returns 200 and stores zero bytes is a
+                  # documented S3 failure mode, and the read is one HEAD.
+                  size_on_s3="$(curl --fail --silent --show-error --head \
+                       --aws-sigv4 "aws:amz:${WASABI_REGION}:s3" \
+                       --user "${WASABI_ACCESS_KEY}:${WASABI_SECRET_KEY}" \
+                       "https://${WASABI_BUCKET}.${WASABI_ENDPOINT}/${key}" \
+                       | grep -i '^content-length:' | tr -d '\r' | awk '{print $2}')"
+                  if [ "${size_on_s3}" != "${bytes}" ]; then
+                    echo "✗ uploaded ${bytes} bytes, Wasabi reports ${size_on_s3}" >&2
+                    exit 1
+                  fi
+                  echo "✓ ${key} — ${bytes} bytes, verified"
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef: { name: postgres-superuser, key: password }
+                - name: WASABI_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef: { name: backup-s3, key: access-key }
+                - name: WASABI_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef: { name: backup-s3, key: secret-key }
+                # Kept beside pgbackrest.conf's repo1-s3-* values, and they must agree.
+                # verify-readiness.sh §4 compares them, because a dump that lands in a bucket
+                # nobody restores from is worse than no dump at all.
+                - { name: WASABI_ENDPOINT, value: s3.ap-southeast-1.wasabisys.com }
+                - { name: WASABI_REGION, value: ap-southeast-1 }
+                - { name: WASABI_BUCKET, value: mageride-production-pgdump }
+              resources:
+                requests: { cpu: 250m, memory: 512Mi }
+                limits: { cpu: "1", memory: 2Gi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              volumeMounts:
+                - { name: tmp, mountPath: /tmp }
+          volumes:
+            - name: tmp
+              # The dump is written here before it is uploaded. `emptyDir` is node disk, and
+              # the node has to have room for the whole archive — which is the reason this is
+              # sized in capacity-plan.md §4 rather than left to whatever the node happens to
+              # have free.
+              emptyDir: { sizeLimit: 50Gi }

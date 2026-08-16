@@ -62,8 +62,10 @@ spec:
           ports:
             - { name: http, containerPort: 3003, protocol: TCP }
           envFrom:
-            # NEXT_PUBLIC_* only. A portal is a browser bundle: anything it can read,
-            # a user can read, so no Secret is ever mounted into one.
+            # No Secret is ever mounted into a portal pod. NOT because a portal is a
+            # browser bundle — it is a Next SERVER that holds the session and calls the
+            # gateway itself — but because it has never needed one: it authenticates
+            # with the caller's own bearer, not a credential of its own.
             - configMapRef: { name: portal-config }
           resources:
             requests: { cpu: "100m", memory: 256Mi }

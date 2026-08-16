@@ -1,0 +1,99 @@
+# =====================================================================================
+# MageRide — LiveKit SFU, SINGAPORE (C131)
+#
+# This is `infra/deploy/livekit/livekit.yaml` with the three changes C131 found were needed
+# before any relayed call can work at all. Each is argued at the line. The dev file is left
+# alone: it is C055's and the defects are recorded as findings with an owner in
+# `acceptance/sg/report.md`, not patched from here.
+# =====================================================================================
+
+port: 7880
+
+rtc:
+  tcp_port: 7881
+
+  # ---------------------------------------------------------------------------------
+  # CHANGE 1 — the SFU's media ports are NOT coturn's relay range.
+  #
+  # `infra/deploy/livekit/livekit.yaml` sets 50000-50100 here and
+  # `infra/deploy/coturn/turnserver.conf` sets min-port/max-port to the SAME 50000-50100,
+  # with both containers on `network_mode: host`. Two processes then contend for one
+  # 101-port range in one network namespace: whichever binds first wins each port and the
+  # other is refused. D6' §6's "(3478 + 50000-50100)" describes the TURN RELAY's range;
+  # turnserver.conf's own comment reads it as a range the two must share ("Must match
+  # rtc.port_range_start/end in livekit.yaml"), which is the misreading.
+  #
+  # The SFU gets its own range here. coturn keeps D6' §6's.
+  # ---------------------------------------------------------------------------------
+  port_range_start: 50200
+  port_range_end: 50400
+
+  # The node's external address. `use_external_ip` discovers it through STUN, which on a
+  # DOKS node behind a LoadBalancer discovers the NODE's address rather than the service's.
+  # Set it outright in Singapore — a wrong advertised address is silent one-way audio, not
+  # an error (docs/runbooks/voip-call-setup.md §2).
+  use_external_ip: false
+  node_ip: ${LIVEKIT_NODE_IP}
+
+  # ---------------------------------------------------------------------------------
+  # CHANGE 2 — the relay is ADVERTISED. This is the whole of C131-01.
+  #
+  # Without this block LiveKit tells clients about no TURN server at all: the embedded one
+  # is off (`turn.enabled: false`, below) and there is no external declaration, so the ICE
+  # servers in the JoinResponse fall back to LiveKit's default — Google's public STUN.
+  # coturn is then deployed, hardened, given a shared secret and a host UDP range, and
+  # never offered to a single handset. Every call whose ICE needs a relay has no relay
+  # candidate to try, and the failure is a call that rings and has no audio — on symmetric
+  # and carrier-grade NAT, which `specs/lightweight-production-replica.md` calls "the common
+  # case on Sri Lankan mobile carriers".
+  #
+  # `secret` is coturn's `static-auth-secret`: LiveKit mints the ephemeral credential pair
+  # (username = expiry, password = base64(HMAC-SHA1(secret, username))) per participant,
+  # which is what `use-auth-secret` on the relay expects and what keeps each participant
+  # under its own `user-quota`.
+  # ---------------------------------------------------------------------------------
+  turn_servers:
+    - host: ${TURN_PUBLIC_HOST}
+      port: 3478
+      protocol: udp
+      secret_file: /run/secrets/turn_shared_secret
+      ttl: 3600
+    # TLS on 5349 for the carriers that block plain STUN/TURN. See turnserver.sg.conf —
+    # this listener needs a certificate, which the dev configuration declares and does not
+    # supply.
+    - host: ${TURN_PUBLIC_HOST}
+      port: 5349
+      protocol: tls
+      secret_file: /run/secrets/turn_shared_secret
+      ttl: 3600
+
+limit:
+  num_tracks: 4
+  bytes_per_sec: 300000
+
+# Recordings are OFF (PDPA, ADD §6). There is no egress configuration in this file and there
+# must not be one — unchanged from the dev configuration, and stated again because this is
+# the file a production deployment reads.
+
+room:
+  empty_timeout: 60
+  max_participants: 2
+  enabled_codecs:
+    - mime: audio/opus
+
+turn:
+  # ---------------------------------------------------------------------------------
+  # CHANGE 3 — still off, and now for a stated reason rather than by omission.
+  #
+  # D6' §6 names coturn by product and gives it the host UDP range. LiveKit's embedded TURN
+  # would need the same ports with none of coturn's operational surface — no denied-peer
+  # list, no quotas, no separate credential. It stays off; what changed is that the external
+  # relay is now declared above, which is what `enabled: false` was silently assuming.
+  # ---------------------------------------------------------------------------------
+  enabled: false
+
+logging:
+  level: info
+  json: true
+
+# keys come from LIVEKIT_KEYS in the environment, never from this file.
