@@ -20,7 +20,7 @@ namespace MageRide.E2E.Scenarios;
 /// <para>
 /// <b>The acquirer is a real socket</b> (<see cref="AcquirerGateway"/>) speaking D6' §7.1's
 /// create-session shape and signing its callbacks with the deployment's own secret, exactly as
-/// C122's <c>SmsGateway</c> speaks Notify.lk's. It decides nothing: whether a callback is a first
+/// C122's <c>SmsGateway</c> speaks Fit SMS's. It decides nothing: whether a callback is a first
 /// delivery, a redelivery, a second transaction for one session or an amount that disagrees with it
 /// is what each test chooses, because those four are four distinct R-19 behaviours.
 /// </para>

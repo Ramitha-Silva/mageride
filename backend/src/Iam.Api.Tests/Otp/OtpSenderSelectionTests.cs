@@ -68,24 +68,21 @@ public sealed class OtpSenderSelectionTests
         Assert.Equal(SmsOptions.DevProvider, options.Provider);
     }
 
-    [Fact]
-    public void Selecting_notify_lk_without_credentials_fails_fast_rather_than_swallowing_every_otp()
+    /// <summary>
+    /// AL-60 removed Notify.lk. A deployment still naming it must FAIL rather than fall through to
+    /// the dev sender, which would log every OTP to stdout and let nobody sign in — while looking
+    /// healthy.
+    /// </summary>
+    [Theory]
+    [InlineData("notifylk")]
+    [InlineData("dialog")]
+    [InlineData("")]
+    public void A_provider_that_is_not_fitsms_or_dev_is_refused(string provider)
     {
         var exception = Assert.Throws<OptionsValidationException>(
-            () => Resolve(TestEnvironment.Development, ("Sms:Provider", SmsOptions.NotifyLkProvider)));
+            () => Resolve(TestEnvironment.Development, ("Sms:Provider", provider)));
 
-        Assert.Contains("Sms:NotifyLkApiKey", string.Join(' ', exception.Failures), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Notify_lk_is_the_sender_once_it_is_configured()
-    {
-        var sender = ResolveSender(
-            ("Sms:Provider", SmsOptions.NotifyLkProvider),
-            ("Sms:NotifyLkUserId", "12345"),
-            ("Sms:NotifyLkApiKey", "not-a-real-key"));
-
-        Assert.IsType<NotifyLkOtpSender>(sender);
+        Assert.Contains("Sms:Provider must be", string.Join(' ', exception.Failures), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -159,17 +156,16 @@ public sealed class OtpSenderSelectionTests
     /// one gateway is a deployment with one gateway, not a broken one.
     /// </summary>
     [Fact]
-    public void A_configured_secondary_gateway_wraps_notify_lk_in_the_fallback()
+    public void A_configured_secondary_gateway_wraps_fit_sms_in_the_fallback()
     {
         var sender = ResolveSender(
-            ("Sms:Provider", SmsOptions.NotifyLkProvider),
-            ("Sms:NotifyLkUserId", "12345"),
-            ("Sms:NotifyLkApiKey", "not-a-real-key"),
+            ("Sms:Provider", SmsOptions.FitSmsProvider),
+            ("Sms:FitSmsApiToken", "588|not-a-real-token"),
             ("Sms:SecondaryGateway", "https://sms.example.lk/send"),
             ("Sms:SecondaryApiKey", "also-not-real"));
 
         Assert.IsType<FallbackOtpSender>(sender);
-        Assert.Equal("notifylk+secondary", sender.Provider);
+        Assert.Equal("fitsms+secondary", sender.Provider);
     }
 
     [Fact]

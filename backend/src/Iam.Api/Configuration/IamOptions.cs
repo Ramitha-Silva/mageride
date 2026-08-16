@@ -42,37 +42,28 @@ public sealed class OtpOptions
 }
 
 /// <summary>
-/// SMS delivery for the OTP (D6' §7.3, D7' §4.2 <c>Sms__NotifyLkApiKey</c> /
-/// <c>Sms__SecondaryGateway</c>).
+/// SMS delivery for the OTP (D7' §4.2 <c>Sms__FitSmsApiToken</c> / <c>Sms__SecondaryGateway</c>).
 /// </summary>
+/// <remarks>
+/// <b>Fit SMS is the platform's only SMS gateway (AL-60).</b> D6' §7.3 named Notify.lk as the
+/// primary and it was implemented as one; the account moved and the class is gone rather than
+/// left as a switchable alternative, because a second gateway that nobody holds credentials for
+/// is a code path no deployment exercises and no test can honestly cover. The
+/// <c>Sms__SecondaryGateway</c> half of §7.3 is unchanged — it is a generic HTTP shape, not a
+/// named provider, and D-33 still needs a second transport for the SOS.
+/// </remarks>
 public sealed class SmsOptions
 {
     public const string SectionName = "Sms";
 
     public const string DevProvider = "dev";
-    public const string NotifyLkProvider = "notifylk";
     public const string FitSmsProvider = "fitsms";
 
     /// <summary>
-    /// <c>dev</c> logs the code instead of sending it; <c>notifylk</c> and <c>fitsms</c> are the
-    /// two real gateways (D6' §7.3 "Primary: Notify.lk REST", and Fit SMS beside it).
+    /// <c>dev</c> logs the code instead of sending it; <c>fitsms</c> is the real gateway.
     /// </summary>
     [Required]
     public string Provider { get; set; } = DevProvider;
-
-    /// <summary>Notify.lk REST base address.</summary>
-    [Required]
-    public string NotifyLkBaseUrl { get; set; } = "https://app.notify.lk/api/v1/";
-
-    /// <summary>Notify.lk account id (their <c>user_id</c> parameter).</summary>
-    public string? NotifyLkUserId { get; set; }
-
-    /// <summary>D7' §4.2 <c>Sms__NotifyLkApiKey</c>.</summary>
-    public string? NotifyLkApiKey { get; set; }
-
-    /// <summary>Registered alphanumeric sender mask. <c>NotifyDEMO</c> is their sandbox one.</summary>
-    [Required]
-    public string NotifyLkSenderId { get; set; } = "MageRide";
 
     /// <summary>
     /// Fit SMS v4 REST base address. The sender posts <c>sms/send</c> relative to it, so it ends
@@ -93,7 +84,7 @@ public sealed class SmsOptions
     /// <c>AddSmsOptions</c> checks at start.
     /// </summary>
     [Required]
-    public string FitSmsSenderId { get; set; } = "MageRide";
+    public string FitSmsSenderId { get; set; } = "The Change";
 
     /// <summary>
     /// The <c>type</c> Fit SMS is told to send a non-ASCII body as.

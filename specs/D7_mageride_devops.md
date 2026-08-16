@@ -371,7 +371,7 @@ dev→staging→prod promotion by image SHA tag + ArgoCD app-of-apps; DB migrati
 | HAProxy + Keepalived | `haproxy:2.9-alpine` | edge LB / VRRP | [KEEP] |
 | OTLP/LGTM | Prometheus, Loki, Grafana, Tempo | observability | [ADAPT] |
 
-**External SaaS:** OnePay + LankaQR (payments — **no bank-transfer IPG, AL-05**), Notify.lk + Dialog/Mobitel (SMS),
+**External SaaS:** OnePay + LankaQR (payments — **no bank-transfer IPG, AL-05**), Fit SMS + Dialog/Mobitel (SMS, AL-60),
 FCM + APNs (push), Gemini Flash (OCR), Cloudflare R2 (tiles). **Removed `[DELTA:INDIA]`/`[DELTA:JUSPAY]`:**
 Juspay/Stripe, Idfy/HyperVerge/DigiLocker/Aadhaar, Google Maps, Exotel, InfoBIP, Passetto, Beckn/ONDC.
 

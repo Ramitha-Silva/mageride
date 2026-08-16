@@ -71,8 +71,6 @@ public sealed class SmsSender(
                 => SmsGatewayNames.Dev,
             not null when provider.Equals(SmsOptions.FitSmsProvider, StringComparison.OrdinalIgnoreCase)
                 => SmsGatewayNames.FitSms,
-            not null when provider.Equals(SmsOptions.NotifyLkProvider, StringComparison.OrdinalIgnoreCase)
-                => SmsGatewayNames.NotifyLk,
             _ => string.Empty,
         };
 
@@ -113,7 +111,7 @@ public sealed class SmsSender(
         logger.LogWarning(
             "The primary SMS gateway ({Primary}) refused a message to {Phone} ({Error}); falling back to {Secondary} (D6' §7.3).",
             primary.Name,
-            NotifyLkSmsGateway.Redact(phone),
+            SmsPhone.Redact(phone),
             result.Error,
             secondary.Name);
 

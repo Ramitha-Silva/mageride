@@ -44,7 +44,6 @@ public interface ISmsGateway
 /// <summary>Gateway names, so the primary/secondary vocabulary is spelled once.</summary>
 public static class SmsGatewayNames
 {
-    public const string NotifyLk = "notifylk";
     public const string FitSms = "fitsms";
     public const string Secondary = "secondary";
     public const string Dev = "dev";
@@ -52,11 +51,11 @@ public static class SmsGatewayNames
 
 /// <summary>
 /// Fit SMS v4 REST (<c>https://app.fitsms.lk/api/v4/sms/send</c>) — the platform's primary gateway
-/// from the AL-57 switch away from Notify.lk.
+/// from the AL-60 switch away from Notify.lk.
 /// </summary>
 /// <remarks>
 /// <para>
-/// One JSON POST to <c>sms/send</c> under a bearer token. <b>Like Notify.lk, their API answers HTTP
+/// One JSON POST to <c>sms/send</c> under a bearer token. <b>Their API answers HTTP
 /// 200 with <c>{"status":"error"}</c></b> for a rejected send — an unregistered mask, an exhausted
 /// balance — so the status line alone is not the outcome and the body has to be read. A gateway
 /// that trusted the 200 would mark every SOS delivered and `safety.sos_events` would record a
@@ -64,9 +63,8 @@ public static class SmsGatewayNames
 /// </para>
 /// <para>
 /// The parse and the national-digits conversion are duplicated from iam-svc's
-/// <c>FitSmsOtpSender</c> rather than shared, for the reason
-/// <see cref="NotifyLkSmsGateway"/> already carries: the two services do not reference each other,
-/// and the C051 handoff proposes folding all four into the kernel.
+/// <c>FitSmsOtpSender</c> rather than shared: the two services do not reference each other, and
+/// the C051 handoff proposes folding both into the kernel.
 /// </para>
 /// <para>
 /// <c>ruid</c> is kept as the <see cref="SmsResult.MessageId"/>. It is what their support and their
@@ -108,7 +106,7 @@ public sealed class FitSmsGateway(
         }
 
         var request = new FitSmsSendRequest(
-            Recipient: NotifyLkSmsGateway.ToNationalDigits(phone),
+            Recipient: SmsPhone.ToNationalDigits(phone),
             SenderId: _sms.FitSmsSenderId,
             Type: MessageTypeFor(message, _sms.FitSmsUnicodeType),
             Message: message,
@@ -129,7 +127,7 @@ public sealed class FitSmsGateway(
                 logger.LogError(
                     "Fit SMS answered {Status} for {Phone}: {Body}",
                     (int)response.StatusCode,
-                    NotifyLkSmsGateway.Redact(phone),
+                    SmsPhone.Redact(phone),
                     body);
 
                 return SmsResult.Failed(Name, $"Fit SMS answered {(int)response.StatusCode}.");
@@ -137,7 +135,7 @@ public sealed class FitSmsGateway(
 
             if (!IsAccepted(body, out var reported, out var ruid))
             {
-                logger.LogError("Fit SMS refused the send for {Phone}: {Body}", NotifyLkSmsGateway.Redact(phone), body);
+                logger.LogError("Fit SMS refused the send for {Phone}: {Body}", SmsPhone.Redact(phone), body);
                 return SmsResult.Failed(Name, $"Fit SMS refused the send ({reported}).");
             }
 
@@ -240,141 +238,6 @@ public sealed class FitSmsGateway(
 }
 
 /// <summary>
-/// Notify.lk REST — D6' §7.3's primary ("~Rs 0.50–1.50 per SMS — OTP, transactional, low-balance").
-/// </summary>
-/// <remarks>
-/// <para>
-/// One form POST to <c>/send</c>. <b>Their API answers HTTP 200 with <c>{"status":"error"}</c></b>
-/// for a rejected send — an unregistered sender mask, an exhausted balance — so the status line
-/// alone is not the outcome and the body has to be read. iam-svc's <c>NotifyLkOtpSender</c> learned
-/// the same thing (C026); the parse is repeated here rather than shared because the two services do
-/// not reference each other and the C051 handoff proposes folding both into the kernel.
-/// </para>
-/// <para>
-/// <c>to</c> is the national form with no <c>+</c>. The platform stores E.164 everywhere else, so
-/// the conversion happens here, at the boundary that wants the other spelling.
-/// </para>
-/// </remarks>
-public sealed class NotifyLkSmsGateway(
-    IHttpClientFactory clients,
-    IOptions<SmsOptions> options,
-    ILogger<NotifyLkSmsGateway> logger) : ISmsGateway
-{
-    /// <summary>The named client the resilience pipeline is attached to.</summary>
-    public const string HttpClientName = "sms-notifylk";
-
-    private readonly SmsOptions _sms = options?.Value ?? throw new ArgumentNullException(nameof(options));
-
-    public string Name => SmsGatewayNames.NotifyLk;
-
-    public bool IsConfigured =>
-        !string.IsNullOrWhiteSpace(_sms.NotifyLkUserId) && !string.IsNullOrWhiteSpace(_sms.NotifyLkApiKey);
-
-    public async Task<SmsResult> SendAsync(string phone, string message, CancellationToken cancellationToken)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(phone);
-        ArgumentException.ThrowIfNullOrWhiteSpace(message);
-
-        if (!IsConfigured)
-        {
-            return SmsResult.Failed(Name, "Notify.lk is not configured (Sms:NotifyLkUserId / Sms:NotifyLkApiKey).");
-        }
-
-        var form = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["user_id"] = _sms.NotifyLkUserId!,
-            ["api_key"] = _sms.NotifyLkApiKey!,
-            ["sender_id"] = _sms.NotifyLkSenderId,
-            ["to"] = ToNationalDigits(phone),
-            ["message"] = message,
-        };
-
-        var client = clients.CreateClient(HttpClientName);
-
-        try
-        {
-            using var response = await client.PostAsync("send", new FormUrlEncodedContent(form), cancellationToken);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                return SmsResult.Failed(Name, $"Notify.lk answered {(int)response.StatusCode}.");
-            }
-
-            if (!IsAccepted(body, out var reported))
-            {
-                // The body is logged and kept out of the result: their error strings can carry the
-                // destination number, and the result is written to `last_error` on a row.
-                logger.LogError("Notify.lk refused the send for {Phone}: {Body}", Redact(phone), body);
-                return SmsResult.Failed(Name, $"Notify.lk refused the send ({reported}).");
-            }
-
-            return SmsResult.Ok(Name, MessageIdOf(body));
-        }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException
-                                              && !cancellationToken.IsCancellationRequested)
-        {
-            return SmsResult.Failed(Name, $"Notify.lk was unreachable: {exception.Message}");
-        }
-    }
-
-    /// <summary><c>+94771234567</c> → <c>94771234567</c>. Notify.lk rejects the leading <c>+</c>.</summary>
-    internal static string ToNationalDigits(string e164) => e164.TrimStart('+');
-
-    /// <summary>
-    /// Success is <c>{"status":"success","data":{…}}</c>; failure comes back as
-    /// <c>{"status":"error","message":"…"}</c> under the same 200.
-    /// </summary>
-    internal static bool IsAccepted(string body, out string reported)
-    {
-        reported = "unparseable response";
-
-        if (string.IsNullOrWhiteSpace(body))
-        {
-            return false;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(body);
-
-            if (!document.RootElement.TryGetProperty("status", out var status))
-            {
-                return false;
-            }
-
-            reported = status.GetString() ?? "no status";
-            return string.Equals(reported, "success", StringComparison.OrdinalIgnoreCase);
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-    }
-
-    private static string? MessageIdOf(string body)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(body);
-
-            return document.RootElement.TryGetProperty("data", out var data)
-                   && data.TryGetProperty("message_id", out var id)
-                ? id.ToString()
-                : null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>Last four digits only. A log line is not a place for a full MSISDN (§0 PII).</summary>
-    internal static string Redact(string phone) =>
-        phone.Length <= 4 ? "****" : string.Create(CultureInfo.InvariantCulture, $"****{phone[^4..]}");
-}
-
-/// <summary>
 /// A generic HTTP gateway — the "secondary gateway (Dialog/Mobitel)" of D6' §7.3.
 /// </summary>
 /// <remarks>
@@ -416,7 +279,7 @@ public sealed class SecondarySmsGateway(
                 new
                 {
                     to = phone,
-                    from = _sms.SecondarySenderId ?? _sms.NotifyLkSenderId,
+                    from = _sms.SecondarySenderId ?? _sms.FitSmsSenderId,
                     message,
                 },
                 cancellationToken);
@@ -447,7 +310,7 @@ public sealed class LoggingSmsGateway(ILogger<LoggingSmsGateway> logger) : ISmsG
 
     public Task<SmsResult> SendAsync(string phone, string message, CancellationToken cancellationToken)
     {
-        logger.LogInformation("[dev-sms] to {Phone}: {Message}", NotifyLkSmsGateway.Redact(phone), message);
+        logger.LogInformation("[dev-sms] to {Phone}: {Message}", SmsPhone.Redact(phone), message);
         return Task.FromResult(SmsResult.Ok(Name, Guid.NewGuid().ToString("n")));
     }
 }

@@ -13,7 +13,7 @@ public interface IOtpSender
 }
 
 /// <summary>
-/// The dev sender: writes the OTP to the log instead of paying Notify.lk for it.
+/// The dev sender: writes the OTP to the log instead of paying a gateway to deliver it.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -24,7 +24,7 @@ public interface IOtpSender
 /// it runs on synthetic numbers).
 /// </para>
 /// <para>
-/// The real Notify.lk sender, its trilingual templates (D-26) and the D-33 secondary gateway are
+/// The real Fit SMS sender, its trilingual templates (D-26) and the D-33 secondary gateway are
 /// C026/C051.
 /// </para>
 /// </remarks>

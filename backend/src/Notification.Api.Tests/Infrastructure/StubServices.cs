@@ -235,16 +235,16 @@ internal sealed class SmsGatewayStub : IAsyncDisposable
     /// <summary>Artificial latency before answering. Models a gateway having a bad minute.</summary>
     public TimeSpan Delay { get; set; } = TimeSpan.Zero;
 
-    /// <summary>When set, the gateway refuses everything — Notify.lk's 200-with-an-error shape.</summary>
+    /// <summary>When set, the gateway refuses everything — Fit SMS's 200-with-an-error shape.</summary>
     public bool Refuse { get; set; }
 
-    /// <summary>Notify.lk's REST shape: form POST to <c>/send</c>, 200 with a status member.</summary>
-    public static Task<SmsGatewayStub> StartPrimaryAsync() => StartAsync("primary", notifyLk: true);
+    /// <summary>Fit SMS v4: JSON POST to <c>sms/send</c>, 200 with a status member.</summary>
+    public static Task<SmsGatewayStub> StartPrimaryAsync() => StartAsync("primary", fitSms: true);
 
     /// <summary>The generic JSON POST the secondary gateway takes (D6' §7.3, shape unspecified).</summary>
-    public static Task<SmsGatewayStub> StartSecondaryAsync() => StartAsync("secondary", notifyLk: false);
+    public static Task<SmsGatewayStub> StartSecondaryAsync() => StartAsync("secondary", fitSms: false);
 
-    private static async Task<SmsGatewayStub> StartAsync(string name, bool notifyLk)
+    private static async Task<SmsGatewayStub> StartAsync(string name, bool fitSms)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
@@ -259,28 +259,32 @@ internal sealed class SmsGatewayStub : IAsyncDisposable
         var sent = new ConcurrentQueue<SentSms>();
         SmsGatewayStub? stub = null;
 
-        if (notifyLk)
+        if (fitSms)
         {
-            app.MapPost("/api/v1/send", async (HttpContext context) =>
+            app.MapPost("/api/v4/sms/send", async (HttpContext context) =>
             {
                 if (stub!.Delay > TimeSpan.Zero)
                 {
                     await Task.Delay(stub.Delay);
                 }
 
-                var form = await context.Request.ReadFormAsync();
+                var body = await context.Request.ReadFromJsonAsync<FitSmsBody>();
 
                 if (stub.Refuse)
                 {
                     // Their real failure shape: HTTP 200 with an error body, which is exactly the
-                    // trap NotifyLkSmsGateway.IsAccepted exists for.
+                    // trap FitSmsGateway.IsAccepted exists for.
                     return Results.Ok(new { status = "error", message = "insufficient balance" });
                 }
 
                 sent.Enqueue(new SentSms(
-                    name, form["to"].ToString(), form["message"].ToString(), DateTimeOffset.UtcNow));
+                    name, body?.Recipient ?? string.Empty, body?.Message ?? string.Empty, DateTimeOffset.UtcNow));
 
-                return Results.Ok(new { status = "success", data = new { message_id = sent.Count } });
+                return Results.Ok(new
+                {
+                    status = "success",
+                    data = new { ruid = $"stub-{sent.Count:D32}", to = body?.Recipient },
+                });
             });
         }
         else
@@ -334,6 +338,14 @@ internal sealed class SmsGatewayStub : IAsyncDisposable
             Console.Error.WriteLine($"warning: could not stop the {Name} SMS stub: {exception.Message}");
         }
     }
+
+    /// <summary>Fit SMS's send body, as their field names spell it.</summary>
+    private sealed record FitSmsBody(
+        [property: System.Text.Json.Serialization.JsonPropertyName("recipient")] string Recipient,
+        [property: System.Text.Json.Serialization.JsonPropertyName("sender_id")] string SenderId,
+        [property: System.Text.Json.Serialization.JsonPropertyName("type")] string Type,
+        [property: System.Text.Json.Serialization.JsonPropertyName("message")] string Message,
+        [property: System.Text.Json.Serialization.JsonPropertyName("expiry_time")] int ExpirySeconds);
 
     private sealed record SecondaryBody(string? To, string? From, string? Message);
 }

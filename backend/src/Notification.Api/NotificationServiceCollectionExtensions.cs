@@ -87,7 +87,7 @@ public static class NotificationServiceCollectionExtensions
         }
         else
         {
-            services.AddSingleton<ISmsGateway, NotifyLkSmsGateway>();
+            services.AddSingleton<ISmsGateway, FitSmsGateway>();
         }
 
         services.AddSingleton<ISmsGateway, SecondarySmsGateway>();
@@ -144,15 +144,6 @@ public static class NotificationServiceCollectionExtensions
             client.DefaultRequestVersion = System.Net.HttpVersion.Version20;
             client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact;
         });
-
-        // D6' §7.3's "Retry: 2 attempts" per gateway lives here, on the client, which is where
-        // iam-svc puts it too.
-        services.AddHttpClient(NotifyLkSmsGateway.HttpClientName, client =>
-            {
-                client.BaseAddress = new Uri(Slash(sms.NotifyLkBaseUrl));
-                client.Timeout = sms.RequestTimeout;
-            })
-            .AddMageRideResilience(new ResilienceOptions { MaxRetryAttempts = sms.MaxAttemptsPerGateway - 1 });
 
         // Fit SMS. The bearer token is set once here rather than per request: it is a static
         // credential, and a header added in the gateway would be re-added on every retry the

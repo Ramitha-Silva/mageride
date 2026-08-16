@@ -11,7 +11,7 @@
 > **Stack delta:** NY = Kafka (no MQTT) + external LTS + HTTP-poll (no WebSocket) + Beckn/ed25519 +
 > Juspay/Stripe + Idfy/HyperVerge/DigiLocker/Aadhaar + Google Maps + Exotel. MageRide = **EMQX MQTT
 > ingest** (real) + **Redpanda** event backbone + **SignalR** fan-out (real) + **OnePay/LankaQR** +
-> **Gemini OCR** + **PMTiles/MapLibre** + **LiveKit VoIP** + **FCM/APNs** + **Notify.lk SMS**. **No
+> **Gemini OCR** + **PMTiles/MapLibre** + **LiveKit VoIP** + **FCM/APNs** + **Fit SMS**. **No
 > Beckn/ONDC** (`[DELTA:BECKN]` removed — direct ride-svc). Every item tagged; all `[DELTA:*]` and
 > Phase-A `[UNVERIFIED]` resolved.
 
@@ -57,7 +57,7 @@ graph TD
     PG[(PostgreSQL 16 + PostGIS)]; TSDB[(TimescaleDB)]; RED[(Redis)]
   end
   subgraph External
-    ONEPAY[OnePay]; LQR[LankaQR / ComBank IPG]; SMS[Notify.lk + Dialog/Mobitel]
+    ONEPAY[OnePay]; LQR[LankaQR / ComBank IPG]; SMS[Fit SMS + Dialog/Mobitel]
     FCMX[FCM / APNs]; GEM[Gemini Flash + Tesseract]; TILES[PMTiles / Cloudflare R2]; NOM[Nominatim]
   end
 
@@ -338,12 +338,30 @@ Bank transfer: **REMOVED as a top-up method (AL-05).** ComBank IPG webhook is re
 Retry/timeout: 90 s; settlement exceptions → Finance queue
 ```
 
-### 7.3 SMS — Notify.lk + secondary (D-33)   [REPLACE] (NY SMS/WhatsApp/Exotel)
+### 7.3 SMS — Fit SMS + secondary (D-33, AL-60)   [REPLACE] (NY SMS/WhatsApp/Exotel)
 ```
-Primary:  Notify.lk REST (~Rs 0.50–1.50/SMS) — OTP, transactional, low-balance
+Primary:  Fit SMS v4 REST (https://app.fitsms.lk/api/v4/) — OTP, transactional, low-balance,
+          SOS, share links. THE PLATFORM'S ONLY SMS GATEWAY (AL-60; Notify.lk retired).
+Auth:     one bearer token, issued as {id}|{secret} — the pipe is part of the credential
+Send:     POST sms/send {recipient, sender_id, type, message, expiry_time}
+          recipient = national digits, no leading + (94771234567)
+          type      = plain for GSM-7, unicode otherwise. AL-26 makes Sinhala the default
+                      language, so the COMMON message here is UCS-2; sent as plain it
+                      arrives as question marks
+          expiry_time = seconds, their window is 60 s .. 24 h
+Failure:  **HTTP 200 with {"status":"error"}** for a refused send — an unapproved sender
+          mask, an exhausted balance. The status line is NOT the outcome; the body is.
+Sender:   sender_id must be a mask Fit SMS has APPROVED on the account, else
+          `Sender ID "X" is not authorized to send this message` under that same 200
+Trace:    data.ruid is the id their GET sms/{ruid} traces an undelivered message by
 SOS (D-33): primary + secondary gateway (Dialog/Mobitel) IN PARALLEL; p99 ≤ 5 s; whichever delivers first
 Retry: 2 attempts; OTP rate-limit 60 s resend, 5/h (D-32). No WhatsApp/Exotel (dropped).
 ```
+> **AL-60 (2026-08-16).** The primary moved from Notify.lk to Fit SMS and the Notify.lk client is
+> **removed**, not left switchable: a gateway nobody holds credentials for is a code path no
+> deployment exercises and no test honestly covers. The **secondary** half of this section is
+> unchanged — it is a generic HTTP shape rather than a named provider, and D-33 still needs a
+> second transport for the SOS.
 
 ### 7.4 Push — FCM + APNs (E-01)   [ADAPT]
 ```
@@ -440,7 +458,7 @@ dispatch-svc` · `/v1/fare/** → fare-svc` · `/v1/wallet/**,/v1/fees/** → wa
 | US-15.1 | 15 | §3.5/§4.4 replay | [NEW] | R-17 | offline buffer replay |
 | US-2.2/2.4 | 2 | §7.5 OCR | [ADAPT] | D-36 | Gemini + redaction |
 | MAP-01..09 | 3 | §7.6 tiles | [REPLACE] | D-14/15 | PMTiles/Nominatim |
-| US-1.1/1.10 | 1 | §7.3 SMS OTP | [REPLACE] | D-32 | Notify.lk, rate-limit |
+| US-1.1/1.10 | 1 | §7.3 SMS OTP | [REPLACE] | D-32 | Fit SMS, rate-limit |
 
 ## Mandatory ADD Critique-Item Coverage (D6′ scope)
 
@@ -479,7 +497,7 @@ All in-scope items ✅ — **document NOT `[INCOMPLETE]`.**
   analytics schemas → MageRide event schemas (§2.2); (8) APNs send-path → **APNs HTTP/2 (E-01)**; (9)
   consumer-lag thresholds → **warn 10k / page 100k**.
 - **`[DELTA:*]` resolved:** `[DELTA:BECKN]` **removed** (no ONDC/Beckn — direct ride-svc); `[DELTA:INDIA]`
-  Juspay/Stripe/Idfy/HyperVerge/DigiLocker/Aadhaar/Exotel/WhatsApp dropped → OnePay/LankaQR/Notify.lk/
+  Juspay/Stripe/Idfy/HyperVerge/DigiLocker/Aadhaar/Exotel/WhatsApp dropped → OnePay/LankaQR/Fit SMS/
   Gemini/PMTiles; ₹→Rs, +91→+94, IST→Asia/Colombo.
 - **Hard rules honoured:** payment = OnePay/LankaQR/Cash; map/tiles = PMTiles/R2. All in-scope ADD
   critique items ✅.
@@ -497,7 +515,7 @@ Admin uploads a **GTFS zip** (`routes`, `trips`, `stops`, `stop_times`, `shapes`
 ### I-23.3 Package recipient notification on pickup-confirm (item 11, AL-21)
 Trigger event: `package.picked_up` (from `ride-svc` when driver enters pickup OTP). `notification-svc` resolves recipient phone:
 - **registered** → FCM HTTP v1 high-priority data+notification: title/body *"📦 Package on the way — {driver} · ETA {n} min"*, `data.deeplink=mageride://package/{rideId}` → opens SCR-PA-021.
-- **unregistered** → SMS (Notify.lk primary / Dialog secondary): *"Your package is on the way. Track here: passenger.mageride.lk/track?token={token}"* where `token` is a `safety.trip_share_tokens` row scoped `package_recipient` (TTL = delivery + 1 h). Web page validates token → shows map + status + delivery OTP, no login (AL-04/P-09).
+- **unregistered** → SMS (Fit SMS primary / Dialog secondary): *"Your package is on the way. Track here: passenger.mageride.lk/track?token={token}"* where `token` is a `safety.trip_share_tokens` row scoped `package_recipient` (TTL = delivery + 1 h). Web page validates token → shows map + status + delivery OTP, no login (AL-04/P-09).
 
 ### I-23.4 Mode B subscription payment gateways (item 16, AL-24)
 Payment is **passenger → fleet owner** (pass-through; not platform revenue), via:
@@ -562,7 +580,7 @@ Passenger/driver/vehicle directory list+detail endpoints are **read-models/joins
 A thin stateless BFF fronts `passenger.mageride.lk`: validates the token against `safety.trip_share_tokens` (Redis-cached, TTL-checked), shapes the snapshot per scope, and serves **SSE** for live position/status (subscribing to the same SignalR geocell/ride channels the apps use; **long-poll fallback** `?since=cursor` for older browsers). Per-token + per-IP Redis token-bucket rate limits; CDN-cacheable static shell; **no cookies, no localStorage of ride data**.
 
 ### I-29.2 Token minting + SMS templates (items 1, 3, AL-44/45)
-`notification-svc` mints tokens server-side and embeds them in SMS via the existing dual gateway (Notify.lk primary / Dialog secondary): template `package_on_the_way` (scope `package_recipient`, on driver pickup-confirm — existing, unchanged), **new `proxy_ride_link`** (scope `proxy_rider`, on driver accept of a proxy ride, US-8.22/10.10) and **new `pickup_confirm_link`** (scope `pickup_confirm`, on `RiderNotRegistered`, TTL 300 s). Tokens are single-use-scope, never returned to any client API, and burned per BR-29.1.
+`notification-svc` mints tokens server-side and embeds them in SMS via the existing dual gateway (Fit SMS primary / Dialog secondary): template `package_on_the_way` (scope `package_recipient`, on driver pickup-confirm — existing, unchanged), **new `proxy_ride_link`** (scope `proxy_rider`, on driver accept of a proxy ride, US-8.22/10.10) and **new `pickup_confirm_link`** (scope `pickup_confirm`, on `RiderNotRegistered`, TTL 300 s). Tokens are single-use-scope, never returned to any client API, and burned per BR-29.1.
 
 ### I-29.3 Web subview call — plain `tel:` link (item 4, AL-44 as amended by AL-48)
 **REMOVED IN FULL BY AL-48 (see I-30.2).** There is no `POST /public/track/{token}/call`, no ride-scoped proxy-DID lease and no CPaaS bridge. The `/public/track/{token}` snapshot carries `driver.phone` for `package_recipient`/`proxy_rider` scopes, and SCR-WT-002/004 render it as a plain `tel:` link the browser dials directly (US-26.3). Still no WebRTC/mic permission on the web subview. Web SOS (I-29.4) is unaffected.
@@ -578,7 +596,7 @@ A thin stateless BFF fronts `passenger.mageride.lk`: validates the token against
 Driver-QR fare payments have **no PSP integration at all**: the passenger's bank app talks to LankaPay/the driver's bank directly. The platform's only moving parts are two FCM pushes (`QR_CLAIMED` → driver confirm prompt; `QR_CONFIRMED` → passenger receipt) and the `+5 min` nudge timer on the ride saga (Quartz durable timer, R-04). OnePay remains the only webhook-reconciled fare gateway (I-23.5/D-10 unchanged for OnePay).
 
 ### I-30.2 Telephony simplification — masking stack removed (items 2–4, AL-48)
-**Superseded and removed:** the masked-number PSTN bridge (I-28.3 `normal_masked` leg), the web proxy-DID lease (**I-29.3 entirely**), and the masked-SMS relay fallback (D-25). **What remains:** LiveKit/CallKit VoIP for **Free call** (I-28.3's `free_voip` leg, unchanged); **Normal call** and the **web subview call** are plain `tel:` dials of the real MSISDN carried in the ride detail / token snapshot — **no CPaaS, no DID pool, no operator voice API dependency** (this also closes feasibility condition C3 without a provider integration). VoIP-failure UX falls back to the same direct dial. SOS SMS (D-33) and all Notify.lk/Ideamart SMS integrations are unaffected.
+**Superseded and removed:** the masked-number PSTN bridge (I-28.3 `normal_masked` leg), the web proxy-DID lease (**I-29.3 entirely**), and the masked-SMS relay fallback (D-25). **What remains:** LiveKit/CallKit VoIP for **Free call** (I-28.3's `free_voip` leg, unchanged); **Normal call** and the **web subview call** are plain `tel:` dials of the real MSISDN carried in the ride detail / token snapshot — **no CPaaS, no DID pool, no operator voice API dependency** (this also closes feasibility condition C3 without a provider integration). VoIP-failure UX falls back to the same direct dial. SOS SMS (D-33) and all SMS integrations (AL-60: Fit SMS) are unaffected.
 
 ## Δ Addendum — Discussion 2026-07-18 (Fleet Portal payout & vehicle-document detail, items 1–3)
 

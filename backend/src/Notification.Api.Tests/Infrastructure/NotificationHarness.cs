@@ -142,10 +142,9 @@ internal sealed class NotificationHarness : IAsyncDisposable
             ["Notification:ConsumersEnabled"] = "false",
 
             // The SMS gateways are real sockets — D-33's parallel dispatch is the claim.
-            ["Sms:Provider"] = "notifylk",
-            ["Sms:NotifyLkBaseUrl"] = primarySms.BaseAddress.TrimEnd('/') + "/api/v1/",
-            ["Sms:NotifyLkUserId"] = "test-user",
-            ["Sms:NotifyLkApiKey"] = "test-key",
+            ["Sms:Provider"] = "fitsms",
+            ["Sms:FitSmsBaseUrl"] = primarySms.BaseAddress.TrimEnd('/') + "/api/v4/",
+            ["Sms:FitSmsApiToken"] = "test-key",
             ["Sms:SecondaryGateway"] = withSecondaryGateway ? secondarySms.BaseAddress : null,
             ["Sms:SecondaryApiKey"] = withSecondaryGateway ? "secondary-key" : null,
 

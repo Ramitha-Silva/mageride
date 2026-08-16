@@ -53,7 +53,7 @@ public static class NotificationApplication
             // **No outbox, and that is structural.** This service produces no domain events: it is
             // the end of every fan-out on the platform, not a step in one. The state it owns — "this
             // message was sent" — has no consumer that could act on it, and the one fact another
-            // service might want (a delivery receipt) is not something FCM, APNs or Notify.lk give
+            // service might want (a delivery receipt) is not something FCM, APNs or Fit SMS give
             // synchronously. D3' calls the send route "accepted asynchronously — delivery receipts
             // are not part of this call".
             UseOutbox = false,
@@ -167,7 +167,7 @@ public static class NotificationApplication
             throw new InvalidOperationException(
                 $"Sms:Provider is '{SmsOptions.DevProvider}' outside Development. It writes message bodies — "
                 + "including AL-44 share tokens, which are credentials — to the log instead of sending them. Set "
-                + $"Sms:Provider={SmsOptions.FitSmsProvider} (or {SmsOptions.NotifyLkProvider}), or "
+                + $"Sms:Provider={SmsOptions.FitSmsProvider}, or "
                 + "Sms:AllowDevSenderOutsideDevelopment=true if this is the synthetic-data replica.");
         }
     }
@@ -230,7 +230,7 @@ public static class NotificationApplication
             logger.LogWarning(
                 "Sms:SecondaryGateway is not configured. D-33 requires an SOS to go through the primary AND a "
                 + "secondary gateway in parallel with a p99 of 5 s; with one gateway the SLO has nothing behind it, "
-                + "and an SOS is lost whenever Notify.lk is having a bad minute.");
+                + "and an SOS is lost whenever the primary gateway is having a bad minute.");
         }
 
         if (string.IsNullOrWhiteSpace(settings.WebTrackBaseUrl))

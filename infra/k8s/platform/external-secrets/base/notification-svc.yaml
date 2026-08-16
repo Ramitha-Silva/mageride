@@ -42,10 +42,6 @@ spec:
       remoteRef: { key: providers, property: apns_key_id }
     - secretKey: Apns__TeamId
       remoteRef: { key: providers, property: apns_team_id }
-    - secretKey: Sms__NotifyLkUserId
-      remoteRef: { key: providers, property: notify_lk_user_id }
-    - secretKey: Sms__NotifyLkApiKey
-      remoteRef: { key: providers, property: notify_lk_api_key }
     - secretKey: Sms__FitSmsApiToken
       remoteRef: { key: providers, property: fitsms_api_token }
     - secretKey: Sms__SecondaryApiKey

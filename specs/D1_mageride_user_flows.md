@@ -179,7 +179,7 @@ flowchart TD
 
 | Action | Trigger | What Happens | Loading | Success | Failure |
 |---|---|---|---|---|---|
-| Request OTP | tap "Get OTP" | KMP `auth` → `POST /auth/otp/request` (`iam-svc`, SMS gateway Notify.lk) | inline spinner + toast "OTP sent" | OTP view; 60 s cooldown timer | rate-limited (5/h, D-32) → snackbar/alert |
+| Request OTP | tap "Get OTP" | KMP `auth` → `POST /auth/otp/request` (`iam-svc`, SMS gateway Fit SMS) | inline spinner + toast "OTP sent" | OTP view; 60 s cooldown timer | rate-limited (5/h, D-32) → snackbar/alert |
 | Verify OTP | enter 6 digits | `POST /auth/otp/verify` → mints RS256 JWT (30 min) + refresh | "Verifying…" | route by profile presence | invalid/expired → attempts shown |
 | Resend OTP | tap resend (≥60 s) | re-request; new authId | — | new OTP | cooldown not elapsed → disabled |
 

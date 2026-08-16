@@ -294,7 +294,7 @@ public sealed class NotificationOptions
 }
 
 /// <summary>
-/// SMS delivery (D6' §7.3, D7' §4.2 <c>Sms__NotifyLkApiKey</c> / <c>Sms__SecondaryGateway</c>).
+/// SMS delivery (D7' §4.2 <c>Sms__FitSmsApiToken</c> / <c>Sms__SecondaryGateway</c>).
 /// </summary>
 /// <remarks>
 /// <b>Bound to the same <c>Sms</c> section iam-svc binds</b>, with the same property names, so one
@@ -309,25 +309,17 @@ public sealed class SmsOptions
     /// <summary><c>dev</c> logs the message instead of sending it.</summary>
     public const string DevProvider = "dev";
 
-    /// <summary>D6' §7.3's "Primary: Notify.lk REST".</summary>
-    public const string NotifyLkProvider = "notifylk";
-
-    /// <summary>Fit SMS v4 REST — the platform's primary from the AL-57 switch.</summary>
+    /// <summary>
+    /// Fit SMS v4 REST — the platform's ONLY SMS gateway (AL-60). D6' §7.3 named Notify.lk as the
+    /// primary and it was implemented as one; the account moved and the class is gone rather than
+    /// left switchable, because a gateway nobody holds credentials for is a code path no
+    /// deployment exercises. §7.3's SECONDARY is unchanged — it is a generic HTTP shape rather
+    /// than a named provider, and D-33's SOS still needs a second transport.
+    /// </summary>
     public const string FitSmsProvider = "fitsms";
 
     [Required]
     public string Provider { get; set; } = DevProvider;
-
-    [Required]
-    public string NotifyLkBaseUrl { get; set; } = "https://app.notify.lk/api/v1/";
-
-    public string? NotifyLkUserId { get; set; }
-
-    public string? NotifyLkApiKey { get; set; }
-
-    /// <summary>Registered alphanumeric sender mask.</summary>
-    [Required]
-    public string NotifyLkSenderId { get; set; } = "MageRide";
 
     // --- Fit SMS ---------------------------------------------------------------------------
     // The same five names iam-svc's SmsOptions declares, because both bind the SAME `Sms`
@@ -352,7 +344,7 @@ public sealed class SmsOptions
     /// Registered sender mask on Fit SMS. Their limit is 11 characters for an alphanumeric mask.
     /// </summary>
     [Required]
-    public string FitSmsSenderId { get; set; } = "MageRide";
+    public string FitSmsSenderId { get; set; } = "The Change";
 
     /// <summary>
     /// The <c>type</c> a non-ASCII body is sent as. AL-26 makes Sinhala the default language, so

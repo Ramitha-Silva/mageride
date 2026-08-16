@@ -9,116 +9,6 @@ using Microsoft.Extensions.Options;
 namespace MageRide.Iam.Otp;
 
 /// <summary>
-/// The Notify.lk REST gateway — D6' §7.3's primary SMS transport ("Notify.lk REST, ~Rs 0.50–1.50
-/// per SMS — OTP, transactional, low-balance").
-/// </summary>
-/// <remarks>
-/// <para>
-/// One form POST to <c>/send</c> with <c>user_id</c>, <c>api_key</c>, <c>sender_id</c>, <c>to</c>
-/// and <c>message</c>. Their API answers <b>HTTP 200 with <c>{"status":"error"}</c></b> for a
-/// rejected send — an unregistered sender mask, an exhausted balance — so the status line alone is
-/// not the outcome and the body has to be read. A sender that trusted the 200 would report every
-/// OTP as delivered and no user could ever sign in.
-/// </para>
-/// <para>
-/// <c>to</c> is the national form without a <c>+</c>: <c>94771234567</c>. The rest of the platform
-/// stores E.164 (<c>PhoneNumbers</c>), so the conversion happens here, at the boundary that wants
-/// the other spelling.
-/// </para>
-/// </remarks>
-public sealed class NotifyLkOtpSender(
-    IHttpClientFactory httpClientFactory,
-    SmsTemplates templates,
-    IOptions<SmsOptions> smsOptions,
-    IOptions<OtpOptions> otpOptions,
-    ILogger<NotifyLkOtpSender> logger) : IOtpSender
-{
-    /// <summary>The named client the resilience pipeline is attached to.</summary>
-    public const string HttpClientName = "notifylk";
-
-    private readonly SmsOptions _sms = smsOptions?.Value ?? throw new ArgumentNullException(nameof(smsOptions));
-    private readonly OtpOptions _otp = otpOptions?.Value ?? throw new ArgumentNullException(nameof(otpOptions));
-
-    public string Provider => SmsOptions.NotifyLkProvider;
-
-    public async Task SendAsync(string phone, string code, string language, CancellationToken cancellationToken)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(phone);
-        ArgumentException.ThrowIfNullOrWhiteSpace(code);
-
-        var message = templates.Render(SmsTemplates.Otp, language, code, (int)_otp.Ttl.TotalMinutes);
-
-        var form = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["user_id"] = _sms.NotifyLkUserId ?? string.Empty,
-            ["api_key"] = _sms.NotifyLkApiKey ?? string.Empty,
-            ["sender_id"] = _sms.NotifyLkSenderId,
-            ["to"] = ToNationalDigits(phone),
-            ["message"] = message,
-        };
-
-        var client = httpClientFactory.CreateClient(HttpClientName);
-        using var response = await client.PostAsync("send", new FormUrlEncodedContent(form), cancellationToken);
-
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new OtpDeliveryException(
-                $"Notify.lk answered {(int)response.StatusCode} for {Redact(phone)}.");
-        }
-
-        if (!IsAccepted(body, out var reported))
-        {
-            // The body is logged and the exception is not given it: their error strings can carry
-            // the destination number, and an OTP failure is not a reason to put a phone number in
-            // an exception message that may reach a client.
-            logger.LogError("Notify.lk refused the send for {Phone}: {Body}", Redact(phone), body);
-            throw new OtpDeliveryException($"Notify.lk refused the send ({reported}).");
-        }
-    }
-
-    /// <summary>
-    /// <c>+94771234567</c> → <c>94771234567</c>. Notify.lk rejects the leading <c>+</c>.
-    /// </summary>
-    internal static string ToNationalDigits(string e164) => e164.TrimStart('+');
-
-    /// <summary>
-    /// Their success shape is <c>{"status":"success","data":{…}}</c>; failures come back as
-    /// <c>{"status":"error","message":"…"}</c> under the same 200.
-    /// </summary>
-    internal static bool IsAccepted(string body, out string reported)
-    {
-        reported = "unparseable response";
-
-        if (string.IsNullOrWhiteSpace(body))
-        {
-            return false;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(body);
-            if (!document.RootElement.TryGetProperty("status", out var status))
-            {
-                return false;
-            }
-
-            reported = status.GetString() ?? "no status";
-            return string.Equals(reported, "success", StringComparison.OrdinalIgnoreCase);
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-    }
-
-    /// <summary>Last four digits only. An OTP log line is not a place for a full MSISDN.</summary>
-    internal static string Redact(string phone) =>
-        phone.Length <= 4 ? "****" : string.Create(CultureInfo.InvariantCulture, $"****{phone[^4..]}");
-}
-
-/// <summary>
 /// A generic HTTP fallback gateway — the "secondary gateway (Dialog/Mobitel)" of D6' §7.3 and
 /// D7' §4.2's <c>Sms__SecondaryGateway</c>.
 /// </summary>
@@ -163,7 +53,7 @@ public sealed class SecondaryGatewayOtpSender(
             new
             {
                 to = phone,
-                from = _sms.SecondarySenderId ?? _sms.NotifyLkSenderId,
+                from = _sms.SecondarySenderId ?? _sms.FitSmsSenderId,
                 message,
             },
             cancellationToken);
@@ -171,7 +61,7 @@ public sealed class SecondaryGatewayOtpSender(
         if (!response.IsSuccessStatusCode)
         {
             throw new OtpDeliveryException(
-                $"The secondary SMS gateway answered {(int)response.StatusCode} for {NotifyLkOtpSender.Redact(phone)}.");
+                $"The secondary SMS gateway answered {(int)response.StatusCode} for {SmsPhone.Redact(phone)}.");
         }
     }
 }
@@ -234,7 +124,7 @@ public sealed class FallbackOtpSender(
                 ex,
                 "The primary SMS gateway ({Primary}) could not deliver to {Phone}; falling back to {Secondary} (D6' §7.3)",
                 primary.Provider,
-                NotifyLkOtpSender.Redact(phone),
+                SmsPhone.Redact(phone),
                 secondary.Provider);
         }
 
@@ -245,7 +135,7 @@ public sealed class FallbackOtpSender(
         catch (Exception ex) when (ex is OtpDeliveryException or HttpRequestException or TaskCanceledException
                                        && !cancellationToken.IsCancellationRequested)
         {
-            logger.LogError(ex, "Both SMS gateways refused the OTP for {Phone}", NotifyLkOtpSender.Redact(phone));
+            logger.LogError(ex, "Both SMS gateways refused the OTP for {Phone}", SmsPhone.Redact(phone));
             throw new MageRideException(
                 MageRideErrors.DependencyUnavailable, "The SMS gateway is unavailable; try again shortly.");
         }

@@ -86,45 +86,23 @@ public sealed class SmsTemplateTests
 }
 
 /// <summary>
-/// Notify.lk's wire quirks, and the fallback that keeps an outage from being a lock-out.
+/// The phone-number conversions every gateway needs, and the fallback that keeps an outage from
+/// being a lock-out.
 /// </summary>
 public sealed class OtpDeliveryTests
 {
-    /// <summary>
-    /// Their API answers <b>HTTP 200 with <c>status: error</c></b> for a rejected send. A sender
-    /// that trusted the status line would report every OTP as delivered and nobody could sign in.
-    /// </summary>
-    [Theory]
-    [InlineData("""{"status":"success","data":{"user_id":1}}""", true)]
-    [InlineData("""{"status":"error","message":"Insufficient balance"}""", false)]
-    [InlineData("""{"data":{}}""", false)]
-    [InlineData("not json at all", false)]
-    [InlineData("", false)]
-    public void A_two_hundred_is_not_the_same_as_a_delivery(string body, bool accepted)
-    {
-        Assert.Equal(accepted, NotifyLkOtpSender.IsAccepted(body, out _));
-    }
-
-    [Fact]
-    public void The_reported_status_is_carried_out_for_the_log()
-    {
-        NotifyLkOtpSender.IsAccepted("""{"status":"error","message":"Invalid sender"}""", out var reported);
-
-        Assert.Equal("error", reported);
-    }
-
-    /// <summary>The platform stores E.164; Notify.lk rejects the leading plus.</summary>
+    /// <summary>The platform stores E.164; the gateway wants the national form.</summary>
     [Fact]
     public void The_destination_is_sent_in_the_national_form()
     {
-        Assert.Equal("94771234567", NotifyLkOtpSender.ToNationalDigits("+94771234567"));
+        Assert.Equal("94771234567", SmsPhone.ToNationalDigits("+94771234567"));
     }
 
     [Fact]
     public void A_log_line_never_carries_a_whole_msisdn()
     {
-        Assert.Equal("****4567", NotifyLkOtpSender.Redact("+94771234567"));
-        Assert.Equal("****", NotifyLkOtpSender.Redact("+94"));
+        Assert.Equal("****4567", SmsPhone.Redact("+94771234567"));
+        Assert.Equal("****", SmsPhone.Redact("+94"));
     }
 
     [Fact]
@@ -215,7 +193,7 @@ public sealed class OtpDeliveryTests
 public sealed class FitSmsDeliveryTests
 {
     /// <summary>
-    /// Same trap as Notify.lk: a rejected send comes back as <b>HTTP 200 with
+    /// The trap: a rejected send comes back as <b>HTTP 200 with
     /// <c>status: error</c></b>, so the status line alone is not the outcome.
     /// </summary>
     [Theory]
@@ -309,7 +287,7 @@ public sealed class FitSmsDeliveryTests
     [Fact]
     public void The_destination_is_sent_in_the_national_form()
     {
-        Assert.Equal("94771234567", NotifyLkOtpSender.ToNationalDigits("+94771234567"));
+        Assert.Equal("94771234567", SmsPhone.ToNationalDigits("+94771234567"));
     }
 
     /// <summary>

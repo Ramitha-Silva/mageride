@@ -498,7 +498,7 @@ last_seen_seq`); live preempts replay 4:1 (see §5.3).
 | Field | Rule | Tag |
 |---|---|---|
 | Mobile | **+94** E.164, `^\+947\d{8}$` (was +91/10-digit `[DELTA:INDIA]`) | [ADAPT] |
-| OTP | **6 digits** (was 4); SMS gateway Notify.lk (was 4-digit + fake "7891") | [ADAPT] |
+| OTP | **6 digits** (was 4); SMS gateway Fit SMS (AL-60) (was 4-digit + fake "7891") | [ADAPT] |
 | OTP rate-limit (D-32) | **60 s resend cooldown, 5/h**; Redis token bucket | [NEW] |
 | Rating | integer 1–5 | [KEEP] |
 | Ride/pickup OTP | must equal stored OTP (HMAC) else `IncorrectOTP` | [KEEP] |

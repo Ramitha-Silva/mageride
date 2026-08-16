@@ -219,7 +219,7 @@ CATALOG = yaml.safe_load((REPO / "infra/k8s/service-catalog.yaml").read_text(enc
 SECRET_SHAPED = re.compile(
     r"(ApiKey|ApiSecret|InternalKey|SigningKey|SigningKeyPem|WebhookSecret|ServiceAccountJson"
     r"|P8Key|PepperKey|HashKey|ClientSecret|SecretKey|TokenKey|RefreshTokenKey|MerchantId"
-    r"|NotifyLkUserId|KeyId|TeamId|SessionTokenSecret|BankApiKey|AppId)$"
+    r"|KeyId|TeamId|SessionTokenSecret|BankApiKey|AppId)$"
 )
 
 declared = set()

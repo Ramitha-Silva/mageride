@@ -73,7 +73,7 @@ the catalog says must be shared, and generating them centrally is how they stay 
 
 It cannot invent, and will prompt for (or leave empty, with a warning per key):
 
-- **`providers/*`** — a real third party issued them: OnePay, LankaQR/ComBank IPG, Notify.lk,
+- **`providers/*`** — a real third party issued them: OnePay, LankaQR/ComBank IPG, Fit SMS,
   FCM, APNs, Gemini, LiveKit, Play Integrity. An empty value here means the corresponding
   feature is unavailable in the dev cluster, which is the honest state and, for a dev cluster,
   usually the right one. Every service that takes one is written to degrade rather than fail

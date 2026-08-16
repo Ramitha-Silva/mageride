@@ -81,7 +81,7 @@ D3' §0 and D7' §4.2 still carry pre-AL-37 wording; AL-37 is later and wins (pl
   invalidates every live refresh token.
 - **D-32 fails closed.** If the Redis bucket is unreachable the OTP is refused (`503
   dependency-unavailable`). The gateway's coarse limiter fails *open*; this one guards an SMS bill.
-- **A gateway outage is a 503, not a 500.** Notify.lk primary → Dialog/Mobitel secondary
+- **A gateway outage is a 503, not a 500.** Fit SMS primary → Dialog/Mobitel secondary
   (D6' §7.3); both refusing answers `dependency-unavailable`, which a client can act on.
 - **The OTP is never at rest in the clear.** `iam.otp_attempts.otp_hash` is
   HMAC-SHA256(`{authId}:{code}`) under `Otp:PepperKey`, which is required outside Development.
@@ -170,18 +170,21 @@ D3' §0 and D7' §4.2 still carry pre-AL-37 wording; AL-37 is later and wins (pl
 
 ## Configuration
 
-`Sms:Provider=dev` logs the OTP instead of sending it and is refused outside Development unless
-`Sms:AllowDevSenderOutsideDevelopment=true`. `Sms:Provider=notifylk` requires
-`Sms:NotifyLkUserId` + `Sms:NotifyLkApiKey`; `Sms:Provider=fitsms` requires `Sms:FitSmsApiToken`
-(their whole `{id}|{secret}` string). `Sms:SecondaryGateway` (optional) adds the D6' §7.3 fallback
-behind **whichever** primary is selected.
+**Fit SMS is the platform's only SMS gateway (AL-60).** `Sms:Provider=fitsms` requires
+`Sms:FitSmsApiToken` (their whole `{id}|{secret}` string) and `Sms:FitSmsSenderId` — a mask Fit SMS
+has **approved on the account**, because an unapproved one is refused with `Sender ID "X" is not
+authorized to send this message` under HTTP 200, where only the body says so. `Sms:Provider=dev`
+logs the OTP instead of sending it and is refused outside Development unless
+`Sms:AllowDevSenderOutsideDevelopment=true`. **Any other value, `notifylk` included, is refused at
+start-up** — falling back to the dev sender would log every OTP and let nobody sign in while
+looking healthy. `Sms:SecondaryGateway` (optional) adds the D6' §7.3 fallback behind the primary;
+that half of §7.3 is a generic HTTP shape rather than a named provider and is unchanged.
 
 **A Sinhala OTP is UCS-2, and the gateway has to be told so.** AL-26 makes Sinhala the default
 language, so the common OTP on this platform is not GSM-7. `FitSmsOtpSender` sends
 `Sms:FitSmsUnicodeType` (default `unicode`) as the message `type` for any body that is not plain
 ASCII and `plain` for the rest; their send documentation names only `plain` while the rest of their
-API lists `unicode` beside it, so the value is configuration rather than a constant. Notify.lk's
-form POST has no equivalent field.
+API lists `unicode` beside it, so the value is configuration rather than a constant.
 
 Four things are resolved during `IamApplication.Build`, so a missing one is a failed deploy rather
 than a 500 on somebody's sign-in: `Jwt:SigningKeyPem`, `Otp:PepperKey`, the embedded SMS templates,

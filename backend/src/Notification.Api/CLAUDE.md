@@ -11,8 +11,8 @@ over the code.
 ## What this service is
 
 The end of every fan-out on the platform. Two transports — FCM HTTP v1 / APNs HTTP/2 (D6' §7.4)
-and **Fit SMS** with a Dialog/Mobitel secondary (AL-57; Notify.lk remains implemented and is one
-`Sms:Provider` value away, D6' §7.3) — one durable queue, and one rule: **no
+and **Fit SMS** with a Dialog/Mobitel secondary (AL-60 — Fit SMS is the platform's only SMS
+gateway; D6' §7.3's Notify.lk is gone, its secondary is not) — one durable queue, and one rule: **no
 user-facing string is composed here.** Every body is rendered from
 `content.notification_templates` in the recipient's own language (D-26).
 
@@ -219,7 +219,7 @@ where half the messages are unrecognisable.
 | `LocationRequestLimitsEnabled` | on | P-12; the second of two gates, ride-svc holds the first |
 | `ConsumersEnabled` · `ConsumerGroup` | on · `notification-svc` | **off ⇒ nothing is consumed** and every handset stays silent |
 | `MaxRecipientsPerSend` · `MaxBroadcastRecipients` | 1 000 · 50 000 | the contract's `maxItems`; the broadcast cap has **no spec** and truncation is logged |
-| `Sms:Provider` | `dev` | `fitsms` \| `notifylk` \| `dev`. **Refused outside Development** unless `Sms:AllowDevSenderOutsideDevelopment`. Selects the primary BY NAME — an unrecognised value registers no primary and every send fails loudly rather than falling through to whichever gateway happened to be registered |
+| `Sms:Provider` | `dev` | `fitsms` \| `dev`. **Refused outside Development** unless `Sms:AllowDevSenderOutsideDevelopment`. Selects the primary BY NAME — an unrecognised value (`notifylk` included, AL-60) registers no primary and every send fails loudly rather than falling through to whichever gateway happened to be registered |
 | `Sms:FitSmsApiToken` | unset | **unset ⇒ Fit SMS refuses every send.** Issued as `{id}\|{secret}`; the pipe is part of the credential |
 | `Sms:FitSmsSenderId` · `FitSmsBaseUrl` | `MageRide` · v4 | 11 characters is their limit for an alphanumeric mask |
 | `Sms:FitSmsUnicodeType` | `unicode` | the `type` a non-ASCII body is sent as. AL-26 makes Sinhala the default language, so the common message here is UCS-2 and `plain` would deliver question marks |
