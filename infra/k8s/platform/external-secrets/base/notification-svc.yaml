@@ -46,6 +46,8 @@ spec:
       remoteRef: { key: providers, property: notify_lk_user_id }
     - secretKey: Sms__NotifyLkApiKey
       remoteRef: { key: providers, property: notify_lk_api_key }
+    - secretKey: Sms__FitSmsApiToken
+      remoteRef: { key: providers, property: fitsms_api_token }
     - secretKey: Sms__SecondaryApiKey
       remoteRef: { key: providers, property: sms_secondary_api_key }
     - secretKey: Notification__InternalApiKey

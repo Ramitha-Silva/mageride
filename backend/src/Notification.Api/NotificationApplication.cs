@@ -167,8 +167,8 @@ public static class NotificationApplication
             throw new InvalidOperationException(
                 $"Sms:Provider is '{SmsOptions.DevProvider}' outside Development. It writes message bodies — "
                 + "including AL-44 share tokens, which are credentials — to the log instead of sending them. Set "
-                + "Sms:Provider=notifylk, or Sms:AllowDevSenderOutsideDevelopment=true if this is the "
-                + "synthetic-data replica.");
+                + $"Sms:Provider={SmsOptions.FitSmsProvider} (or {SmsOptions.NotifyLkProvider}), or "
+                + "Sms:AllowDevSenderOutsideDevelopment=true if this is the synthetic-data replica.");
         }
     }
 

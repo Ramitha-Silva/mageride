@@ -272,10 +272,15 @@ services:
       - Apns__P8Key
       - Apns__KeyId
       - Apns__TeamId
-      # Both gateways, and this service binds the same `Sms` section iam-svc does: D-33's dual
-      # SMS is the primary AND the secondary, so an SOS that fails on Notify.lk still goes out.
+      # All three gateways, and this service binds the same `Sms` section iam-svc does: D-33's dual
+      # SMS is the primary AND the secondary, so an SOS that fails on the primary still goes out.
+      # Every primary is wired even though `Sms__Provider` selects one, for the reason iam-svc's
+      # entry gives: a gateway swap is then a ConfigMap edit and a rollout rather than a Vault
+      # write plus a manifest change — the difference between switching provider during an SMS
+      # outage and switching it next deploy.
       - Sms__NotifyLkUserId
       - Sms__NotifyLkApiKey
+      - Sms__FitSmsApiToken
       - Sms__SecondaryApiKey
       - Notification__InternalApiKey
       - Notification__ContentInternalApiKey

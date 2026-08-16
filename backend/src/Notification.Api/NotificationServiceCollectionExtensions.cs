@@ -73,9 +73,17 @@ public static class NotificationServiceCollectionExtensions
         // SMS gateways. Both concrete gateways are always registered — `IsConfigured` is what decides
         // whether one is used, and SmsSender needs to be able to *see* the secondary to know whether
         // D-33's parallel dispatch is possible at all.
+        // The primary is the one the provider names. Registering only the selected gateway — rather
+        // than both real ones — is what stops `SmsSender` having to guess which of two configured
+        // primaries is meant, and it means an unset token on the OTHER gateway is not a start-up
+        // failure for a deployment that does not use it.
         if (string.Equals(sms.Provider, SmsOptions.DevProvider, StringComparison.OrdinalIgnoreCase))
         {
             services.AddSingleton<ISmsGateway, LoggingSmsGateway>();
+        }
+        else if (string.Equals(sms.Provider, SmsOptions.FitSmsProvider, StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddSingleton<ISmsGateway, FitSmsGateway>();
         }
         else
         {
@@ -143,6 +151,24 @@ public static class NotificationServiceCollectionExtensions
             {
                 client.BaseAddress = new Uri(Slash(sms.NotifyLkBaseUrl));
                 client.Timeout = sms.RequestTimeout;
+            })
+            .AddMageRideResilience(new ResilienceOptions { MaxRetryAttempts = sms.MaxAttemptsPerGateway - 1 });
+
+        // Fit SMS. The bearer token is set once here rather than per request: it is a static
+        // credential, and a header added in the gateway would be re-added on every retry the
+        // resilience pipeline makes.
+        services.AddHttpClient(FitSmsGateway.HttpClientName, client =>
+            {
+                client.BaseAddress = new Uri(Slash(sms.FitSmsBaseUrl));
+                client.Timeout = sms.RequestTimeout;
+                client.DefaultRequestHeaders.Accept.Add(
+                    new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+                if (!string.IsNullOrWhiteSpace(sms.FitSmsApiToken))
+                {
+                    client.DefaultRequestHeaders.Authorization =
+                        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", sms.FitSmsApiToken);
+                }
             })
             .AddMageRideResilience(new ResilienceOptions { MaxRetryAttempts = sms.MaxAttemptsPerGateway - 1 });
 
