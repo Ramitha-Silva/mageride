@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MageRide.Iam.Otp;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -204,5 +205,135 @@ public sealed class OtpDeliveryTests
 
             return failWith is null ? Task.CompletedTask : Task.FromException(failWith());
         }
+    }
+}
+
+/// <summary>
+/// Fit SMS's wire quirks — the envelope that reports a refusal under a 200, the field names their
+/// API spells with underscores, and the message type a Sinhala body has to carry.
+/// </summary>
+public sealed class FitSmsDeliveryTests
+{
+    /// <summary>
+    /// Same trap as Notify.lk: a rejected send comes back as <b>HTTP 200 with
+    /// <c>status: error</c></b>, so the status line alone is not the outcome.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"status":"success","data":{"ruid":"03bd1b3d590f40819aa83a49c1ca1a41"}}""", true)]
+    [InlineData("""{"status":"error","message":"Insufficient balance"}""", false)]
+    [InlineData("""{"data":{}}""", false)]
+    [InlineData("not json at all", false)]
+    [InlineData("", false)]
+    public void A_two_hundred_is_not_the_same_as_a_delivery(string body, bool accepted)
+    {
+        Assert.Equal(accepted, FitSmsOtpSender.IsAccepted(body, out _, out _));
+    }
+
+    /// <summary>
+    /// <c>ruid</c> is what their support and their <c>/sms/{ruid}</c> lookup trace a missing OTP
+    /// by, so it is the one field the sender keeps.
+    /// </summary>
+    [Fact]
+    public void The_tracking_id_is_carried_out_of_a_successful_send()
+    {
+        FitSmsOtpSender.IsAccepted(
+            """{"status":"success","data":{"ruid":"03bd1b3d590f40819aa83a49c1ca1a41","total_receivers":1}}""",
+            out _,
+            out var ruid);
+
+        Assert.Equal("03bd1b3d590f40819aa83a49c1ca1a41", ruid);
+    }
+
+    /// <summary>A success with no <c>data</c> block is still a success; there is just nothing to trace by.</summary>
+    [Fact]
+    public void A_success_without_a_tracking_id_is_still_a_success()
+    {
+        Assert.True(FitSmsOtpSender.IsAccepted("""{"status":"success"}""", out _, out var ruid));
+        Assert.Null(ruid);
+    }
+
+    [Fact]
+    public void The_reported_status_is_carried_out_for_the_log()
+    {
+        FitSmsOtpSender.IsAccepted("""{"status":"error","message":"Invalid sender id"}""", out var reported, out _);
+
+        Assert.Equal("error", reported);
+    }
+
+    /// <summary>
+    /// AL-26 makes Sinhala the default language, so the COMMON OTP on this platform is UCS-2. A
+    /// gateway told a Sinhala body is <c>plain</c> delivers question marks.
+    /// </summary>
+    [Theory]
+    [InlineData("si")]
+    [InlineData("ta")]
+    public void A_sinhala_or_tamil_body_is_sent_as_unicode(string language)
+    {
+        var body = new SmsTemplates().Render(SmsTemplates.Otp, language, "123456", 5);
+
+        Assert.Equal("unicode", FitSmsOtpSender.MessageTypeFor(body, "unicode"));
+    }
+
+    [Fact]
+    public void An_english_body_is_sent_as_plain()
+    {
+        var body = new SmsTemplates().Render(SmsTemplates.Otp, "en", "123456", 5);
+
+        Assert.Equal(FitSmsOtpSender.PlainType, FitSmsOtpSender.MessageTypeFor(body, "unicode"));
+    }
+
+    /// <summary>The escape hatch: a deployment whose gateway refuses <c>unicode</c> clears the setting.</summary>
+    [Fact]
+    public void Clearing_the_unicode_type_sends_everything_as_plain()
+    {
+        var body = new SmsTemplates().Render(SmsTemplates.Otp, "si", "123456", 5);
+
+        Assert.Equal(FitSmsOtpSender.PlainType, FitSmsOtpSender.MessageTypeFor(body, null));
+        Assert.Equal(FitSmsOtpSender.PlainType, FitSmsOtpSender.MessageTypeFor(body, "  "));
+    }
+
+    /// <summary>
+    /// The message is worthless once the code it carries has expired, so the delivery deadline is
+    /// the code's — clamped into the window their API accepts ("at least +60 Seconds", max 24 h).
+    /// </summary>
+    [Theory]
+    [InlineData(300, 300)]
+    [InlineData(30, FitSmsOtpSender.MinimumExpirySeconds)]
+    [InlineData(48 * 60 * 60, FitSmsOtpSender.MaximumExpirySeconds)]
+    public void The_expiry_is_the_otp_ttl_clamped_to_their_window(int ttlSeconds, int expected)
+    {
+        Assert.Equal(expected, FitSmsOtpSender.ExpirySecondsFor(TimeSpan.FromSeconds(ttlSeconds)));
+    }
+
+    /// <summary>The platform stores E.164; their <c>recipient</c> is the national form.</summary>
+    [Fact]
+    public void The_destination_is_sent_in_the_national_form()
+    {
+        Assert.Equal("94771234567", NotifyLkOtpSender.ToNationalDigits("+94771234567"));
+    }
+
+    /// <summary>
+    /// <c>PostAsJsonAsync</c> serialises with the web defaults, whose camelCase policy would send
+    /// <c>senderId</c> and <c>expiryTime</c> — names their API ignores, leaving a send with no mask
+    /// rather than an error anyone would see. The property attributes are what stop it, and this is
+    /// what would fail if somebody replaced the record with an anonymous object.
+    /// </summary>
+    [Fact]
+    public void The_send_body_uses_their_snake_case_field_names()
+    {
+        var request = new FitSmsOtpSender.FitSmsSendRequest(
+            Recipient: "94771234567",
+            SenderId: "MageRide",
+            Type: "unicode",
+            Message: "123456 is your MageRide code.",
+            ExpirySeconds: 300);
+
+        var json = JsonSerializer.Serialize(request, JsonSerializerOptions.Web);
+
+        using var document = JsonDocument.Parse(json);
+        Assert.Equal("94771234567", document.RootElement.GetProperty("recipient").GetString());
+        Assert.Equal("MageRide", document.RootElement.GetProperty("sender_id").GetString());
+        Assert.Equal("unicode", document.RootElement.GetProperty("type").GetString());
+        Assert.Equal(300, document.RootElement.GetProperty("expiry_time").GetInt32());
     }
 }

@@ -114,6 +114,10 @@ services:
     secrets:
       - Sms__NotifyLkUserId
       - Sms__NotifyLkApiKey
+      # Both gateways are wired even though `Sms__Provider` selects one. A gateway swap is then a
+      # ConfigMap edit and a rollout rather than a Vault write plus a manifest change, which is the
+      # difference between switching provider during an OTP outage and switching it next deploy.
+      - Sms__FitSmsApiToken
       - Sms__SecondaryApiKey
       - Jwt__SigningKeyPem
       # The 90-day JWKS overlap slot (D7' §13). Seeded EMPTY at bootstrap and written by the
@@ -590,6 +594,7 @@ aliases:
   # transact on it. Rotating it is one Vault write and two rollouts.
   Sms__NotifyLkUserId: { path: providers, property: notify_lk_user_id }
   Sms__NotifyLkApiKey: { path: providers, property: notify_lk_api_key }
+  Sms__FitSmsApiToken: { path: providers, property: fitsms_api_token }
   Sms__SecondaryApiKey: { path: providers, property: sms_secondary_api_key }
 
   Onepay__ApiKey: { path: providers, property: onepay_api_key }

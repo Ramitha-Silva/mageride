@@ -88,6 +88,72 @@ public sealed class OtpSenderSelectionTests
         Assert.IsType<NotifyLkOtpSender>(sender);
     }
 
+    [Fact]
+    public void Selecting_fit_sms_without_a_token_fails_fast_rather_than_swallowing_every_otp()
+    {
+        var exception = Assert.Throws<OptionsValidationException>(
+            () => Resolve(TestEnvironment.Development, ("Sms:Provider", SmsOptions.FitSmsProvider)));
+
+        Assert.Contains("Sms:FitSmsApiToken", string.Join(' ', exception.Failures), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Fit_sms_is_the_sender_once_it_is_configured()
+    {
+        var sender = ResolveSender(
+            ("Sms:Provider", SmsOptions.FitSmsProvider),
+            ("Sms:FitSmsApiToken", "588|not-a-real-token"));
+
+        Assert.IsType<FitSmsOtpSender>(sender);
+        Assert.Equal(SmsOptions.FitSmsProvider, sender.Provider);
+    }
+
+    /// <summary>
+    /// Their cap is on an ALPHANUMERIC mask. A mask that is a telephone number is a longer string
+    /// they accept, so the check must not reject one.
+    /// </summary>
+    [Fact]
+    public void An_alphanumeric_sender_mask_over_eleven_characters_is_a_configuration_error()
+    {
+        var exception = Assert.Throws<OptionsValidationException>(
+            () => Resolve(
+                TestEnvironment.Development,
+                ("Sms:Provider", SmsOptions.FitSmsProvider),
+                ("Sms:FitSmsApiToken", "588|not-a-real-token"),
+                ("Sms:FitSmsSenderId", "MageRideLanka")));
+
+        Assert.Contains("Sms:FitSmsSenderId", string.Join(' ', exception.Failures), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_numeric_sender_mask_is_not_bound_by_the_alphanumeric_cap()
+    {
+        var options = Resolve(
+            TestEnvironment.Development,
+            ("Sms:Provider", SmsOptions.FitSmsProvider),
+            ("Sms:FitSmsApiToken", "588|not-a-real-token"),
+            ("Sms:FitSmsSenderId", "94771234567"));
+
+        Assert.Equal("94771234567", options.FitSmsSenderId);
+    }
+
+    /// <summary>
+    /// The fallback wraps whichever primary was chosen — the secondary gateway is not Notify.lk's
+    /// alone, and a deployment on Fit SMS that configured one would otherwise silently lose it.
+    /// </summary>
+    [Fact]
+    public void A_configured_secondary_gateway_wraps_fit_sms_too()
+    {
+        var sender = ResolveSender(
+            ("Sms:Provider", SmsOptions.FitSmsProvider),
+            ("Sms:FitSmsApiToken", "588|not-a-real-token"),
+            ("Sms:SecondaryGateway", "https://sms.example.lk/send"),
+            ("Sms:SecondaryApiKey", "also-not-real"));
+
+        Assert.IsType<FallbackOtpSender>(sender);
+        Assert.Equal("fitsms+secondary", sender.Provider);
+    }
+
     /// <summary>
     /// D6' §7.3's secondary gateway is only wired in when one is configured — a deployment with
     /// one gateway is a deployment with one gateway, not a broken one.

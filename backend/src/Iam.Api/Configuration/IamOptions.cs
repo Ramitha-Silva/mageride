@@ -51,10 +51,11 @@ public sealed class SmsOptions
 
     public const string DevProvider = "dev";
     public const string NotifyLkProvider = "notifylk";
+    public const string FitSmsProvider = "fitsms";
 
     /// <summary>
-    /// <c>dev</c> logs the code instead of sending it; <c>notifylk</c> is the real gateway
-    /// (D6' §7.3 "Primary: Notify.lk REST").
+    /// <c>dev</c> logs the code instead of sending it; <c>notifylk</c> and <c>fitsms</c> are the
+    /// two real gateways (D6' §7.3 "Primary: Notify.lk REST", and Fit SMS beside it).
     /// </summary>
     [Required]
     public string Provider { get; set; } = DevProvider;
@@ -72,6 +73,40 @@ public sealed class SmsOptions
     /// <summary>Registered alphanumeric sender mask. <c>NotifyDEMO</c> is their sandbox one.</summary>
     [Required]
     public string NotifyLkSenderId { get; set; } = "MageRide";
+
+    /// <summary>
+    /// Fit SMS v4 REST base address. The sender posts <c>sms/send</c> relative to it, so it ends
+    /// in a slash — see <see cref="MageRide.Iam.Otp.FitSmsOtpSender"/>.
+    /// </summary>
+    [Required]
+    public string FitSmsBaseUrl { get; set; } = "https://app.fitsms.lk/api/v4/";
+
+    /// <summary>
+    /// Fit SMS bearer token — D7' §4.2's <c>Sms__FitSmsApiToken</c>. Their tokens are issued in the
+    /// form <c>{id}|{secret}</c> and the whole string is the credential, pipe included.
+    /// </summary>
+    public string? FitSmsApiToken { get; set; }
+
+    /// <summary>
+    /// Registered sender mask on Fit SMS. Their limit is 11 characters for an alphanumeric mask
+    /// (a mask that is a telephone number is not bound by it), which
+    /// <c>AddSmsOptions</c> checks at start.
+    /// </summary>
+    [Required]
+    public string FitSmsSenderId { get; set; } = "MageRide";
+
+    /// <summary>
+    /// The <c>type</c> Fit SMS is told to send a non-ASCII body as.
+    /// </summary>
+    /// <remarks>
+    /// AL-26 makes Sinhala the default language, so the <em>common</em> OTP on this platform is
+    /// UCS-2 and not GSM-7 — which is why this is a setting rather than a constant. Their send
+    /// documentation names only <c>plain</c> while the rest of their API lists <c>unicode</c>
+    /// beside it; if a deployment finds their gateway refuses the latter, this becomes
+    /// <c>plain</c> and no code changes. Empty means "send everything as
+    /// <see cref="MageRide.Iam.Otp.FitSmsOtpSender.PlainType"/>".
+    /// </remarks>
+    public string FitSmsUnicodeType { get; set; } = "unicode";
 
     /// <summary>
     /// D7' §4.2 <c>Sms__SecondaryGateway</c> — the Dialog/Mobitel fallback of D6' §7.3. Empty
