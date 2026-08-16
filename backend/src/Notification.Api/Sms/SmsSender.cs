@@ -52,13 +52,29 @@ public sealed class SmsSender(
     private readonly IReadOnlyList<ISmsGateway> _gateways = [.. gateways];
 
     /// <summary>
-    /// The primary. In a <c>dev</c> deployment that is the logging gateway, which is the only case
-    /// where the primary is not Notify.lk.
+    /// The primary — whichever gateway <c>Sms:Provider</c> names.
     /// </summary>
-    private ISmsGateway? Primary =>
-        string.Equals(_sms.Provider, SmsOptions.DevProvider, StringComparison.OrdinalIgnoreCase)
-            ? Find(SmsGatewayNames.Dev)
-            : Find(SmsGatewayNames.NotifyLk);
+    /// <remarks>
+    /// Resolved by NAME from the provider rather than by "the one that is not the secondary": the
+    /// composition root registers exactly one primary, so a lookup that took whatever it found
+    /// would keep working after a misconfiguration instead of reporting one. An unknown provider
+    /// therefore yields no primary and every send fails loudly, which is the correct reading of a
+    /// deployment that named a gateway nobody implements.
+    /// </remarks>
+    private ISmsGateway? Primary => Find(PrimaryNameFor(_sms.Provider));
+
+    /// <summary>The gateway name a <c>Sms:Provider</c> value selects.</summary>
+    internal static string PrimaryNameFor(string? provider) =>
+        provider switch
+        {
+            not null when provider.Equals(SmsOptions.DevProvider, StringComparison.OrdinalIgnoreCase)
+                => SmsGatewayNames.Dev,
+            not null when provider.Equals(SmsOptions.FitSmsProvider, StringComparison.OrdinalIgnoreCase)
+                => SmsGatewayNames.FitSms,
+            not null when provider.Equals(SmsOptions.NotifyLkProvider, StringComparison.OrdinalIgnoreCase)
+                => SmsGatewayNames.NotifyLk,
+            _ => string.Empty,
+        };
 
     private ISmsGateway? Secondary
     {

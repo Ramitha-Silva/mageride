@@ -11,7 +11,8 @@ over the code.
 ## What this service is
 
 The end of every fan-out on the platform. Two transports — FCM HTTP v1 / APNs HTTP/2 (D6' §7.4)
-and Notify.lk with a Dialog/Mobitel secondary (D6' §7.3) — one durable queue, and one rule: **no
+and **Fit SMS** with a Dialog/Mobitel secondary (AL-57; Notify.lk remains implemented and is one
+`Sms:Provider` value away, D6' §7.3) — one durable queue, and one rule: **no
 user-facing string is composed here.** Every body is rendered from
 `content.notification_templates` in the recipient's own language (D-26).
 
@@ -218,7 +219,11 @@ where half the messages are unrecognisable.
 | `LocationRequestLimitsEnabled` | on | P-12; the second of two gates, ride-svc holds the first |
 | `ConsumersEnabled` · `ConsumerGroup` | on · `notification-svc` | **off ⇒ nothing is consumed** and every handset stays silent |
 | `MaxRecipientsPerSend` · `MaxBroadcastRecipients` | 1 000 · 50 000 | the contract's `maxItems`; the broadcast cap has **no spec** and truncation is logged |
-| `Sms:Provider` | `dev` | **refused outside Development** unless `Sms:AllowDevSenderOutsideDevelopment` |
+| `Sms:Provider` | `dev` | `fitsms` \| `notifylk` \| `dev`. **Refused outside Development** unless `Sms:AllowDevSenderOutsideDevelopment`. Selects the primary BY NAME — an unrecognised value registers no primary and every send fails loudly rather than falling through to whichever gateway happened to be registered |
+| `Sms:FitSmsApiToken` | unset | **unset ⇒ Fit SMS refuses every send.** Issued as `{id}\|{secret}`; the pipe is part of the credential |
+| `Sms:FitSmsSenderId` · `FitSmsBaseUrl` | `MageRide` · v4 | 11 characters is their limit for an alphanumeric mask |
+| `Sms:FitSmsUnicodeType` | `unicode` | the `type` a non-ASCII body is sent as. AL-26 makes Sinhala the default language, so the common message here is UCS-2 and `plain` would deliver question marks |
+| `Sms:FitSmsExpiry` | 24 h | their `expiry_time`, clamped to their 60 s–24 h window. One value for every message type — see the option's remarks for why D-33 does not get a shorter one |
 | `Sms:SecondaryGateway` | unset | **unset ⇒ D-33's SOS has one gateway** and the p99 has nothing behind it |
 | `Sms:MaxAttemptsPerGateway` · `RequestTimeout` | 2 · 4 s | D6' §7.3's "Retry: 2 attempts"; the timeout is bounded by D-33's five seconds |
 

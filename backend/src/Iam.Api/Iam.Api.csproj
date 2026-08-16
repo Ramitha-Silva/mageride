@@ -3,8 +3,9 @@
   <!--
     Iam.Api — iam-svc's authentication half (C020 ws-iam-minimal, completed by C026 iam-svc-auth).
 
-    Every sign-in surface AL-07 lists: Phone OTP for the passenger and driver apps over the
-    Notify.lk gateway with a Dialog/Mobitel fallback (D6' §7.3), password or Google for the Admin
+    Every sign-in surface AL-07 lists: Phone OTP for the passenger and driver apps over one of two
+    SMS gateways — Notify.lk (D6' §7.3) or Fit SMS — with a Dialog/Mobitel fallback behind either,
+    selected by Sms:Provider; password or Google for the Admin
     Portal, email+password / Google / Apple for the Fleet Portal. RS256 access tokens over a
     rotating key ring with a published JWKS, opaque single-use refresh with reuse detection
     (D-29), device binding and one session per surface (AL-08), and the MQTT session JWT E-02

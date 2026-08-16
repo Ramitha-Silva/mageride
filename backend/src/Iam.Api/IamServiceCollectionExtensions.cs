@@ -133,14 +133,33 @@ public static class IamServiceCollectionExtensions
         services.AddOptions<SmsOptions>()
             .Bind(configuration.GetSection(SmsOptions.SectionName))
             .Validate(
-                static sms => IsProvider(sms, SmsOptions.DevProvider) || IsProvider(sms, SmsOptions.NotifyLkProvider),
-                $"Sms:Provider must be '{SmsOptions.DevProvider}' or '{SmsOptions.NotifyLkProvider}'.")
+                static sms => IsProvider(sms, SmsOptions.DevProvider)
+                              || IsProvider(sms, SmsOptions.NotifyLkProvider)
+                              || IsProvider(sms, SmsOptions.FitSmsProvider),
+                $"Sms:Provider must be '{SmsOptions.DevProvider}', '{SmsOptions.NotifyLkProvider}' or " +
+                $"'{SmsOptions.FitSmsProvider}'.")
             .Validate(
                 static sms => !IsProvider(sms, SmsOptions.NotifyLkProvider)
                               || (!string.IsNullOrWhiteSpace(sms.NotifyLkApiKey)
                                   && !string.IsNullOrWhiteSpace(sms.NotifyLkUserId)),
                 "Sms:Provider=notifylk needs Sms:NotifyLkApiKey and Sms:NotifyLkUserId (D7' §4.2). Without them " +
                 "every OTP is refused by the gateway and nobody can sign in.")
+            .Validate(
+                static sms => !IsProvider(sms, SmsOptions.FitSmsProvider)
+                              || !string.IsNullOrWhiteSpace(sms.FitSmsApiToken),
+                "Sms:Provider=fitsms needs Sms:FitSmsApiToken (D7' §4.2) — their whole '{id}|{secret}' string. " +
+                "Without it every OTP is refused by the gateway and nobody can sign in.")
+            .Validate(
+                static sms => !IsProvider(sms, SmsOptions.FitSmsProvider)
+                              || Uri.TryCreate(sms.FitSmsBaseUrl, UriKind.Absolute, out _),
+                "Sms:FitSmsBaseUrl must be an absolute URL (default https://app.fitsms.lk/api/v4/).")
+            .Validate(
+                // Their limit is on an alphanumeric mask; a mask that is a telephone number is a
+                // longer string they accept, so the length is only checked when it is not one.
+                static sms => !IsProvider(sms, SmsOptions.FitSmsProvider)
+                              || sms.FitSmsSenderId.All(char.IsAsciiDigit)
+                              || sms.FitSmsSenderId.Length <= 11,
+                "Sms:FitSmsSenderId is an alphanumeric sender mask, which Fit SMS caps at 11 characters.")
             .Validate(
                 static sms => string.IsNullOrWhiteSpace(sms.SecondaryGateway)
                               || Uri.TryCreate(sms.SecondaryGateway, UriKind.Absolute, out _),
@@ -192,6 +211,29 @@ public static class IamServiceCollectionExtensions
             })
             .AddMageRideResilience(perGateway);
 
+        services.AddHttpClient(FitSmsOtpSender.HttpClientName)
+            .ConfigureHttpClient(static (provider, client) =>
+            {
+                var sms = provider.GetRequiredService<IOptions<SmsOptions>>().Value;
+
+                // A relative "sms/send" resolves against a base that ends in '/'; without the slash
+                // Uri would drop the last path segment and post to /api/sms/send.
+                var baseUrl = sms.FitSmsBaseUrl.EndsWith('/') ? sms.FitSmsBaseUrl : sms.FitSmsBaseUrl + "/";
+                client.BaseAddress = new Uri(baseUrl);
+
+                if (!string.IsNullOrWhiteSpace(sms.FitSmsApiToken))
+                {
+                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sms.FitSmsApiToken);
+                }
+
+                // Their documentation lists `Accept: application/json` as a required header, and
+                // the send path reads the body to tell an accepted send from a refused one.
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                client.Timeout = sms.RequestTimeout;
+            })
+            .AddMageRideResilience(perGateway);
+
         services.AddHttpClient(SecondaryGatewayOtpSender.HttpClientName)
             .ConfigureHttpClient(static (provider, client) =>
             {
@@ -215,12 +257,20 @@ public static class IamServiceCollectionExtensions
         {
             var sms = provider.GetRequiredService<IOptions<SmsOptions>>().Value;
 
-            if (!string.Equals(sms.Provider, SmsOptions.NotifyLkProvider, StringComparison.OrdinalIgnoreCase))
+            IOtpSender primary;
+
+            if (IsProvider(sms, SmsOptions.FitSmsProvider))
+            {
+                primary = ActivatorUtilities.CreateInstance<FitSmsOtpSender>(provider);
+            }
+            else if (IsProvider(sms, SmsOptions.NotifyLkProvider))
+            {
+                primary = ActivatorUtilities.CreateInstance<NotifyLkOtpSender>(provider);
+            }
+            else
             {
                 return ActivatorUtilities.CreateInstance<DevLoggingOtpSender>(provider);
             }
-
-            var primary = ActivatorUtilities.CreateInstance<NotifyLkOtpSender>(provider);
 
             if (string.IsNullOrWhiteSpace(sms.SecondaryGateway))
             {

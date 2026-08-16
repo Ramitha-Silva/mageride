@@ -312,6 +312,9 @@ public sealed class SmsOptions
     /// <summary>D6' §7.3's "Primary: Notify.lk REST".</summary>
     public const string NotifyLkProvider = "notifylk";
 
+    /// <summary>Fit SMS v4 REST — the platform's primary from the AL-57 switch.</summary>
+    public const string FitSmsProvider = "fitsms";
+
     [Required]
     public string Provider { get; set; } = DevProvider;
 
@@ -325,6 +328,59 @@ public sealed class SmsOptions
     /// <summary>Registered alphanumeric sender mask.</summary>
     [Required]
     public string NotifyLkSenderId { get; set; } = "MageRide";
+
+    // --- Fit SMS ---------------------------------------------------------------------------
+    // The same five names iam-svc's SmsOptions declares, because both bind the SAME `Sms`
+    // section (see this class's remarks). A name that differed by one character here would give
+    // the OTP and the SOS different senders — or leave one of them with no token at all — from a
+    // single set of environment variables that looked complete.
+
+    /// <summary>
+    /// Fit SMS v4 REST base address. The gateway posts <c>sms/send</c> relative to it, so it ends
+    /// in a slash.
+    /// </summary>
+    [Required]
+    public string FitSmsBaseUrl { get; set; } = "https://app.fitsms.lk/api/v4/";
+
+    /// <summary>
+    /// Fit SMS bearer token — <c>Sms__FitSmsApiToken</c>. Issued as <c>{id}|{secret}</c>, and the
+    /// whole string is the credential, pipe included.
+    /// </summary>
+    public string? FitSmsApiToken { get; set; }
+
+    /// <summary>
+    /// Registered sender mask on Fit SMS. Their limit is 11 characters for an alphanumeric mask.
+    /// </summary>
+    [Required]
+    public string FitSmsSenderId { get; set; } = "MageRide";
+
+    /// <summary>
+    /// The <c>type</c> a non-ASCII body is sent as. AL-26 makes Sinhala the default language, so
+    /// the common message on this platform is UCS-2 rather than GSM-7 and sending it as
+    /// <c>plain</c> is how it arrives as question marks. A setting rather than a constant so a
+    /// deployment can fall back to <c>plain</c> if the gateway ever refuses <c>unicode</c>.
+    /// </summary>
+    public string FitSmsUnicodeType { get; set; } = "unicode";
+
+    /// <summary>
+    /// <c>expiry_time</c> for a non-OTP message, in seconds.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// iam-svc derives this from the OTP's own TTL, because a code that has expired makes its
+    /// message worthless. Nothing here has that: an SOS, a share link and a low-balance warning
+    /// are all worth delivering late. Their API's default and maximum are both 24 hours, so this
+    /// is that ceiling stated rather than left implicit.
+    /// </para>
+    /// <para>
+    /// <b>One value, not one per message type.</b> A shorter deadline for an SOS is arguably
+    /// right — a safety alert delivered an hour late misleads rather than informs — but
+    /// <see cref="ISmsGateway.SendAsync"/> is handed a phone and a body and knows nothing about
+    /// which it is. Adding the setting without the argument would be a knob that resolves to
+    /// nothing; if D-33 wants its own deadline, the interface has to carry the intent first.
+    /// </para>
+    /// </remarks>
+    public TimeSpan FitSmsExpiry { get; set; } = TimeSpan.FromHours(24);
 
     /// <summary>
     /// D7' §4.2 <c>Sms__SecondaryGateway</c> — the Dialog/Mobitel half of D6' §7.3.

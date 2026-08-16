@@ -375,7 +375,7 @@ check "no Mfa__* variable is set (AL-37)" "0" "$mfa"
 
 # Nothing that looks like a real credential may be committed (infra/CLAUDE.md). Every
 # secret-marked D7' §4.2 row is either empty or an explicit CHANGEME_ placeholder.
-for v in Jwt__SigningKeyPem Sms__NotifyLkApiKey Onepay__ApiKey Onepay__WebhookSecret \
+for v in Jwt__SigningKeyPem Sms__NotifyLkApiKey Sms__FitSmsApiToken Onepay__ApiKey Onepay__WebhookSecret \
          Otp__PepperKey Gemini__ApiKey Fcm__ServiceAccountJson Apns__P8Key; do
   val=$( { grep -E "^${v}=" "$APP" || true; } | head -1 | cut -d= -f2-)
   if [[ -z "$val" || "$val" == CHANGEME_* ]]; then s=placeholder; else s="$val"; fi

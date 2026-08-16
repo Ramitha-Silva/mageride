@@ -172,8 +172,16 @@ D3' §0 and D7' §4.2 still carry pre-AL-37 wording; AL-37 is later and wins (pl
 
 `Sms:Provider=dev` logs the OTP instead of sending it and is refused outside Development unless
 `Sms:AllowDevSenderOutsideDevelopment=true`. `Sms:Provider=notifylk` requires
-`Sms:NotifyLkUserId` + `Sms:NotifyLkApiKey`; `Sms:SecondaryGateway` (optional) adds the D6' §7.3
-fallback.
+`Sms:NotifyLkUserId` + `Sms:NotifyLkApiKey`; `Sms:Provider=fitsms` requires `Sms:FitSmsApiToken`
+(their whole `{id}|{secret}` string). `Sms:SecondaryGateway` (optional) adds the D6' §7.3 fallback
+behind **whichever** primary is selected.
+
+**A Sinhala OTP is UCS-2, and the gateway has to be told so.** AL-26 makes Sinhala the default
+language, so the common OTP on this platform is not GSM-7. `FitSmsOtpSender` sends
+`Sms:FitSmsUnicodeType` (default `unicode`) as the message `type` for any body that is not plain
+ASCII and `plain` for the rest; their send documentation names only `plain` while the rest of their
+API lists `unicode` beside it, so the value is configuration rather than a constant. Notify.lk's
+form POST has no equivalent field.
 
 Four things are resolved during `IamApplication.Build`, so a missing one is a failed deploy rather
 than a 500 on somebody's sign-in: `Jwt:SigningKeyPem`, `Otp:PepperKey`, the embedded SMS templates,
