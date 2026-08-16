@@ -12,11 +12,19 @@ using Microsoft.Extensions.Logging;
 namespace MageRide.E2E.Infrastructure;
 
 /// <summary>One message a handset was actually sent.</summary>
-/// <param name="Phone">National digits, as Notify.lk's <c>to</c> carries them (no leading <c>+</c>).</param>
+/// <param name="Phone">National digits, as Fit SMS's <c>recipient</c> carries them (no leading <c>+</c>).</param>
 internal sealed record SentSms(string Phone, string Body, DateTimeOffset At);
 
+/// <summary>Fit SMS's send body, as their field names spell it.</summary>
+internal sealed record FitSmsBody(
+    [property: System.Text.Json.Serialization.JsonPropertyName("recipient")] string Recipient,
+    [property: System.Text.Json.Serialization.JsonPropertyName("sender_id")] string SenderId,
+    [property: System.Text.Json.Serialization.JsonPropertyName("type")] string Type,
+    [property: System.Text.Json.Serialization.JsonPropertyName("message")] string Message,
+    [property: System.Text.Json.Serialization.JsonPropertyName("expiry_time")] int ExpirySeconds);
+
 /// <summary>
-/// Notify.lk, as far as notification-svc can tell — a real socket speaking D6' §7.3's REST shape.
+/// Fit SMS, as far as notification-svc can tell — a real socket speaking their v4 REST shape.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -25,7 +33,7 @@ internal sealed record SentSms(string Phone, string Body, DateTimeOffset At);
 /// app, a device or a peer service has; it says nothing about the third parties on the other side of
 /// the platform's own egress, because there is no version of this suite that dials a real Sri Lankan
 /// SMS gateway. The same choice C121 made for a tracker: <c>TrackerDevice</c> writes the bytes
-/// firmware would write, and this answers the way Notify.lk answers.
+/// firmware would write, and this answers the way Fit SMS answers.
 /// </para>
 /// <para>
 /// <b>What it buys is the only honest way to reach SCR-WT-002 and SCR-WT-003.</b> AL-44/AL-45 make a
@@ -37,8 +45,8 @@ internal sealed record SentSms(string Phone, string Body, DateTimeOffset At);
 /// number, containing a link the platform composed from a template it fetched from content-svc.
 /// </para>
 /// <para>
-/// Notify.lk's real failure shape is <b>HTTP 200 with <c>{"status":"error"}</c></b>, which is what
-/// <c>NotifyLkSmsGateway.IsAccepted</c> exists for; this answers the success shape, so a scenario
+/// Fit SMS's real failure shape is <b>HTTP 200 with <c>{"status":"error"}</c></b>, which is what
+/// <c>FitSmsGateway.IsAccepted</c> exists for; this answers the success shape, so a scenario
 /// that never receives a message is looking at a platform that never sent one rather than at a
 /// gateway that refused.
 /// </para>
@@ -69,10 +77,10 @@ internal sealed class SmsGateway : IAsyncDisposable
             .Features.Get<IServerAddressesFeature>()!.Addresses.First();
 
         // notification-svc appends `send` to this, the way Notify.lk's own base URL ends.
-        BaseAddress = address.TrimEnd('/') + "/api/v1/";
+        BaseAddress = address.TrimEnd('/') + "/api/v4/";
     }
 
-    /// <summary>What <c>Sms:NotifyLkBaseUrl</c> is pointed at.</summary>
+    /// <summary>What <c>Sms:FitSmsBaseUrl</c> is pointed at.</summary>
     public string BaseAddress { get; }
 
     public static async Task<SmsGateway> StartAsync()
@@ -89,14 +97,18 @@ internal sealed class SmsGateway : IAsyncDisposable
         var app = builder.Build();
         var sent = new ConcurrentQueue<SentSms>();
 
-        app.MapPost("/api/v1/send", async (HttpContext context) =>
+        app.MapPost("/api/v4/sms/send", async (HttpContext context) =>
         {
-            var form = await context.Request.ReadFormAsync();
+            var body = await context.Request.ReadFromJsonAsync<FitSmsBody>();
 
             sent.Enqueue(new SentSms(
-                form["to"].ToString(), form["message"].ToString(), DateTimeOffset.UtcNow));
+                body?.Recipient ?? string.Empty, body?.Message ?? string.Empty, DateTimeOffset.UtcNow));
 
-            return Results.Ok(new { status = "success", data = new { message_id = sent.Count } });
+            return Results.Ok(new
+            {
+                status = "success",
+                data = new { ruid = $"e2e-{sent.Count:D32}", to = body?.Recipient },
+            });
         });
 
         await app.StartAsync();

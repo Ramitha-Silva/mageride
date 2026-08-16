@@ -112,11 +112,9 @@ services:
   - name: iam-svc
     project: Iam.Api
     secrets:
-      - Sms__NotifyLkUserId
-      - Sms__NotifyLkApiKey
-      # Both gateways are wired even though `Sms__Provider` selects one. A gateway swap is then a
-      # ConfigMap edit and a rollout rather than a Vault write plus a manifest change, which is the
-      # difference between switching provider during an OTP outage and switching it next deploy.
+      # Fit SMS is the platform's only SMS gateway (AL-60); Notify.lk's two properties went with
+      # the class. `Sms__SecondaryGateway` is unchanged — D-33's second transport is a generic HTTP
+      # shape, not a named provider.
       - Sms__FitSmsApiToken
       - Sms__SecondaryApiKey
       - Jwt__SigningKeyPem
@@ -272,14 +270,8 @@ services:
       - Apns__P8Key
       - Apns__KeyId
       - Apns__TeamId
-      # All three gateways, and this service binds the same `Sms` section iam-svc does: D-33's dual
-      # SMS is the primary AND the secondary, so an SOS that fails on the primary still goes out.
-      # Every primary is wired even though `Sms__Provider` selects one, for the reason iam-svc's
-      # entry gives: a gateway swap is then a ConfigMap edit and a rollout rather than a Vault
-      # write plus a manifest change — the difference between switching provider during an SMS
-      # outage and switching it next deploy.
-      - Sms__NotifyLkUserId
-      - Sms__NotifyLkApiKey
+      # Both transports, and this service binds the same `Sms` section iam-svc does: D-33's dual
+      # SMS is the primary AND the secondary, so an SOS that fails on Fit SMS still goes out.
       - Sms__FitSmsApiToken
       - Sms__SecondaryApiKey
       - Notification__InternalApiKey
@@ -597,8 +589,6 @@ aliases:
   # Two services holding one provider's key is not duplication to be removed — OnePay
   # issues one merchant credential and both fare-svc (D-10) and fleet-billing-svc (AL-03)
   # transact on it. Rotating it is one Vault write and two rollouts.
-  Sms__NotifyLkUserId: { path: providers, property: notify_lk_user_id }
-  Sms__NotifyLkApiKey: { path: providers, property: notify_lk_api_key }
   Sms__FitSmsApiToken: { path: providers, property: fitsms_api_token }
   Sms__SecondaryApiKey: { path: providers, property: sms_secondary_api_key }
 

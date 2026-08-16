@@ -63,7 +63,7 @@ public sealed class SosTests(PostgresFixture postgres, RedisFixture redis)
         Assert.Equal(SosSources.App, row.Source);
         Assert.NotNull(row.DispatchedAt);
 
-        Assert.Equal("notifylk:attempted", row.PrimaryGateway);
+        Assert.Equal("fitsms:attempted", row.PrimaryGateway);
         Assert.Equal("secondary:delivered", row.SecondaryGateway);
 
         // The measured SLO is on the row, so it survives the request and can be queried after an
@@ -79,7 +79,7 @@ public sealed class SosTests(PostgresFixture postgres, RedisFixture redis)
         // Rendered by content-svc, carrying the raiser's name and a live tracking link.
         var sms = harness.SecondarySms.Sent[0];
 
-        // The secondary gateway takes E.164 verbatim; only Notify.lk wants the national form.
+        // The secondary gateway takes E.164 verbatim; only Fit SMS wants the national form.
         Assert.Equal("+94770000001", sms.To);
         Assert.Equal("94770000001", harness.PrimarySms.Sent[0].To);
         Assert.Contains("Nimal", sms.Message, StringComparison.Ordinal);

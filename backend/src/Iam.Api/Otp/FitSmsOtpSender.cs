@@ -16,15 +16,15 @@ namespace MageRide.Iam.Otp;
 /// <c>sender_id</c>, <c>type</c>, <c>message</c> and <c>expiry_time</c>.
 /// </para>
 /// <para>
-/// Like Notify.lk, <b>their API answers HTTP 200 with <c>{"status":"error"}</c></b> for a rejected
+/// <b>Their API answers HTTP 200 with <c>{"status":"error"}</c></b> for a rejected
 /// send — an unregistered sender mask, an exhausted balance — so the status line alone is not the
 /// outcome and the body has to be read. A sender that trusted the 200 would report every OTP as
 /// delivered and no user could ever sign in.
 /// </para>
 /// <para>
-/// <c>recipient</c> is the national form without a <c>+</c>: <c>94771234567</c>, the same spelling
-/// Notify.lk wants, so the conversion is <see cref="NotifyLkOtpSender.ToNationalDigits"/> rather
-/// than a second copy of it.
+/// <c>recipient</c> is the national form without a <c>+</c>: <c>94771234567</c>. The platform
+/// stores E.164 everywhere else (<c>PhoneNumbers</c>), so the conversion happens here via
+/// <see cref="SmsPhone.ToNationalDigits"/>, at the boundary that wants the other spelling.
 /// </para>
 /// </remarks>
 public sealed class FitSmsOtpSender(
@@ -61,7 +61,7 @@ public sealed class FitSmsOtpSender(
         var message = templates.Render(SmsTemplates.Otp, language, code, (int)_otp.Ttl.TotalMinutes);
 
         var request = new FitSmsSendRequest(
-            Recipient: NotifyLkOtpSender.ToNationalDigits(phone),
+            Recipient: SmsPhone.ToNationalDigits(phone),
             SenderId: _sms.FitSmsSenderId,
             Type: MessageTypeFor(message, _sms.FitSmsUnicodeType),
             Message: message,
@@ -79,24 +79,24 @@ public sealed class FitSmsOtpSender(
             logger.LogError(
                 "Fit SMS answered {Status} for {Phone}: {Body}",
                 (int)response.StatusCode,
-                NotifyLkOtpSender.Redact(phone),
+                SmsPhone.Redact(phone),
                 body);
 
             throw new OtpDeliveryException(
-                $"Fit SMS answered {(int)response.StatusCode} for {NotifyLkOtpSender.Redact(phone)}.");
+                $"Fit SMS answered {(int)response.StatusCode} for {SmsPhone.Redact(phone)}.");
         }
 
         if (!IsAccepted(body, out var reported, out var ruid))
         {
             // As above: their error strings can carry the destination number, and an OTP failure is
             // not a reason to put a phone number in an exception message that may reach a client.
-            logger.LogError("Fit SMS refused the send for {Phone}: {Body}", NotifyLkOtpSender.Redact(phone), body);
+            logger.LogError("Fit SMS refused the send for {Phone}: {Body}", SmsPhone.Redact(phone), body);
             throw new OtpDeliveryException($"Fit SMS refused the send ({reported}).");
         }
 
         // The one field worth keeping: `ruid` is what their support and their /sms/{ruid} lookup
         // trace a missing OTP by, and it is meaningless without a line saying which send it was.
-        logger.LogDebug("Fit SMS accepted the OTP for {Phone} as {Ruid}", NotifyLkOtpSender.Redact(phone), ruid);
+        logger.LogDebug("Fit SMS accepted the OTP for {Phone} as {Ruid}", SmsPhone.Redact(phone), ruid);
     }
 
     /// <summary>
@@ -139,9 +139,8 @@ public sealed class FitSmsOtpSender(
     /// <c>{"status":"error","message":"…"}</c> under the same 200.
     /// </summary>
     /// <remarks>
-    /// The same envelope Notify.lk uses, parsed separately rather than shared, because the halves
-    /// differ where it matters: this one carries <c>data.ruid</c>, the id a missing OTP is traced
-    /// by, and a shared parser would have to answer <c>null</c> for it on every Notify.lk send.
+    /// Parsed here rather than shared with notification-svc's gateway: the two services do not
+    /// reference each other, and the C051 handoff proposes folding both into the kernel.
     /// </remarks>
     internal static bool IsAccepted(string body, out string reported, out string? ruid)
     {

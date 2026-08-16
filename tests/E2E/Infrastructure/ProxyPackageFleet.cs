@@ -35,7 +35,7 @@ namespace MageRide.E2E.Infrastructure;
 /// <para>
 /// Ten services on ten real sockets, against a real Postgres, Redis and Redpanda, each built through
 /// its own <c>XApplication.Build</c>, plus one thing that is not a MageRide component at all: a real
-/// HTTP endpoint speaking Notify.lk's REST shape (<see cref="SmsGateway"/>). <b>Every background
+/// HTTP endpoint speaking Fit SMS's REST shape (<see cref="SmsGateway"/>). <b>Every background
 /// worker is on</b> — ride-svc's outbox dispatcher, its R-04 timer sweep and the
 /// <c>location_request</c> expiry pass that rides in it, dispatch-svc's whole loop, notification-svc's
 /// four consumers and its delivery worker, and fanout-svc's control plane. A scenario acts and then
@@ -172,7 +172,7 @@ internal sealed class ProxyPackageFleet : IAsyncDisposable
     /// <summary>The six SCR-WT pages, as a browser reaches them.</summary>
     public WebSubview Web { get; }
 
-    /// <summary>Notify.lk's stand-in — where the AL-45 and AL-21 links actually arrive.</summary>
+    /// <summary>Fit SMS's stand-in — where the AL-45 and AL-21 links actually arrive.</summary>
     public SmsGateway Sms { get; }
 
     public TestTokenIssuer Tokens { get; }
@@ -1440,10 +1440,9 @@ internal sealed class ProxyPackageFleet : IAsyncDisposable
                 ["Notification:RetentionSweepEnabled"] = "false",
 
                 // The gateway is a third party, not a component — see SmsGateway.
-                ["Sms:Provider"] = "notifylk",
-                ["Sms:NotifyLkBaseUrl"] = smsBaseUrl,
-                ["Sms:NotifyLkUserId"] = "c122-e2e",
-                ["Sms:NotifyLkApiKey"] = "c122-e2e-key",
+                ["Sms:Provider"] = "fitsms",
+                ["Sms:FitSmsBaseUrl"] = smsBaseUrl,
+                ["Sms:FitSmsApiToken"] = "c122-e2e-key",
             },
             (options, configure) => NotificationApplication.Build(options, configure));
 

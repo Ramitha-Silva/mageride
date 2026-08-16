@@ -161,8 +161,10 @@ public sealed class FitSmsGatewayTests
     [Theory]
     [InlineData("fitsms", SmsGatewayNames.FitSms)]
     [InlineData("FitSms", SmsGatewayNames.FitSms)]
-    [InlineData("notifylk", SmsGatewayNames.NotifyLk)]
     [InlineData("dev", SmsGatewayNames.Dev)]
+    // AL-60 removed Notify.lk. A deployment still naming it selects NOTHING rather than silently
+    // sending through whichever gateway happened to be registered.
+    [InlineData("notifylk", "")]
     [InlineData("fitsmss", "")]
     [InlineData("", "")]
     [InlineData(null, "")]

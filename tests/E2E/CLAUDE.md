@@ -54,7 +54,7 @@ the scenarios, so a test added to that suite is covered by it without its author
 `MoneyFleet.AssertLedgerBalancedAsync` for what "balanced" means in three statements.
 
 **One thing every stand-in in this assembly has in common.** `TrackerDevice` writes the bytes
-firmware would write and `SmsGateway` answers the way Notify.lk answers — both stand in for the
+firmware would write and `SmsGateway` answers the way Fit SMS answers — both stand in for the
 *outside* of the platform, never for a part of it. Nothing in here stands between two MageRide
 components, which is what the no-stub fence actually says.
 
@@ -182,7 +182,7 @@ whole `/v1/location-requests` family answer `503` by design. The branch every pr
 does not exist without it.
 
 **The SMS gateway is a third party, not a component.** `SmsGateway` is a real socket speaking D6'
-§7.3's Notify.lk REST shape, and it is the only way to reach SCR-WT-002 and SCR-WT-003 honestly:
+Fit SMS's v4 REST shape, and it is the only way to reach SCR-WT-002 and SCR-WT-003 honestly:
 AL-44/AL-45 make a share token mint-and-SMS — `MintedLink` has no token member and no contract in
 notification-svc can carry one out — so a scenario that read `safety.trip_share_tokens` to open a
 page would be asserting about a page no recipient could have reached. Every token in this suite comes

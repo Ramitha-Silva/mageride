@@ -65,7 +65,7 @@ open at deployment**, owned by C133 and due at go-live.
 | 2.2.3 | Notification on credential change | notification-svc templates; `Notification.Api.Tests` |
 | 2.3.1 | OTP secrets not at rest in the clear | `iam.otp_attempts.otp_hash` = HMAC-SHA256(`{authId}:{code}`) under `Otp:PepperKey`, required outside Development |
 | 2.5.x | Credential recovery does not reveal the credential | OTP re-issue only; no password is ever transmitted |
-| 2.7.2 | OTP delivered out of band, time-limited | SMS via Notify.lk + a secondary gateway (D6' §7.3); D-33's 5 s p99 |
+| 2.7.2 | OTP delivered out of band, time-limited | SMS via Fit SMS + a secondary gateway (AL-60, D6' §7.3); D-33's 5 s p99 |
 | 2.8.x | MFA | **AL-37 removed it deliberately.** Compensating controls: durable failed-attempt lock-out on `iam.user_credentials` (not a Redis counter — a cache flush must not reset every internal account at once), session binding, optional `Auth:InternalRoleIpAllowList`. `Iam.Api.Tests` lock-out suite |
 | 2.10.1 | Service accounts do not use default credentials | `.env.*.example` placeholders only; `CHK` 10.3 |
 | 2.10.4 | Secrets stored with protection | Vault + ESO (D7' §13); `CHK` 10.4 |

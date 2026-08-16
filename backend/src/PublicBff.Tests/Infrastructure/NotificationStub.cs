@@ -88,8 +88,8 @@ internal sealed class NotificationStub : IAsyncDisposable
                     new
                     {
                         status = stub.Refuse ? "Failed" : "Sent",
-                        provider = stub.Refuse ? null : "notifylk",
-                        gateways = new[] { "notifylk", "dialog" },
+                        provider = stub.Refuse ? null : "fitsms",
+                        gateways = new[] { "fitsms", "dialog" },
                         error = stub.Refuse ? "stub refused" : null,
                     },
                 },

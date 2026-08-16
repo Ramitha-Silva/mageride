@@ -134,16 +134,8 @@ public static class IamServiceCollectionExtensions
             .Bind(configuration.GetSection(SmsOptions.SectionName))
             .Validate(
                 static sms => IsProvider(sms, SmsOptions.DevProvider)
-                              || IsProvider(sms, SmsOptions.NotifyLkProvider)
                               || IsProvider(sms, SmsOptions.FitSmsProvider),
-                $"Sms:Provider must be '{SmsOptions.DevProvider}', '{SmsOptions.NotifyLkProvider}' or " +
-                $"'{SmsOptions.FitSmsProvider}'.")
-            .Validate(
-                static sms => !IsProvider(sms, SmsOptions.NotifyLkProvider)
-                              || (!string.IsNullOrWhiteSpace(sms.NotifyLkApiKey)
-                                  && !string.IsNullOrWhiteSpace(sms.NotifyLkUserId)),
-                "Sms:Provider=notifylk needs Sms:NotifyLkApiKey and Sms:NotifyLkUserId (D7' §4.2). Without them " +
-                "every OTP is refused by the gateway and nobody can sign in.")
+                $"Sms:Provider must be '{SmsOptions.DevProvider}' or '{SmsOptions.FitSmsProvider}'.")
             .Validate(
                 static sms => !IsProvider(sms, SmsOptions.FitSmsProvider)
                               || !string.IsNullOrWhiteSpace(sms.FitSmsApiToken),
@@ -198,19 +190,6 @@ public static class IamServiceCollectionExtensions
             AttemptTimeout = sms.RequestTimeout,
         };
 
-        services.AddHttpClient(NotifyLkOtpSender.HttpClientName)
-            .ConfigureHttpClient(static (provider, client) =>
-            {
-                var sms = provider.GetRequiredService<IOptions<SmsOptions>>().Value;
-
-                // A relative "send" resolves against a base that ends in '/'; without the slash
-                // Uri would drop the last path segment and post to the wrong endpoint.
-                var baseUrl = sms.NotifyLkBaseUrl.EndsWith('/') ? sms.NotifyLkBaseUrl : sms.NotifyLkBaseUrl + "/";
-                client.BaseAddress = new Uri(baseUrl);
-                client.Timeout = sms.RequestTimeout;
-            })
-            .AddMageRideResilience(perGateway);
-
         services.AddHttpClient(FitSmsOtpSender.HttpClientName)
             .ConfigureHttpClient(static (provider, client) =>
             {
@@ -262,10 +241,6 @@ public static class IamServiceCollectionExtensions
             if (IsProvider(sms, SmsOptions.FitSmsProvider))
             {
                 primary = ActivatorUtilities.CreateInstance<FitSmsOtpSender>(provider);
-            }
-            else if (IsProvider(sms, SmsOptions.NotifyLkProvider))
-            {
-                primary = ActivatorUtilities.CreateInstance<NotifyLkOtpSender>(provider);
             }
             else
             {

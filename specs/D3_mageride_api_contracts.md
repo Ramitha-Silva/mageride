@@ -99,7 +99,7 @@
 ## iam-svc — auth, profile, token (`/v1/auth`, `/v1/users`)
 
 ### iam-svc — POST /v1/auth/otp/request   [ADAPT] (NY `POST /v2/auth`)
-Purpose: start login; send OTP via SMS gateway (Notify.lk). **Auth:** none (public) + attestation.
+Purpose: start login; send OTP via SMS gateway (Fit SMS, AL-60). **Auth:** none (public) + attestation.
 Request body:
 ```jsonc
 { "phone": "string  // +94 E.164, required, regex ^\\+947\\d{8}$",

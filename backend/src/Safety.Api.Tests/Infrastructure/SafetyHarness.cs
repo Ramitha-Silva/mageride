@@ -229,10 +229,9 @@ internal sealed class SafetyHarness : IAsyncDisposable
                     ["Notification:RetentionSweepEnabled"] = "false",
                     ["Notification:ConsumersEnabled"] = "false",
 
-                    ["Sms:Provider"] = "notifylk",
-                    ["Sms:NotifyLkBaseUrl"] = primarySms.BaseAddress.TrimEnd('/') + "/api/v1/",
-                    ["Sms:NotifyLkUserId"] = "test-user",
-                    ["Sms:NotifyLkApiKey"] = "test-key",
+                    ["Sms:Provider"] = "fitsms",
+                    ["Sms:FitSmsBaseUrl"] = primarySms.BaseAddress.TrimEnd('/') + "/api/v4/",
+                    ["Sms:FitSmsApiToken"] = "test-key",
                     ["Sms:SecondaryGateway"] = withSecondaryGateway ? secondarySms.BaseAddress : null,
                     ["Sms:SecondaryApiKey"] = withSecondaryGateway ? "secondary-key" : null,
 

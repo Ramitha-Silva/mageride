@@ -245,7 +245,7 @@ public sealed class OtpService(
     /// </summary>
     /// <remarks>
     /// Without this a gateway outage is a 500 — an internal error the client is told nothing
-    /// about and its retry policy treats as a bug. It is not a bug: it is Notify.lk being down,
+    /// about and its retry policy treats as a bug. It is not a bug: it is the gateway being down,
     /// and "try again shortly" is both true and actionable. <see cref="FallbackOtpSender"/> has
     /// already tried the secondary gateway by the time this catches anything (D6' §7.3).
     /// </remarks>
