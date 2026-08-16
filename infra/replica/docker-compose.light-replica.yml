@@ -615,6 +615,16 @@ services:
       # `NEXT_PUBLIC_*`, enforced by the portal's own fence test) and Container 7's co-located
       # gateway rather than the per-service dev address in portals/fleet/.env.example.
       MAGERIDE_API_BASE_URL: http://app-services:5000
+      # D-14's `tile-cdn`. A MapLibre STYLE DOCUMENT, not the `.pmtiles` archive: the native
+      # apps bundle their style as an app resource and fetch only the archive, while a browser
+      # fetches the style over HTTP and follows it. The style's own source URL is
+      # `pmtiles://https://tiles.mageride.lk/lk.pmtiles`, which the `pmtiles` npm Protocol
+      # resolves with range requests — same archive the apps read, same cartography.
+      #
+      # Public https, not an internal hostname: this one is fetched by the OPERATOR'S BROWSER,
+      # not by the Next server, so a container-network address would be unreachable.
+      # Unset, `mapStyleUrl()` returns null and SCR-FP-007 draws vehicles on an empty canvas.
+      FLEET_PORTAL_MAP_STYLE_URL: https://tiles.mageride.lk/style.json
     depends_on:
       app-services: { condition: service_healthy }
     deploy:
