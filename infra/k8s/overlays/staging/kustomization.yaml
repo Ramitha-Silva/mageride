@@ -169,12 +169,7 @@ patches:
         # do with telemetry. When it lands:
         #   Otel__Endpoint: http://otel-collector.observability.svc.cluster.local:4317
         Otel__Endpoint: ""
-  - target: { kind: ConfigMap, name: portal-config }
-    patch: |
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: portal-config
-      data:
-        NEXT_PUBLIC_API_BASE_URL: https://api.staging.mageride.lk
-        NEXT_PUBLIC_HUB_URL: wss://api.staging.mageride.lk/hubs
+  # No portal-config patch. It used to set `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_HUB_URL`
+  # per environment; no portal has ever read either (base's header has the evidence), and the
+  # variable they DO read — `MAGERIDE_API_BASE_URL: http://api-gateway` — is a Service name that
+  # is identical in every cluster, so there is nothing environment-shaped left to override.

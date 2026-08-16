@@ -181,12 +181,6 @@ patches:
         # the cluster does not trust. THE ONLY ENVIRONMENT WHERE THIS IS FALSE.
         Jwt__RequireHttpsMetadata: "false"
         Jwt__Issuer: https://iam.dev.mageride.lk
-  - target: { kind: ConfigMap, name: portal-config }
-    patch: |
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: portal-config
-      data:
-        NEXT_PUBLIC_API_BASE_URL: https://api.dev.mageride.lk
-        NEXT_PUBLIC_HUB_URL: wss://api.dev.mageride.lk/hubs
+  # No portal-config patch — see the staging overlay's note. Nothing read the two
+  # `NEXT_PUBLIC_*` keys this used to set, and `MAGERIDE_API_BASE_URL` is a Service name that
+  # does not vary by cluster.

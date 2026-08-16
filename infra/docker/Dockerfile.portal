@@ -35,8 +35,18 @@ WORKDIR /repo
 # The workspace root plus every member manifest, so `npm ci` resolves the same tree the
 # lockfile pins without pulling in application source (which would bust this layer on
 # every edit).
+#
+# EVERY member, not only the ones being built: `npm ci` resolves the whole workspace from
+# the lockfile in one pass, and the lockfile carries a link entry per member. Omit one and
+# the install fails for a portal that does not even depend on it. All seven of
+# `portals/package.json`'s `workspaces` are listed here and the set must be kept in step
+# with it — eslint-config, i18n and ui were added after this file was first written, and
+# admin and fleet both depend on @mageride/i18n and @mageride/ui.
 COPY ["portals/package.json", "portals/package-lock.json", "./portals/"]
+COPY ["portals/eslint-config/package.json", "./portals/eslint-config/"]
 COPY ["portals/tailwind-preset/package.json", "./portals/tailwind-preset/"]
+COPY ["portals/i18n/package.json", "./portals/i18n/"]
+COPY ["portals/ui/package.json", "./portals/ui/"]
 COPY ["portals/admin/package.json", "./portals/admin/"]
 COPY ["portals/fleet/package.json", "./portals/fleet/"]
 COPY ["portals/web-passenger/package.json", "./portals/web-passenger/"]
