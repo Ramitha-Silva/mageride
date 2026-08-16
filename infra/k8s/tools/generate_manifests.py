@@ -439,8 +439,10 @@ def render_portal(cat: dict, p: dict) -> str:
         "          imagePullPolicy: IfNotPresent\n"
         + ports_block("          ", "http", port, [])
         + "          envFrom:\n"
-          "            # NEXT_PUBLIC_* only. A portal is a browser bundle: anything it can read,\n"
-          "            # a user can read, so no Secret is ever mounted into one.\n"
+          "            # No Secret is ever mounted into a portal pod. NOT because a portal is a\n"
+          "            # browser bundle — it is a Next SERVER that holds the session and calls the\n"
+          "            # gateway itself — but because it has never needed one: it authenticates\n"
+          "            # with the caller's own bearer, not a credential of its own.\n"
           "            - configMapRef: { name: portal-config }\n"
         + resources(res)
         + "          # The Dockerfile's own healthcheck, as a probe: Next.js serves `/` as soon as\n"
