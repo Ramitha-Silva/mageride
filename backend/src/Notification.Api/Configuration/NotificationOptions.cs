@@ -344,7 +344,7 @@ public sealed class SmsOptions
     /// Registered sender mask on Fit SMS. Their limit is 11 characters for an alphanumeric mask.
     /// </summary>
     [Required]
-    public string FitSmsSenderId { get; set; } = "The Change";
+    public string FitSmsSenderId { get; set; } = "MageRide";
 
     /// <summary>
     /// The <c>type</c> a non-ASCII body is sent as. AL-26 makes Sinhala the default language, so
