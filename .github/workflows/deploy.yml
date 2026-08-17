@@ -136,6 +136,8 @@ jobs:
     environment: ${{ inputs.environment }}
     permissions:
       contents: write
+      # AL-62: the promotion lands through a PR, so the job opens and merges one.
+      pull-requests: write
     outputs:
       tag: ${{ steps.write.outputs.tag }}
     steps:
@@ -199,19 +201,32 @@ jobs:
             -m "Promoted by ${{ github.workflow }} run ${{ github.run_id }}." \
             -m "Source commit: ${{ inputs.sha }}" \
             -m "Previous:      ${{ needs.migration-gate.outputs.deployed }}"
-          # Rebase rather than force: another environment's promotion may have landed while the
-          # gate was running, and both commits belong on main.
-          for attempt in 1 2 3; do
-            if git push origin HEAD:main; then exit 0; fi
-            echo "push rejected (attempt $attempt) — rebasing onto main"
-            git pull --rebase origin main
-          done
-          echo "::error::could not push the promotion commit after three attempts"
-          exit 1
+          # --- through a PULL REQUEST, not a direct push (AL-62) -------------------------
+          # The `Protect main` ruleset requires one ("Changes must be made through a pull
+          # request"), and on a PERSONAL repository the GitHub Actions app CANNOT be added as a
+          # bypass actor — GitHub refuses it with "must be part of the ruleset source or owner
+          # organization". So the promotion satisfies the rule rather than circumventing it.
+          #
+          # This is safe to merge unattended because the rule requires ZERO approvals and the
+          # step above has already proved the diff touches nothing but `newTag` lines.
+          branch="deploy/${ENVIRONMENT}-${TAG}-${GITHUB_RUN_ID}"
+          # Rebase first: another environment's promotion may have landed while the gate ran, and
+          # both commits belong on main.
+          git pull --rebase origin main
+          git push origin "HEAD:refs/heads/${branch}"
+
+          gh pr create --base main --head "$branch" \
+            --title "deploy(${ENVIRONMENT}): ${TAG}${REASON:+ — $REASON}" \
+            --body "Automated promotion by ${GITHUB_WORKFLOW} run ${GITHUB_RUN_ID}. Image tags only."
+
+          # --merge, never --squash: the promotion is one commit and its message is what an
+          # incident reads. --delete-branch so the deploy/* refs do not accumulate one per deploy.
+          gh pr merge "$branch" --merge --delete-branch
         env:
           ENVIRONMENT: ${{ inputs.environment }}
           TAG: ${{ steps.write.outputs.tag }}
           REASON: ${{ inputs.reason }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ===================================================================================
   # Did it land? Two ways, depending on what credentials exist.
