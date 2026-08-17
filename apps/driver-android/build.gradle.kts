@@ -107,7 +107,17 @@ android {
             isMinifyEnabled = false
             buildConfigField("String", "API_BASE_URL", "\"https://api.mageride.lk\"")
             buildConfigField("String", "MQTT_HOST", "\"mqtt.mageride.lk\"")
-            buildConfigField("int", "MQTT_PORT", "8883")
+            // 8084, NOT 8883. 8883 is the TRACKER plane: emqx.conf sets `verify_peer` +
+            // `fail_if_no_peer_cert` on it, so a client must present an X.509 certificate signed
+            // by the device CA — whose CN becomes its MQTT username — and it sets
+            // `enable_authn = false` there, so the JWT authenticator is deliberately OFF. A driver
+            // handset has neither: it fails the TLS handshake before MQTT starts, and its session
+            // token would not help if it did.
+            //
+            // emqx.conf states the split outright: "the mobile plane keeps the JWT authenticator
+            // on 8084/1883 (E-02, D-21)". 8084 is `verify_none` MQTT-over-WSS, and the driver's
+            // JWT is what authenticates it there.
+            buildConfigField("int", "MQTT_PORT", "8084")
             buildConfigField("boolean", "MQTT_TLS", "true")
             buildConfigField("String", "PMTILES_URL", "\"https://tiles.mageride.lk/lk.pmtiles\"")
             buildConfigField("long", "INTEGRITY_CLOUD_PROJECT", "0L")
