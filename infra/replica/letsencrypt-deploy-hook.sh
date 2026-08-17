@@ -55,6 +55,34 @@ trap - EXIT
 
 echo "wrote $PEM from $LIVE_DIR"
 
+# --- EMQX's copy ----------------------------------------------------------------------
+# HAProxy passes 8883 and 8084 through at L4, so EMQX terminates that TLS ITSELF and needs
+# its own copy — the combined pem above is HAProxy's format and EMQX wants the halves
+# separately. Without this it serves the self-signed pair shipped in its image
+# (`C=CN, ST=hangzhou, O=EMQ, CN=Server`) and every mobile client refuses the handshake on
+# both an untrusted issuer and a hostname mismatch. This is the C125 debt emqx.conf names.
+#
+# uid 1000 is `emqx` inside emqx/emqx:5.8, as uid 99 is `haproxy` in its image. The key is
+# 600 and owned by that uid: a world-readable private key on a box with a public IP is not
+# made acceptable by the directory being mounted read-only.
+EMQX_CERT="$(dirname "$PEM")/platform-cert.pem"
+EMQX_KEY="$(dirname "$PEM")/platform-key.pem"
+
+install -m 0644 -o 1000 -g 1000 "$LIVE_DIR/fullchain.pem" "$EMQX_CERT"
+install -m 0600 -o 1000 -g 1000 "$LIVE_DIR/privkey.pem"   "$EMQX_KEY"
+echo "wrote $EMQX_CERT and $EMQX_KEY for emqx"
+
+# EMQX reads its listener certificates at listener start, so this is a RESTART and not a
+# reload — every MQTT session drops and reconnects. Acceptable at renewal cadence (~60 days)
+# and unavoidable without an operator-facing reload path; mobile clients reconnect on the
+# backoff ADD §18.2 already requires of them.
+EMQX_CONTAINER="${EMQX_CONTAINER:-mageride-replica-emqx-1}"
+if docker ps --format '{{.Names}}' | grep -qx "$EMQX_CONTAINER"; then
+  docker restart "$EMQX_CONTAINER" >/dev/null && echo "restarted $EMQX_CONTAINER for the new certificate"
+else
+  echo "note: $EMQX_CONTAINER is not running — it will read the new certificate at its next start"
+fi
+
 # SIGUSR2 to the master (-W -db) is a graceful reload: workers finish in-flight requests
 # and new ones pick up the new certificate. A restart would drop every WSS session the
 # fanout container is holding, which a certificate swap has no business doing.
