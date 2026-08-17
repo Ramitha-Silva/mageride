@@ -55,6 +55,43 @@ public sealed class FitSmsGatewayTests
         Assert.False(FitSmsGateway.IsAccepted(body, out _, out _));
     }
 
+    /// <summary>
+    /// v3 answers <c>data</c> as an ARRAY of one, with the id spelt <c>uid</c> rather than
+    /// <c>ruid</c>. AL-61 moved the platform to v3 after v4 began refusing an approved sender, so
+    /// the parser reads both and the endpoint stays a configuration choice.
+    /// </summary>
+    [Fact]
+    public void The_v3_array_shape_is_accepted_and_its_uid_is_the_message_id()
+    {
+        const string body = """
+            {"status":"success","message":"Message is scheduled successfully.",
+             "data":[{"uid":"6a82b0be23eb1","to":"94773137368","from":"The Change",
+                      "status":"Delivered","cost":"0.68","sms_count":1}]}
+            """;
+
+        Assert.True(FitSmsGateway.IsAccepted(body, out var reported, out var id));
+        Assert.Equal("success", reported);
+        Assert.Equal("6a82b0be23eb1", id);
+    }
+
+    /// <summary>An error under v3's shape is still an error — the envelope is the same.</summary>
+    [Fact]
+    public void A_v3_error_envelope_is_a_failure()
+    {
+        const string body = """{"status":"error","message":"Sender ID \"X\" is not authorized to send this message."}""";
+
+        Assert.False(FitSmsGateway.IsAccepted(body, out var reported, out _));
+        Assert.Equal("error", reported);
+    }
+
+    /// <summary>An empty v3 array carries no id, and that is not a failure.</summary>
+    [Fact]
+    public void An_empty_data_array_is_accepted_without_an_id()
+    {
+        Assert.True(FitSmsGateway.IsAccepted("""{"status":"success","data":[]}""", out _, out var id));
+        Assert.Null(id);
+    }
+
     /// <summary>A success with no <c>data</c> is still a success — the ruid is for tracing, not truth.</summary>
     [Fact]
     public void A_success_without_a_ruid_is_still_accepted()

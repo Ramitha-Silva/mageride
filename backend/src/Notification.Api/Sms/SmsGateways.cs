@@ -205,11 +205,28 @@ public sealed class FitSmsGateway(
                 return false;
             }
 
-            if (document.RootElement.TryGetProperty("data", out var data)
-                && data.ValueKind == JsonValueKind.Object
-                && data.TryGetProperty("ruid", out var id))
+            // `data` is an OBJECT on v4 (`{"ruid":…}`) and an ARRAY of one on v3
+            // (`[{"uid":…}]`), and the id is spelt differently in each. Reading both makes the
+            // endpoint a configuration choice rather than a code change — which matters here,
+            // because AL-61 moved to v3 after v4 began refusing an approved sender and v4 is
+            // where this account is expected to end up again.
+            if (document.RootElement.TryGetProperty("data", out var data))
             {
-                ruid = id.GetString();
+                var first = data.ValueKind == JsonValueKind.Array && data.GetArrayLength() > 0
+                    ? data[0]
+                    : data;
+
+                if (first.ValueKind == JsonValueKind.Object)
+                {
+                    if (first.TryGetProperty("ruid", out var v4Id))
+                    {
+                        ruid = v4Id.GetString();
+                    }
+                    else if (first.TryGetProperty("uid", out var v3Id))
+                    {
+                        ruid = v3Id.GetString();
+                    }
+                }
             }
 
             return true;

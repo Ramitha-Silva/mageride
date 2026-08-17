@@ -340,7 +340,7 @@ Retry/timeout: 90 s; settlement exceptions → Finance queue
 
 ### 7.3 SMS — Fit SMS + secondary (D-33, AL-60)   [REPLACE] (NY SMS/WhatsApp/Exotel)
 ```
-Primary:  Fit SMS v4 REST (https://app.fitsms.lk/api/v4/) — OTP, transactional, low-balance,
+Primary:  Fit SMS v3 REST (https://app.fitsms.lk/api/v3/) — OTP, transactional, low-balance,
           SOS, share links. THE PLATFORM'S ONLY SMS GATEWAY (AL-60; Notify.lk retired).
 Auth:     one bearer token, issued as {id}|{secret} — the pipe is part of the credential
 Send:     POST sms/send {recipient, sender_id, type, message, expiry_time}
@@ -357,6 +357,16 @@ Trace:    data.ruid is the id their GET sms/{ruid} traces an undelivered message
 SOS (D-33): primary + secondary gateway (Dialog/Mobitel) IN PARALLEL; p99 ≤ 5 s; whichever delivers first
 Retry: 2 attempts; OTP rate-limit 60 s resend, 5/h (D-32). No WhatsApp/Exotel (dropped).
 ```
+> **AL-61 (2026-08-17) — v3, not v4.** Fit SMS exposes THREE send surfaces and they do not behave
+> alike. `/api/v4/` and `/api/v3/` share the bearer-header auth; `/api/http/` takes the token as a
+> body parameter instead. v4 began answering an **approved** sender with `Sender ID "…" is not
+> authorized to send this message` while v3 accepted the same sender, on the same token, in the same
+> second — proven by sending through both. The platform posts to **v3**. The response shape is the
+> only other difference (`data` is an object with `ruid` on v4, an array of one with `uid` on v3)
+> and the client reads both, so returning to v4 is a base-URL change and nothing else. `/api/http/`
+> is deliberately unused: a token in the request body lands in logs that redact an `Authorization`
+> header.
+>
 > **AL-60 (2026-08-16).** The primary moved from Notify.lk to Fit SMS and the Notify.lk client is
 > **removed**, not left switchable: a gateway nobody holds credentials for is a code path no
 > deployment exercises and no test honestly covers. The **secondary** half of this section is
