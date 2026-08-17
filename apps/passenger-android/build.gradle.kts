@@ -74,14 +74,26 @@ android {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
 
-            // The dev gateway inside the emulator's loopback. Plain HTTP — see
-            // `usesCleartextTraffic` in the debug manifest, which is scoped to this variant only.
+            // The replica edge, NOT the emulator loopback.
+            //
+            // `http://10.0.2.2:5000` is the host machine's localhost as seen from inside an
+            // EMULATOR. On a physical handset it resolves to nothing, so every call times out and
+            // the app shows its generic "Something went wrong" — which is what a debug APK on a
+            // real phone did, with no request ever reaching the edge to explain it.
+            //
+            // Pointed at the replica so a debug build can be exercised on a real device. Revert
+            // to `http://10.0.2.2:5000` for emulator work against the local dev stack; the
+            // release variant below is unaffected either way.
+            //
             // The SignalR hub is on the same origin (`/hubs/live`), so there is one value here
-            // and not two.
-            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:5000\"")
-            // PMTiles archive for the map style. R2 in production (D2' §0.1); the dev stack
-            // serves the same archive off the compose `tiles` volume.
-            buildConfigField("String", "PMTILES_URL", "\"http://10.0.2.2:8080/lk.pmtiles\"")
+            // and not two. `usesCleartextTraffic` stays in the debug manifest for the PMTiles
+            // value below, which is still loopback.
+            buildConfigField("String", "API_BASE_URL", "\"https://api.mageride.lk\"")
+            // PMTiles archive for the map style, on the tile host rather than the emulator
+            // loopback — same reason as API_BASE_URL above: `10.0.2.2` is nothing on a physical
+            // handset, so the basemap renders blank while the markers still draw. Revert to
+            // `http://10.0.2.2:8080/lk.pmtiles` for emulator work against the local dev stack.
+            buildConfigField("String", "PMTILES_URL", "\"https://tiles.mageride.lk/lk.pmtiles\"")
             // Play Console cloud project number for Play Integrity (D-30). 0 means "this build
             // cannot attest", which `PlatformAttestationProvider` turns into a null header and
             // the gateway into a 401 — the intended failure mode, never a silent bypass.

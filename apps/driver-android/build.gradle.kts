@@ -70,15 +70,31 @@ android {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
 
-            // The dev gateway inside the emulator's loopback. Plain HTTP — see
-            // `usesCleartextTraffic` in the debug manifest, which is scoped to this variant only.
-            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:5000\"")
-            buildConfigField("String", "MQTT_HOST", "\"10.0.2.2\"")
-            buildConfigField("int", "MQTT_PORT", "1883")
-            buildConfigField("boolean", "MQTT_TLS", "false")
-            // PMTiles archive for the map style. R2 in production (D2' §0.1); the dev stack
-            // serves the same archive off the compose `tiles` volume.
-            buildConfigField("String", "PMTILES_URL", "\"http://10.0.2.2:8080/lk.pmtiles\"")
+            // The replica edge, NOT the emulator loopback.
+            //
+            // `10.0.2.2` is the host machine's localhost as seen from inside an EMULATOR. On a
+            // physical handset it resolves to nothing, so every call times out and the app shows
+            // its generic "Something went wrong" — with no request ever reaching the edge to
+            // explain it. Revert these to the 10.0.2.2 values for emulator work against the local
+            // dev stack; the release variant below is unaffected either way.
+            buildConfigField("String", "API_BASE_URL", "\"https://api.mageride.lk\"")
+            // MQTT-over-WSS at the replica edge, which HAProxy passes through to EMQX at L4.
+            //
+            // **8084, NOT 8883.** 8883 is the TRACKER plane: `verify_peer` +
+            // `fail_if_no_peer_cert`, so a client must present an X.509 certificate signed by the
+            // device CA — which a handset does not have and cannot get. emqx.conf says where a
+            // phone belongs: "the mobile plane keeps the JWT authenticator on 8084/1883". 8084 is
+            // `verify_none` and the driver's session JWT is what authenticates it.
+            //
+            // TLS is real here: EMQX terminates it with the platform certificate (AL-63), which
+            // carries `mqtt.mageride.lk`. Android refuses a self-signed one outright — no
+            // click-through — so this only works because that certificate is trusted.
+            buildConfigField("String", "MQTT_HOST", "\"mqtt.mageride.lk\"")
+            buildConfigField("int", "MQTT_PORT", "8084")
+            buildConfigField("boolean", "MQTT_TLS", "true")
+            // PMTiles archive for the map style, on the tile host rather than the loopback: the
+            // basemap otherwise renders blank on a device while the markers still draw.
+            buildConfigField("String", "PMTILES_URL", "\"https://tiles.mageride.lk/lk.pmtiles\"")
             // Play Console cloud project number for Play Integrity (D-30). 0 means "this build
             // cannot attest", which `PlatformAttestationProvider` turns into a null header and
             // the gateway into a 401 — the intended failure mode, never a silent bypass.
