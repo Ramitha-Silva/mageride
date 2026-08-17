@@ -96,7 +96,7 @@ public sealed class SmsOptions
     /// <c>AddSmsOptions</c> checks at start.
     /// </summary>
     [Required]
-    public string FitSmsSenderId { get; set; } = "The Change";
+    public string FitSmsSenderId { get; set; } = "MageRide";
 
     /// <summary>
     /// The <c>type</c> Fit SMS is told to send a non-ASCII body as.
