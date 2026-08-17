@@ -252,6 +252,10 @@ services:
     volumes:
       - emqxdata:/opt/emqx/data
       - ../deploy/emqx/emqx.conf:/opt/emqx/etc/emqx.conf:ro
+      # The platform certificate for 8883 and 8084. HAProxy passes both through at L4, so
+      # EMQX terminates that TLS itself and needs its own copy — read-only, and the key is
+      # 600 owned by uid 1000 (`emqx`), written by the Let's Encrypt deploy hook.
+      - ../deploy/certs:/opt/emqx/etc/platform-certs:ro
       - ../deploy/emqx/acl.conf:/opt/emqx/etc/mageride-acl.conf:ro
       # The device CA chain, generated on the host by infra/scripts/ensure-device-ca.sh. EMQX reads
       # certs/ca_chain.crt as its 8883 cacertfile at listener start, so it must exist before this
