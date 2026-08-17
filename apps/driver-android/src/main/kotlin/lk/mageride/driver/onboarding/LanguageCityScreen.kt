@@ -86,15 +86,19 @@ internal fun LanguageCityScreen(onContinue: () -> Unit, modifier: Modifier = Mod
                 label = stringResource(R.string.action_continue),
                 enabled = state.canContinue,
                 onClick = {
+                    // Navigate FIRST, then rebuild — in that order, always.
+                    //
+                    // Resources are resolved once per configuration, so a language chosen after
+                    // that has no effect until the Activity is rebuilt. But `recreate()` does NOT
+                    // send the app back through the splash: `rememberNavController` saves its back
+                    // stack through `rememberSaveable` and restores it, so the app returns to
+                    // whatever was on top — which, if we recreated without moving first, was this
+                    // screen. Continue rebuilt SCR-DA-002 and went nowhere. Moving to Login first
+                    // is what puts Login in the state that gets restored.
                     val languageChanged = viewModel.confirm()
-                    if (languageChanged) {
-                        // Resources are resolved once per configuration; a language chosen after
-                        // that has no effect until the Activity is rebuilt. The splash re-routes
-                        // straight back to where Continue was going.
-                        context.findActivity()?.recreate() ?: onContinue()
-                    } else {
-                        onContinue()
-                    }
+                    onContinue()
+                    // No Activity means a `@Preview`; the navigation above is then all there is.
+                    if (languageChanged) context.findActivity()?.recreate()
                 },
                 modifier = Modifier.padding(top = MageRideTheme.spacing.xs),
             )

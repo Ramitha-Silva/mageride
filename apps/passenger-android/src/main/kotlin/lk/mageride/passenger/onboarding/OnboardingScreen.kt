@@ -52,16 +52,23 @@ internal fun OnboardingScreen(onContinue: () -> Unit, model: OnboardingViewModel
     val pager = rememberPagerState(pageCount = { slides.size })
 
     val finish: () -> Unit = {
+        // Navigate FIRST, then rebuild — in that order, always.
+        //
         // A language change only reaches `Resources` through `MainActivity.attachBaseContext`, so
-        // the Activity is rebuilt before the next screen is drawn — otherwise a passenger who
-        // picked සිංහල meets an English login screen. `recreate()` re-enters the graph at the
-        // splash, which routes straight back here and then on, now in the chosen language.
-        if (model.finish()) {
-            // No Activity means a `@Preview`; continuing is the only sensible thing left.
-            context.findActivity()?.recreate() ?: onContinue()
-        } else {
-            onContinue()
-        }
+        // the Activity has to be recreated before the next screen is drawn, or a passenger who
+        // picked සිංහල meets an English login screen.
+        //
+        // But `recreate()` does NOT re-enter the graph at the splash. `rememberNavController`
+        // saves its back stack through `rememberSaveable` and restores it, so the app comes back
+        // to whatever was on top — which, if we recreated without moving first, was this screen.
+        // And `recreate()` retains view models the way a configuration change does, so the same
+        // `OnboardingViewModel` came back still holding `renderingLanguage = null` and still
+        // answering "yes, rebuild" to the next tap. Get Started rebuilt the screen and went
+        // nowhere, forever. Moving to Login first puts Login in the state that gets restored.
+        val rebuild = model.finish()
+        onContinue()
+        // No Activity means a `@Preview`; the navigation above is then all there is to do.
+        if (rebuild) context.findActivity()?.recreate()
     }
 
     Column(
