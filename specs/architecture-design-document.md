@@ -397,6 +397,22 @@ That leaves one question: on a card payment, **whose account does a ride fare la
 **The rule the three changes reduce to, stated once:** *OnePay and the platform's own LankaQR merchant are used only where **MageRide is the payee**. Where the payee is a driver or a fleet owner, the rail is the payee's own bank instrument, and the platform never touches the money — except on the `wallet` rail, where it takes custody deliberately and discharges it through AL-58's payout run.*
 
 
+### 1.20 Remediation Log (ADD v3.8 — SMS endpoint change set 2026-08-17, 1 change)
+
+**Trigger — an approved sender refused by one endpoint and accepted by another.** AL-60 built
+against Fit SMS **v4**, which their documentation presents as current, and it delivered. A day
+later v4 answered every send with `Sender ID "…" is not authorized to send this message` — for a
+sender the account showed as **Active**, with LKR 247 of credit and a token that still
+authenticated.
+
+| ID | Change request | Architecture resolution | Section / mapping |
+|---|---|---|---|
+| AL-61 | Fit SMS v4 refuses an approved sender. The account has three send surfaces and they do not behave alike | **The platform posts to `/api/v3/sms/send`.** Proven by sending the identical request through each surface in the same minute: `/api/v4/` (bearer header) → refused; `/api/v3/` (bearer header) → **Delivered**; `/api/http/` (token in the BODY) → **Delivered**. v3 keeps the credential in the `Authorization` header, which is why it is preferred over `/api/http/` — a token in a request body lands in logs that redact a header. The only other difference is the response: `data` is an object carrying `ruid` on v4 and an array of one carrying `uid` on v3, so **the client parses both** and returning to v4 is a base-URL change with no code edit. v3 answers `status: "Delivered"` synchronously where v4 answered `"pending"`, and ignores `expiry_time` | D6' §7.3; `Sms__FitSmsBaseUrl`; §6 `iam-svc` / `notification-svc` |
+
+> ⚠ **Raise with the vendor.** v4 is their documented current API and it is refusing a sender its
+> own v3 accepts on the same credential. This resolution unblocks the platform; it does not
+> establish that v4 is wrong to be avoided permanently.
+
 ### 1.19 Remediation Log (ADD v3.7 — SMS gateway change set 2026-08-16, 1 change)
 
 **Trigger — the account moved.** D6' §7.3 named **Notify.lk** as the primary SMS transport and the

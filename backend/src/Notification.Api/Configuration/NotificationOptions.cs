@@ -332,7 +332,7 @@ public sealed class SmsOptions
     /// in a slash.
     /// </summary>
     [Required]
-    public string FitSmsBaseUrl { get; set; } = "https://app.fitsms.lk/api/v4/";
+    public string FitSmsBaseUrl { get; set; } = "https://app.fitsms.lk/api/v3/";
 
     /// <summary>
     /// Fit SMS bearer token — <c>Sms__FitSmsApiToken</c>. Issued as <c>{id}|{secret}</c>, and the

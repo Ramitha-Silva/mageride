@@ -66,11 +66,23 @@ public sealed class SmsOptions
     public string Provider { get; set; } = DevProvider;
 
     /// <summary>
-    /// Fit SMS v4 REST base address. The sender posts <c>sms/send</c> relative to it, so it ends
-    /// in a slash — see <see cref="MageRide.Iam.Otp.FitSmsOtpSender"/>.
+    /// Fit SMS REST base address. The sender posts <c>sms/send</c> relative to it, so it ends in a
+    /// slash — see <see cref="MageRide.Iam.Otp.FitSmsOtpSender"/>.
     /// </summary>
+    /// <remarks>
+    /// <b>v3, not v4 (AL-61.)</b> Their v4 began answering an APPROVED sender with
+    /// <c>Sender ID "…" is not authorized to send this message</c> while v3 accepted the same
+    /// sender, on the same token, in the same second — demonstrated by sending through both. v3
+    /// and v4 share the bearer-header authentication; only the response shape differs, and the
+    /// parser reads both, so moving back to v4 is this one string.
+    /// <para>
+    /// Their third surface, the HTTP API at <c>/api/http/</c>, also works but takes the token as a
+    /// BODY parameter — which puts a credential somewhere request logging does not redact the way
+    /// it redacts an <c>Authorization</c> header. Not used for that reason.
+    /// </para>
+    /// </remarks>
     [Required]
-    public string FitSmsBaseUrl { get; set; } = "https://app.fitsms.lk/api/v4/";
+    public string FitSmsBaseUrl { get; set; } = "https://app.fitsms.lk/api/v3/";
 
     /// <summary>
     /// Fit SMS bearer token — D7' §4.2's <c>Sms__FitSmsApiToken</c>. Their tokens are issued in the
