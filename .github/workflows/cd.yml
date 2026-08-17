@@ -125,6 +125,11 @@ jobs:
       reason: automatic on main
     permissions:
       contents: write
+      # The callee promotes through a PR (it cannot push to main — `Protect main` forbids it and
+      # the Actions app cannot be a bypass actor on a personal repo), so it opens and merges one.
+      # A reusable workflow may not request MORE than its caller grants: without this the run ends
+      # in `startup_failure` before a single job is scheduled, which is what happened on 29410da.
+      pull-requests: write
     secrets: inherit
 
   # ===================================================================================
@@ -145,6 +150,11 @@ jobs:
       reason: automatic on main
     permissions:
       contents: write
+      # The callee promotes through a PR (it cannot push to main — `Protect main` forbids it and
+      # the Actions app cannot be a bypass actor on a personal repo), so it opens and merges one.
+      # A reusable workflow may not request MORE than its caller grants: without this the run ends
+      # in `startup_failure` before a single job is scheduled, which is what happened on 29410da.
+      pull-requests: write
     secrets: inherit
 
   # ===================================================================================
