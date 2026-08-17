@@ -249,6 +249,21 @@ services:
       # key is MECHANISM, not TYPE — D7' §4.2's spelling does not work and the deviation is
       # recorded in infra/CLAUDE.md.
       EMQX_AUTHENTICATION__1__SECRET: ${MQTT_JWT_SECRET:?the replica needs an MQTT JWT secret}
+
+      # --- the platform certificate on both TLS listeners (AL-63) -----------------------
+      # HAProxy passes 8883 and 8084 through at L4, so EMQX terminates that TLS itself and
+      # was doing it with the self-signed pair in its image (`O=EMQ, CN=Server`). A mobile
+      # client refuses that outright — untrusted issuer AND hostname mismatch, no
+      # click-through — so no handset could ever use 8084, which is the mobile plane.
+      #
+      # AN ENV OVERRIDE, NOT A PATH IN emqx.conf. That file is mounted into the dev slim
+      # stack and into MageRide.TestKit's EMQX fixture as well, and neither has a Let's
+      # Encrypt certificate: pointing the config itself at one fails both with `no_cert`,
+      # which is exactly what CI caught. The override belongs where the certificate exists.
+      EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CERTFILE: /opt/emqx/etc/platform-certs/platform-cert.pem
+      EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__KEYFILE: /opt/emqx/etc/platform-certs/platform-key.pem
+      EMQX_LISTENERS__WSS__DEFAULT__SSL_OPTIONS__CERTFILE: /opt/emqx/etc/platform-certs/platform-cert.pem
+      EMQX_LISTENERS__WSS__DEFAULT__SSL_OPTIONS__KEYFILE: /opt/emqx/etc/platform-certs/platform-key.pem
     volumes:
       - emqxdata:/opt/emqx/data
       - ../deploy/emqx/emqx.conf:/opt/emqx/etc/emqx.conf:ro
