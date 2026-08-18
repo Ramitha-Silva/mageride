@@ -33,8 +33,16 @@ final class MapAndVehicleTokenTests: XCTestCase {
         XCTAssertEqual(light, dark)
         XCTAssertEqual(
             light,
-            ["background", "earth", "landuse", "water", "roads-casing", "roads", "buildings", "boundaries", "places"],
-            "the same nine layers as apps/driver-android/src/main/res/raw/map_style_light.json"
+            [
+                "background", "earth", "landuse", "water", "waterway",
+                "buildings", "buildings-outline",
+                "roads-minor-casing", "roads-minor", "paths",
+                "roads-major-casing", "roads-major",
+                "railway", "railway-hatch", "boundaries",
+                "water-labels", "road-labels", "road-shields", "railway-labels",
+                "pois", "places",
+            ],
+            "the same twenty-one layers as apps/driver-android/src/main/res/raw/map_style_light.json"
         )
     }
 
