@@ -86,11 +86,17 @@ internal data class AddressSheetState(
  *
  * @property pin Where the map's fixed centre marker is. `null` until the first fix or the first
  *   camera settle — the map opens on its default centre and the CTA waits for one.
+ * @property fix Where the PASSENGER is, which is a different question from where the pin is: the
+ *   pin follows the map and is the whole point of the screen, so the fix has to be kept beside it
+ *   or the recentre control would have nothing to return to. Read once with the opening fix (see
+ *   [SavedAddressesViewModel.openOnFirstFix]) rather than subscribed — a picker is a few seconds
+ *   of standing still, and the app already forbids a second collector on the fused provider.
  * @property sheet SCR-PA-026a, or `null` when it is closed.
  */
 internal data class SavedAddressesState(
     val addresses: List<SavedAddress> = emptyList(),
     val pin: GeoPoint? = null,
+    val fix: GeoPoint? = null,
     val loading: Boolean = true,
     val sheet: AddressSheetState? = null,
     val busyWith: Ulid? = null,
@@ -369,9 +375,14 @@ internal class SavedAddressesViewModel(
         return if (position < 0) others + saved else others.take(position) + saved + others.drop(position)
     }
 
-    /** The first fix, as the map's opening centre. Nothing is drawn from it afterwards. */
+    /**
+     * The first fix — the map's opening centre, and what the recentre control returns to.
+     *
+     * `pin` takes it only if nothing has moved the map yet; `fix` takes it outright, because it
+     * answers "where is the passenger" and that does not change when they pan the map away.
+     */
     private suspend fun openOnFirstFix() {
-        val fix = locations.fixes.first()
-        mutableState.update { current -> current.copy(pin = current.pin ?: fix.asPoint()) }
+        val point = locations.fixes.first().asPoint()
+        mutableState.update { current -> current.copy(pin = current.pin ?: point, fix = point) }
     }
 }

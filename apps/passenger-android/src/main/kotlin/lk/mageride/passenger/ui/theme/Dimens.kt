@@ -141,6 +141,20 @@ internal object ControlTokens {
     val SheetHandleWidthLarge: Dp = 34.dp
 
     /**
+     * SCR-PA-010's map — a FIXED height, which is the whole point of the token.
+     *
+     * The map used to take `weight(1f)` under the sheet, so every recent destination that arrived
+     * pushed the sheet taller and stole the same height from the map: a passenger with four
+     * recents was looking at half the map a passenger with none saw, and nothing on screen
+     * explained why. The map is the screen, so it is the sheet that has to move instead — it now
+     * grows past the fold and the screen scrolls.
+     *
+     * 340 dp keeps the ~3 km R-06 view legible on the 640 dp handsets this platform targets while
+     * still leaving the search bar and the shortcut chips above the fold on the 480 dp floor.
+     */
+    val HomeMap: Dp = 340.dp
+
+    /**
      * The map inside a modal picker (C079's `MapPickSheet`).
      *
      * Tall enough to orient by, short enough to leave the form behind the sheet visible — a picker
@@ -165,12 +179,16 @@ internal object ControlTokens {
      * SCR-PA-026's pin map, between the address rows and the CTA.
      *
      * The wireframe gives it `flex:0 0 100px` inside a 560 px phone — about a fifth of the screen.
-     * Rounded **up** to 180 dp rather than transcribed: this map is a control, not an illustration,
-     * and 100 px of a 640 dp handset leaves a pin-drop target a thumb covers entirely. It is still
-     * a strip under the list rather than the full-bleed map SCR-PA-010 draws, which is the
-     * proportion the wireframe is actually fixing.
+     * Rounded **up** to 180 dp rather than transcribed, and then **doubled to 360**: this map is a
+     * control, not an illustration. At 180 dp a passenger dropping a pin could see the junction
+     * they were aiming at or the pin itself, but not both, and the fix is height rather than a
+     * gesture. Doubling it is what makes the zoom and recentre controls beside it worth having —
+     * a strip half this tall would be mostly buttons.
+     *
+     * Still a panel under the address rows rather than the full-bleed map SCR-PA-010 draws, which
+     * is the proportion the wireframe is actually fixing; the screen already scrolls.
      */
-    val InlineMap: Dp = 180.dp
+    val InlineMap: Dp = 360.dp
 
     // ---- C084 · the call, the alarm and support -----------------------------------------
 

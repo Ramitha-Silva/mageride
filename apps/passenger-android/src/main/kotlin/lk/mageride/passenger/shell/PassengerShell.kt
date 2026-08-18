@@ -179,10 +179,19 @@ internal fun PassengerShell(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        // Swipe-to-open is off everywhere but the three tabs: SCR-PA-017's QR camera and
-        // SCR-PA-029's alarm are full-screen takeovers, and a drawer that could be dragged out
-        // from the left edge of either is a drawer in front of something urgent.
-        gesturesEnabled = drawerState.isOpen || isTabRoute(currentPath),
+        // **Swipe-to-open is off everywhere. The `≡` is the only way in.**
+        //
+        // It used to be on for the three tab routes, and SCR-PA-010 is one of them — so the
+        // drawer's edge drag and the map's pan were arbitrating for the same horizontal gesture
+        // over a full-width map. Dragging left-to-right pulled the drawer out instead of panning
+        // west, and right-to-left crawled because the drawer's draggable was taking its share of
+        // a gesture it could not use. A map is the whole screen here; the drawer cannot have the
+        // horizontal axis as well.
+        //
+        // `isOpen` keeps the CLOSING swipe, which costs nothing: once the drawer is out it is the
+        // thing under the finger, and a panel that opens by tap but refuses to be pushed back is
+        // the more surprising half of the pair.
+        gesturesEnabled = drawerState.isOpen,
         drawerContent = {
             PassengerDrawerSheet(
                 onOpen = { route ->

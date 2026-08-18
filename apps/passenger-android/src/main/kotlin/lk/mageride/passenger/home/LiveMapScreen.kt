@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.History
@@ -69,6 +70,18 @@ import org.koin.androidx.compose.koinViewModel
  *
  * SCR-PA-006 and SCR-PA-007 are modal sheets over this map and are hosted here for the same reason
  * — both are drawn over it in the wireframe, and neither has a back-stack entry.
+ *
+ * **The map is PINNED at a fixed height and the sheet below it scrolls.** The two used to be the
+ * other way round: the map took `weight(1f)` above a wrap-content sheet, so the sheet's growth
+ * came straight out of the map — the first recent destination halved it, and a passenger with a
+ * full history got a strip. `ControlTokens.HomeMap` is the height now, and the recents scroll
+ * inside [HomeSheet] instead of eating the thing the screen is named after.
+ *
+ * **The map is deliberately OUTSIDE the scrolling container**, which is not a layout preference.
+ * A `MapView` inside a `verticalScroll` takes focus when it or a control on it is touched, and
+ * the scroll container then brings it into view — so tapping `＋` while the recents were scrolled
+ * up snapped the page back to the top, once per tap. Keeping the scroll to the sheet also leaves
+ * every one-finger drag on the map to the map, which is what pan is.
  */
 @Composable
 @Suppress("LongMethod") // The wireframe's layout tree: app bar, map, sheet, and two modal sheets.
@@ -122,7 +135,11 @@ internal fun LiveMapScreen(
             }
         }
 
-        Box(modifier = Modifier.weight(1f)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(ControlTokens.HomeMap),
+        ) {
             MageRideMap(
                 modifier = Modifier.fillMaxSize(),
                 vehicles = state.vehicles,
@@ -141,6 +158,9 @@ internal fun LiveMapScreen(
                         is MarkerTap.ShowPopup, MarkerTap.Ignored -> Unit
                     }
                 },
+                // Pinch still works — the map owns every gesture on it. These are the
+                // one-handed and the accessible way to the same thing.
+                zoomControls = true,
                 dimmed = state.stale,
             )
 
@@ -155,6 +175,7 @@ internal fun LiveMapScreen(
         }
 
         HomeSheet(
+            modifier = Modifier.weight(1f),
             shortcuts = state.shortcuts,
             recents = state.recents,
             onSearch = onSearch,
@@ -192,9 +213,10 @@ private fun HomeSheet(
     onShortcut: (SavedAddress) -> Unit,
     onAddAddress: () -> Unit,
     onRecent: (GeocodedPlace) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.background,
         shape = RoundedCornerShape(
             topStart = MageRideTheme.radius.card,
@@ -205,6 +227,7 @@ private fun HomeSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(MageRideTheme.spacing.sm),
             verticalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.xs),
             horizontalAlignment = Alignment.CenterHorizontally,
