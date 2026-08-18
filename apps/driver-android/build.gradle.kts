@@ -1,3 +1,5 @@
+import javax.inject.Inject
+
 // MageRide — Driver Android application shell (C067 driver-android-shell).
 //
 // The host every screen group plugs into: theme, trilingual resources, navigation, the map, the
@@ -21,6 +23,118 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.detekt)
     alias(libs.plugins.ktlint)
+}
+
+// ---------------------------------------------------------------------------------------
+// C017's H3 native library, lifted out of the jar and packaged as a real JNI lib.
+//
+// **Nothing in this app injects an `H3Grid` yet** — geocell subscription is the passenger's view
+// (R-06), and a driver publishes position over MQTT rather than subscribing to cells. This block
+// is here so that the day one does, it works, because `com.uber:h3` is ALREADY on this app's
+// runtime classpath (`:shared`'s androidMain declares it `implementation`) and the failure it
+// would otherwise produce is a process kill rather than a missing-class error anyone could read.
+//
+// `com.uber:h3` carries its natives as ORDINARY JAR RESOURCES — `/android-arm64/libh3-java.so`,
+// `/linux-x64/libh3-java.so`, `/windows-x64/libh3-java.dll` and ten more — and
+// `H3Core.newInstance()` unpacks whichever matches the running ABI to a temp file and
+// `System.load`s it. That works on a desktop JVM, which is why `:shared`'s tests and the e2e
+// harness exercise the real grid and pass; it can NEVER work inside an APK:
+//
+//   * AGP's java-resource merger drops every `*.so` outright — native libraries are
+//     `MergeNativeLibsTask`'s job, not a resource's.
+//   * `MergeNativeLibsTask` only recognises `lib/<abi>/*.so` inside a jar, which
+//     `android-arm64/libh3-java.so` is not.
+//
+// So an APK ships 1.5 MB of macOS `.dylib` and Windows `.dll` (neither matches `*.so`) while the
+// one file Android actually needs is silently absent, and the first `grid.cellAt()` dies with
+// `UnsatisfiedLinkError: No native resource found at /android-arm64/libh3-java.so` on whichever
+// dispatcher worker asked. The passenger app hit exactly that after a location grant.
+//
+// The fix is a jniLibs tree under the ABI names Android uses, loaded with `System.loadLibrary`
+// (`H3Core.newSystemInstance()`); see `PlatformH3Grid.jvmShared.kt`, which keeps the unpack path
+// as its fallback so the JVM target is unaffected.
+//
+// h3 4.4.0 ships `android-arm64` and `android-arm` and nothing else — there is no x86 or x86_64
+// native, so an EMULATOR has no H3 whatever this task does. Any future caller here must treat a
+// missing engine as a degraded feature rather than something to throw through a coroutine, the
+// way `PassengerLiveMap.geocells` does.
+// ---------------------------------------------------------------------------------------
+val h3NativeLib = configurations.dependencyScope("h3NativeLib")
+
+val h3NativeLibPath = configurations.resolvable("h3NativeLibPath") {
+    extendsFrom(h3NativeLib.get())
+    // The natives are all this needs; h3's classes reach the app through `:shared`.
+    isTransitive = false
+}
+
+dependencies {
+    add(h3NativeLib.name, libs.h3)
+}
+
+/**
+ * Copies `<h3-dir>/libh3-java.so` out of the jar and back in under `<abi>/libh3-java.so`.
+ *
+ * A task type rather than a plain `Sync` because AGP 9 refuses a bare `TaskProvider` on the
+ * SourceSet API — a generated source directory has to be wired through the Variant API, and that
+ * wants a task with a `DirectoryProperty` output it can place itself.
+ */
+abstract class ExtractH3Natives : DefaultTask() {
+
+    /** The `com.uber:h3` jar. A file collection so the resolution stays lazy. */
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val h3Jar: ConfigurableFileCollection
+
+    /** Set by AGP through `addGeneratedSourceDirectory` — do not point this anywhere by hand. */
+    @get:OutputDirectory
+    abstract val jniLibs: DirectoryProperty
+
+    @get:Inject
+    abstract val archives: ArchiveOperations
+
+    @get:Inject
+    abstract val files: FileSystemOperations
+
+    @TaskAction
+    fun extract() {
+        files.sync {
+            from(archives.zipTree(h3Jar.singleFile)) {
+                include(ABI_DIRS.keys.map { "$it/$LIB_NAME" })
+                eachFile { path = "${ABI_DIRS.getValue(path.substringBefore('/'))}/$name" }
+            }
+            includeEmptyDirs = false
+            into(jniLibs)
+        }
+    }
+
+    private companion object {
+
+        const val LIB_NAME = "libh3-java.so"
+
+        /**
+         * h3's own directory names on the left, Android's ABI names on the right.
+         *
+         * Nothing renames these for us: the jar was built for a desktop unpacker that never had
+         * to care what an APK calls an ABI. An entry missing from the jar is simply not copied —
+         * h3 4.4.0 has no x86 or x86_64 Android native at all.
+         */
+        val ABI_DIRS = mapOf(
+            "android-arm64" to "arm64-v8a",
+            "android-arm" to "armeabi-v7a",
+        )
+    }
+}
+
+val extractH3Natives = tasks.register<ExtractH3Natives>("extractH3Natives") {
+    description = "Unpacks libh3-java.so out of com.uber:h3 into a jniLibs tree AGP will package."
+    h3Jar.from(h3NativeLibPath)
+}
+
+// `lib/<abi>/libh3-java.so` in every variant, which is the only place `System.loadLibrary` looks.
+androidComponents {
+    onVariants { variant ->
+        variant.sources.jniLibs?.addGeneratedSourceDirectory(extractH3Natives, ExtractH3Natives::jniLibs)
+    }
 }
 
 android {
@@ -145,6 +259,13 @@ android {
                 "META-INF/LICENSE*",
                 "META-INF/NOTICE*",
                 "META-INF/io.netty.versions.properties",
+                // `com.uber:h3`'s desktop natives, ~1.5 MB of macOS and Windows binaries that an
+                // APK can never load. They arrive through `:shared` and survived only because
+                // AGP's resource merger filters `*.so` and these are not `.so` — see the
+                // `extractH3Natives` note above, which is where the file Android DOES need
+                // comes from.
+                "darwin-*/**",
+                "windows-*/**",
             )
         }
     }

@@ -251,6 +251,19 @@ src/androidHostTest/  JVM-only tests of the Android actuals (NOT `androidUnitTes
   module can because it is appended after `sharedModules`. Everything else in these packages is
   common code and needs no engine. The index *layout* — resolution, base cell, the `7` markers — is
   read in common Kotlin by `H3Cell` and checked against the library in `AndroidH3GridTest`.
+- **The H3 native reaches Android from the APK's `lib/<abi>/`, never from the jar — and nothing in
+  this module can catch it when that breaks.** `com.uber:h3` ships its natives as ordinary jar
+  RESOURCES (`android-arm64/libh3-java.so`, `windows-x64/libh3-java.dll`, eleven more) and
+  `H3Core.newInstance()` unpacks whichever matches the running ABI at runtime — which is exactly
+  what `AndroidH3GridTest` exercises, because it runs on the **desktop JVM** off the plain jar,
+  where that path works perfectly. Inside an APK it cannot work at all: AGP's java-resource merger
+  drops every `*.so`, and the native-lib merger only recognises `lib/<abi>/*.so`. So `H3JavaGrid`
+  tries `newSystemInstance()` (`System.loadLibrary`) first, and each Android app repackages the
+  `.so` into a jniLibs tree with its own `extractH3Natives` task. **A green `AndroidH3GridTest`
+  says the cell ids are right and says nothing about whether an app can load the library at all**
+  — which is how the passenger app shipped a process kill on the first `cellAt` after a location
+  grant. h3 4.4.0 has no x86/x86_64 Android native either, so an emulator has none regardless; a
+  caller must degrade rather than throw.
 - **Group churn is held for 30 s after a boundary crossing, and a reconnect is not churn.**
   `GeoCellSubscription` applies the first crossing immediately, then holds; crossing back cancels
   the held one. `onReconnected()` re-joins everything regardless — after a drop the server holds no
@@ -386,10 +399,12 @@ src/androidHostTest/  JVM-only tests of the Android actuals (NOT `androidUnitTes
   App Attest comes from Kotlin/Native's `DeviceCheck` platform library, and the Keychain from
   `Security`.
 - **`com.uber:h3` is JNI, not Kotlin Multiplatform.** Its jar carries android-arm/arm64, linux
-  and darwin natives and no klib, so it is an **androidMain-only** dependency (applied by C017,
-  `implementation` — `H3JavaGrid` is internal and the public surface is our own `H3Grid`). The iOS
-  side needs cinterop against an H3 built for `ios-arm64`, which cannot be produced on this Linux
-  host: `platformH3Grid()` therefore answers `null` on iOS and C085/C094 bind their own.
+  and darwin natives and no klib, so it lives on the JVM side of the hierarchy — `androidMain` and
+  `jvmSharedMain` both declare it (C017 and C025, `implementation` — `H3JavaGrid` is internal and
+  the public surface is our own `H3Grid`). **Those jar natives do not reach an APK**; an app has to
+  repackage the `.so` into jniLibs itself, and both Android apps do — see the geo section above.
+  The iOS side needs cinterop against an H3 built for `ios-arm64`, which cannot be produced on this
+  Linux host: `platformH3Grid()` therefore answers `null` on iOS and C085/C094 bind their own.
 - **SQLDelight is `api` in commonMain** (C018): `SqlDriver`, `ColumnAdapter` and the generated
   `MageRide*Database` types are all in this module's public surface, because an app builds the driver
   and holds the database. The platform drivers are `implementation` — no androidx.sqlite or SQLiter
@@ -418,7 +433,11 @@ server or in CI can do without an emulator.
 - **`jvmShared` is a real intermediate source set**, holding the two `actual`s that are identical on
   Android and the JVM and must stay that way: `platformH3Grid()` (its cell ids have to match the ones
   `MageRide.Shared.Geo` computes server-side, or a passenger joins `cell:{h3index}` groups nothing
-  publishes to) and `secureRandomBytes`. Both moved out of `androidMain`.
+  publishes to) and `secureRandomBytes`. Both moved out of `androidMain`. It is also why
+  `H3JavaGrid` carries **two** load paths rather than a platform check: Android reaches the native
+  through `System.loadLibrary` off the APK's jniLibs, the JVM unpacks it from the jar, and the
+  loader tries the first and falls back to the second. An `if (isAndroid)` here would be a seam
+  inside the source set that exists to have none.
 - **It is declared by EXTENDING the default hierarchy template**, never by calling `dependsOn` by
   hand. A manual `androidMain.dependsOn(...)` makes the plugin drop the default template entirely,
   and the first casualty is silent: `iosMain` stops belonging to any compilation and the three iOS

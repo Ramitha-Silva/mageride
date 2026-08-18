@@ -1,5 +1,6 @@
 package lk.mageride.passenger.live
 
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -18,6 +19,7 @@ import lk.mageride.shared.data.models.Timestamp
 import lk.mageride.shared.data.models.Ulid
 import lk.mageride.shared.domain.geo.H3Cell
 import lk.mageride.shared.domain.geo.H3Grid
+import lk.mageride.shared.domain.geo.H3GridUnavailableException
 import lk.mageride.shared.realtime.DriverPosition
 import lk.mageride.shared.realtime.LiveHub
 import lk.mageride.shared.realtime.LocationRequestResolved
@@ -89,6 +91,7 @@ internal sealed interface LiveEvent {
  * @param now Wall clock, injected — the boundary hysteresis is a comparison against it.
  * @param newBackoff Overridable so a test can assert the curve rather than sleep through it.
  */
+@Suppress("TooManyFunctions") // Nine entry points a screen calls, the supervision loop, one guard.
 internal class PassengerLiveMap(
     private val transport: LiveHubTransport,
     query: QueryApi,
@@ -130,6 +133,22 @@ internal class PassengerLiveMap(
     private var lastPoint: GeoPoint? = null
 
     /**
+     * Set once the platform turns out to have no H3 engine, after which the geocell plane is off
+     * for the life of the process.
+     *
+     * A missing native library never turns up later, so retrying on every fix would be one crash
+     * per second rather than one. What is lost is the nineteen-cell subscription and with it every
+     * vehicle on the map; what is KEPT is the rest of the app — the socket, the ride and package
+     * events, booking, and the passenger's own blue dot, none of which need a cell id. Killing the
+     * process instead loses all of that too.
+     *
+     * `com.uber:h3` ships arm64 and arm natives only, so an x86_64 emulator is the ordinary way to
+     * reach this; see `extractH3Natives` in the app's build script.
+     */
+    @Volatile
+    private var gridUnavailable = false
+
+    /**
      * Opens the connection and keeps it open until [disconnect].
      *
      * Idempotent: a second call while a supervisor is already running does nothing, which is what
@@ -155,14 +174,14 @@ internal class PassengerLiveMap(
     fun onPosition(point: GeoPoint) {
         scope.launch {
             lastPoint = point
-            subscriptions.onPosition(point)?.let { inbox.retainCells(it) }
+            geocells { subscriptions.onPosition(point)?.let { inbox.retainCells(it) } }
         }
     }
 
     /** Re-evaluates a held boundary crossing without a new fix. See [HubSubscriptions.refresh]. */
     fun refreshCells() {
         scope.launch {
-            subscriptions.refresh()?.let { inbox.retainCells(it) }
+            geocells { subscriptions.refresh()?.let { inbox.retainCells(it) } }
         }
     }
 
@@ -198,6 +217,26 @@ internal class PassengerLiveMap(
     /** Stops rejoining [requestId]. Called on resolve, or on the 300 s expiry (P-02). */
     fun stopWatchingLocationRequest(requestId: Ulid) {
         scope.launch { subscriptions.stopWatchingLocationRequest(requestId) }
+    }
+
+    /**
+     * Runs the one step that needs the H3 engine, and shuts the geocell plane down for good if the
+     * platform has none. See [gridUnavailable].
+     *
+     * The scope this class is given is `SupervisorJob() + Dispatchers.Default`, and a supervisor
+     * job stops a failed child cancelling its siblings — it does NOT stop the failure reaching the
+     * thread's default handler. Every `H3Grid` call in this class is inside a `scope.launch`, so
+     * without this an absent native library is a `FATAL EXCEPTION` on a dispatcher worker.
+     */
+    private suspend fun geocells(step: suspend () -> Unit) {
+        if (gridUnavailable) return
+        try {
+            step()
+        } catch (noGrid: H3GridUnavailableException) {
+            gridUnavailable = true
+            // The one thing worse than an empty map is an empty map with no error anywhere.
+            Log.e(TAG, "No H3 engine on this device — the live map will show no vehicles.", noGrid)
+        }
     }
 
     private suspend fun supervise() {
@@ -243,6 +282,8 @@ internal class PassengerLiveMap(
     }
 
     internal companion object {
+
+        private const val TAG = "PassengerLiveMap"
 
         /** The seven server → client events of `signalr-hub.md` §3. */
         val HUB_EVENTS: Set<String> = setOf(
