@@ -364,6 +364,20 @@ lk.mageride.driver
   `android-sdk` artifact requires Vulkan 1.0 in its manifest, which Play uses to filter devices —
   on the Android 8.0 floor that cuts off exactly the budget handsets this platform is for. Do not
   add `android-sdk-ktx`: it depends on the default artifact and fails `checkDuplicateClasses`.
+- **`com.uber:h3` is already on this app's runtime classpath, and its native library does not
+  survive an APK on its own.** Nothing here injects an `H3Grid` yet — geocell subscription is the
+  *passenger's* view (R-06) and a driver publishes position over MQTT — but `:shared`'s androidMain
+  declares `implementation(libs.h3)`, so the day a screen here takes one, the failure is a process
+  kill rather than a readable missing-class error. The jar carries its natives as ordinary
+  RESOURCES — `android-arm64/libh3-java.so`, `windows-x64/libh3-java.dll` and eleven more — and
+  `H3Core.newInstance()` unpacks whichever matches the running ABI at runtime: fine on the desktop
+  JVM `:shared`'s tests run on, impossible inside an APK, because AGP's java-resource merger drops
+  every `*.so` and the native-lib merger only recognises `lib/<abi>/*.so`. `extractH3Natives` in
+  the build script repackages the `.so` into a real jniLibs tree and `H3JavaGrid` loads it with
+  `newSystemInstance()`. **h3 4.4.0 ships `android-arm64` and `android-arm` and nothing else**, so
+  an EMULATOR has no H3 whatever that task does — a first caller here must treat a missing engine
+  as a degraded feature rather than something to throw through a coroutine, the way
+  `PassengerLiveMap.geocells` does. The passenger app hit exactly that crash after a location grant.
 - **Kotlin block comments nest.** A KDoc containing `values*/strings.xml` closes itself on the `*/`
   and the file stops parsing several declarations later. Same trap C014 hit.
 - **detekt's `LongMethod` and `LongParameterList` carry `ignoreAnnotated: ['Composable']`**

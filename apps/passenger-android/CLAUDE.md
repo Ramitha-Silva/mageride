@@ -320,6 +320,15 @@ lk.mageride.passenger
 - **`LiveHubTransport` is the seam.** Every rule above is asserted on the JVM against
   `FakeLiveHubTransport`, with no server and no network — the same split C067 made between
   `PositionPipeline` and the MQTT client.
+- **A missing H3 engine degrades the plane; it does not kill the app** —
+  `PassengerLiveMap.geocells`. The graph hands this class a `SupervisorJob() + Dispatchers.Default`
+  scope, and a supervisor job stops a failed child cancelling its siblings; it does **not** stop the
+  failure reaching the thread's default uncaught handler. Every `H3Grid` call here is inside a
+  `scope.launch`, so a device with no native library was a `FATAL EXCEPTION`, not a caught failure.
+  The latch is set once and never retried — a missing `.so` does not turn up later, so a retry per
+  fix would be one crash per second rather than one. What is lost is the nineteen cells and every
+  vehicle with them; the socket, the ride and package events, booking and the passenger's own dot
+  all keep working. An emulator is the ordinary way to reach it — see "Things that will bite".
 
 ## Rules this module is built on
 
@@ -425,6 +434,19 @@ lk.mageride.passenger
   `android-sdk` artifact requires Vulkan 1.0 in its manifest, which Play uses to filter devices —
   on the Android 8.0 floor that cuts off exactly the budget handsets this platform is for. Do not
   add `android-sdk-ktx`: it depends on the default artifact and fails `checkDuplicateClasses`.
+- **`com.uber:h3`'s native library does not survive an APK on its own, and the failure is a process
+  kill rather than a missing class.** The jar carries its natives as ordinary RESOURCES —
+  `android-arm64/libh3-java.so`, `windows-x64/libh3-java.dll` and eleven more — and
+  `H3Core.newInstance()` unpacks whichever matches the running ABI at runtime. That works on the
+  desktop JVM every test in this module runs on, and can never work inside an APK: AGP's
+  java-resource merger drops every `*.so`, and the native-lib merger only recognises
+  `lib/<abi>/*.so`, which `android-arm64/…` is not. So the APK shipped 1.5 MB of macOS and Windows
+  binaries and **not** the one file Android needed, and the first `grid.cellAt()` after a location
+  grant died on a `Dispatchers.Default` worker. `extractH3Natives` in the build script repackages
+  the `.so` into a real jniLibs tree and `H3JavaGrid` loads it with `newSystemInstance()`; the
+  unpack path stays as the fallback so the JVM target is unaffected. **h3 4.4.0 ships `android-arm64`
+  and `android-arm` and nothing else** — there is no x86 or x86_64 native, so an EMULATOR has no H3
+  whatever that task does. See the live-plane note above for what the app does about it.
 - **MAP-02 and MAP-10 are metres and MapLibre's `circleRadius` is pixels.** `MageRideMap` rescales
   both circle layers on `addOnCameraIdleListener` through
   `Projection.getMetersPerPixelAtLatitude`. A radius set once is wrong at every other zoom.
