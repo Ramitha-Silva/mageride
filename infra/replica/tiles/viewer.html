@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>MageRide Platform Basemap — Sri Lanka</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="./vendor/maplibre-gl.css">
+<style>
+  :root {
+    --bg: #F7F8FA; --fg: #1A1C1E; --muted: #5C5F66; --line: #D6D9DE;
+    --panel: #FFFFFF; --accent: #00497D; --shadow: 0 2px 12px rgba(0,0,0,.12);
+  }
+  :root[data-theme="dark"] {
+    --bg: #121316; --fg: #E3E5E9; --muted: #A0A4AB; --line: #33363B;
+    --panel: #1A1C1E; --accent: #7FB6E8; --shadow: 0 2px 12px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--fg); display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+    padding: .6rem .9rem; background: var(--panel); border-bottom: 1px solid var(--line);
+    z-index: 2;
+  }
+  .brand { display: flex; flex-direction: column; margin-right: auto; }
+  .brand b { font-size: .95rem; letter-spacing: .01em; }
+  .brand span { font-size: .74rem; color: var(--muted); }
+  form { display: flex; gap: .4rem; position: relative; }
+  input[type=search] {
+    width: min(46vw, 340px); padding: .5rem .7rem; font: inherit;
+    border: 1px solid var(--line); border-radius: .45rem;
+    background: var(--bg); color: var(--fg);
+  }
+  input[type=search]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button {
+    padding: .5rem .8rem; font: inherit; cursor: pointer; color: var(--fg);
+    border: 1px solid var(--line); border-radius: .45rem; background: var(--bg);
+  }
+  button:hover { border-color: var(--accent); }
+  #results {
+    position: absolute; top: calc(100% + .3rem); left: 0; width: min(46vw, 340px);
+    background: var(--panel); border: 1px solid var(--line); border-radius: .45rem;
+    box-shadow: var(--shadow); max-height: 46vh; overflow-y: auto; z-index: 5;
+  }
+  #results:empty { display: none; }
+  #results button {
+    display: block; width: 100%; text-align: left; border: 0; border-radius: 0;
+    border-bottom: 1px solid var(--line); background: transparent; padding: .55rem .7rem;
+  }
+  #results button:last-child { border-bottom: 0; }
+  #results button:hover, #results button:focus { background: var(--bg); }
+  #results .n { display: block; font-weight: 600; }
+  #results .d { display: block; font-size: .76rem; color: var(--muted); }
+  #map { flex: 1 1 auto; }
+  #note {
+    padding: .35rem .9rem; font-size: .72rem; color: var(--muted);
+    background: var(--panel); border-top: 1px solid var(--line);
+  }
+  #status {
+    position: absolute; left: 50%; top: 4.6rem; transform: translateX(-50%);
+    background: var(--panel); color: var(--fg); border: 1px solid var(--line);
+    border-radius: .45rem; padding: .4rem .8rem; box-shadow: var(--shadow); z-index: 4;
+  }
+  #status:empty { display: none; }
+  .maplibregl-popup-content { background: var(--panel); color: var(--fg); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <b>MageRide Platform Basemap</b>
+    <span>Sri Lanka &middot; the same PMTiles archive and cartography the MageRide apps render</span>
+  </div>
+  <form id="search" autocomplete="off">
+    <input type="search" id="q" placeholder="Search a place — Kandy, Galle Face…" aria-label="Search a place in Sri Lanka">
+    <button type="submit">Search</button>
+    <div id="results" role="listbox" aria-label="Search results"></div>
+  </form>
+  <button type="button" id="theme" title="Toggle light and dark">◐ Theme</button>
+</header>
+
+<div id="map"></div>
+<div id="status" role="status"></div>
+<div id="note">
+  Vector tiles served as <code>lk.pmtiles</code> over HTTP range requests — no tile server.
+  Place search is MageRide's self-hosted Nominatim. Map data &copy; OpenStreetMap contributors (ODbL).
+</div>
+
+<!-- pmtiles as a CLASSIC script, not the ESM build. `dist/esm/index.js` imports the bare
+     specifier "fflate", which a browser cannot resolve without an import map — it throws
+     "Failed to resolve module specifier" and takes the whole module graph with it.
+     `dist/pmtiles.js` is the vendor's browser bundle: self-contained, no bare imports, and
+     it assigns a `pmtiles` global. A classic script runs before the deferred module below,
+     so the global is there when the module body executes. -->
+<script src="./vendor/pmtiles.js"></script>
+
+<script type="module">
+// `import * as`, NOT a default import. MapLibre GL JS v6's ESM build has no default export
+// (v5's UMD bundle had the `maplibregl` global, which is what most examples still show).
+// A default import from a module that provides none is a link-time SyntaxError: the whole
+// module script never runs, so the page renders its chrome and the map is simply absent —
+// with no failed request anywhere to point at it.
+import * as maplibregl from './vendor/maplibre-gl.mjs';
+const { Protocol } = pmtiles;
+
+// The same registration the apps make: MapLibre Native carries a PMTiles file source in the
+// AAR/framework, and in a browser this Protocol is its equivalent. Either way the client
+// range-requests the archive itself and there is no tile server on the other end.
+maplibregl.addProtocol('pmtiles', new Protocol().tile);
+
+const SL_BOUNDS = [[79.2, 5.5], [82.2, 10.2]];   // the archive's own extent, padded
+const statusEl = document.getElementById('status');
+const say = (msg) => { statusEl.textContent = msg || ''; };
+
+const styleFor = (theme) => theme === 'dark' ? './style-dark.json' : './style-light.json';
+let theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+document.documentElement.dataset.theme = theme;
+
+const map = new maplibregl.Map({
+  container: 'map',
+  style: styleFor(theme),
+  bounds: SL_BOUNDS,
+  fitBoundsOptions: { padding: 20 },
+  maxBounds: [[78.5, 4.8], [83.0, 11.0]],   // the archive covers Sri Lanka and nothing else
+  minZoom: 6,
+  // 19, not the archive's 15. The style declares `maxzoom: 15` on the source, so MapLibre
+  // OVERZOOMS past it — scaling z15 tiles rather than requesting tiles that do not exist.
+  // Geometry gains no detail beyond 15; this buys usable zoom, not more data.
+  maxZoom: 19,
+  attributionControl: false,
+});
+// Exposed on purpose: `__map.getStyle()`, `__map.queryRenderedFeatures(...)` from the
+// console is how you tell "the style failed" from "the tiles are empty here" without
+// guessing, and it is what the headless check drives.
+window.__map = map;
+
+map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), 'top-right');
+map.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: 'metric' }));
+map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+
+map.on('error', (e) => say('Map error: ' + (e?.error?.message ?? 'unknown')));
+map.on('load', () => say(''));
+
+document.getElementById('theme').addEventListener('click', () => {
+  theme = theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = theme;
+  const { lng, lat } = map.getCenter(), z = map.getZoom();
+  map.setStyle(styleFor(theme));
+  map.once('styledata', () => { map.jumpTo({ center: [lng, lat], zoom: z }); marker && marker.addTo(map); });
+});
+
+// --- place search -------------------------------------------------------------------
+// `/search` is nginx proxying this host's own Nominatim over loopback, rate-limited, GET
+// only. `countrycodes=lk` because this archive is Sri Lanka and a hit outside it would fly
+// the map to a blank rectangle.
+let marker = null;
+const resultsEl = document.getElementById('results');
+
+document.getElementById('search').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const q = document.getElementById('q').value.trim();
+  resultsEl.replaceChildren();
+  if (!q) return;
+  say('Searching…');
+  try {
+    const url = `./search?q=${encodeURIComponent(q)}&format=jsonv2&limit=6&countrycodes=lk`;
+    const res = await fetch(url, { headers: { accept: 'application/json' } });
+    if (res.status === 503) return say('Search is busy — try again in a moment.');
+    if (!res.ok) return say(`Search failed (HTTP ${res.status}).`);
+    const hits = await res.json();
+    if (!hits.length) return say(`Nothing found for “${q}”.`);
+    say('');
+    for (const h of hits) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      const parts = h.display_name.split(', ');
+      b.innerHTML = `<span class="n"></span><span class="d"></span>`;
+      b.querySelector('.n').textContent = parts[0];
+      b.querySelector('.d').textContent = parts.slice(1).join(', ');
+      b.addEventListener('click', () => {
+        const lngLat = [Number(h.lon), Number(h.lat)];
+        marker?.remove();
+        marker = new maplibregl.Marker({ color: '#00497D' }).setLngLat(lngLat)
+          .setPopup(new maplibregl.Popup({ offset: 24 }).setText(h.display_name))
+          .addTo(map);
+        map.flyTo({ center: lngLat, zoom: Math.max(map.getZoom(), 13), speed: 1.4 });
+        resultsEl.replaceChildren();
+      });
+      resultsEl.appendChild(b);
+    }
+  } catch (err) {
+    say('Search failed: ' + err.message);
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#search')) resultsEl.replaceChildren();
+});
+</script>
+</body>
+</html>
