@@ -53,6 +53,8 @@
          an unlabelled rectangle; `map_recentre` is §0.3's recentre FAB. -->
     <string name="map_content_description">Live map of nearby vehicles</string>
     <string name="map_recentre">Recentre on my location</string>
+    <string name="map_zoom_in">Zoom in</string>
+    <string name="map_zoom_out">Zoom out</string>
 
     <!-- The two notification channels, as they appear in Android's own settings. -->
     <string name="push_channel_rides_name">Rides</string>

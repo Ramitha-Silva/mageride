@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lk.mageride.passenger.R
 import lk.mageride.passenger.map.MageRideMap
 import lk.mageride.passenger.map.MapCamera
+import lk.mageride.passenger.map.MapFix
 import lk.mageride.passenger.ui.component.InlineError
 import lk.mageride.passenger.ui.component.MageRideCta
 import lk.mageride.passenger.ui.theme.ControlTokens
@@ -49,6 +50,11 @@ import lk.mageride.shared.data.models.iam.SavedAddress
  * **The pin is the map's centre and the map moves under it.** MapLibre's draggable annotations are
  * in a plugin artifact this module cannot take, so the wireframe's *"drop / drag pin"* is a fixed
  * marker over a map that pans — the same picker C079 and SCR-PA-011 use.
+ *
+ * **The map is a control, so it is sized and equipped like one.** `ControlTokens.InlineMap` was
+ * doubled and the map carries `＋` / `−` and the recentre disc: at the old height a passenger
+ * could see the junction they were aiming for or the pin, not both, and with no zoom the only way
+ * to place a pin precisely was a two-finger pinch on a map inside a scrolling column.
  */
 @Composable
 internal fun SavedAddressesScreen(onBack: () -> Unit, model: SavedAddressesViewModel) {
@@ -105,8 +111,18 @@ internal fun SavedAddressesScreen(onBack: () -> Unit, model: SavedAddressesViewM
                 contentAlignment = Alignment.Center,
             ) {
                 MageRideMap(
+                    // The blue dot, so the passenger can see how far the pin has been dragged
+                    // from where they actually are. It is also what the recentre control needs:
+                    // `MageRideMap` animates back to `userPosition` itself.
+                    userPosition = state.fix?.let { MapFix(it.lat, it.lng) },
                     camera = state.pin?.let { MapCamera(it.lat, it.lng) } ?: MapCamera.Default,
+                    // Recentring settles the camera, which fires `onCameraIdle` and moves the pin
+                    // with it — on a centre-pin picker "back to me" and "pin me" are one gesture.
+                    onRecentre = { },
                     onCameraIdle = model::onPinMoved,
+                    // A pin is only as accurate as the zoom it was dropped at, and this map is
+                    // inside a scrolling column where a one-finger drag belongs to the page.
+                    zoomControls = true,
                 )
                 // The fixed marker, drawn in Compose over the map so it stays exactly at the centre
                 // through every gesture. See the screen KDoc.

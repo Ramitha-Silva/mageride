@@ -28,6 +28,8 @@
 
     <string name="map_content_description">අවට වාහනවල සජීවී සිතියම</string>
     <string name="map_recentre">මගේ ස්ථානය මධ්‍යයට ගන්න</string>
+    <string name="map_zoom_in">විශාල කරන්න</string>
+    <string name="map_zoom_out">කුඩා කරන්න</string>
 
     <string name="push_channel_rides_name">ගමන්</string>
     <string name="push_channel_rides_description">ඔබේ රියදුරු, ඔබේ ගමන සහ ඔබට එවන ලද පිකප් ඉල්ලීම්.</string>

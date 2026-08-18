@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -91,6 +89,11 @@ internal data class MapPin(val kind: String, val lat: Double, val lng: Double)
  * @param onVehicleTap MAP-07 — the vehicle id under the tap, or nothing when the tap missed. What
  *   a tap *opens* is the screen's: SCR-PA-007 for Mode A, SCR-PA-024 for Mode B, nothing at all
  *   for an engaged Mode C (AL-23, US-7.4).
+ * @param zoomControls Whether the `＋` / `−` buttons are drawn above the recentre FAB. Pinch is
+ *   always available — MapLibre enables it by default and nothing here turns it off — but a pinch
+ *   needs two fingers and a free hand, and on SCR-PA-010 the map now lives inside a scrolling
+ *   column where a one-finger drag belongs to the page. These are the accessible way in, and on a
+ *   centre-pin picker they are how a passenger gets close enough to place a pin honestly.
  * @param dimmed SCR-PA-032 — what is drawn is **last known**, not live (US-15.2). The markers fade
  *   rather than disappear, because a passenger who has lost signal still wants to know where the
  *   bus was; the offline banner above says why they are faded. Δ C078.
@@ -110,6 +113,7 @@ internal fun MageRideMap(
     onRecentre: (() -> Unit)? = null,
     onCameraIdle: ((GeoPoint) -> Unit)? = null,
     onVehicleTap: ((String) -> Unit)? = null,
+    zoomControls: Boolean = false,
     dimmed: Boolean = false,
 ) {
     val context = LocalContext.current
@@ -138,7 +142,9 @@ internal fun MageRideMap(
     remember { MapLibre.getInstance(context) }
 
     val mapView = remember {
-        MapView(context).apply {
+        // Not a bare `MapView`: see [PanningMapView] for why a map inside a scrolling parent has
+        // to claim its own gestures.
+        PanningMapView(context).apply {
             getMapAsync { ready ->
                 ready.setStyle(
                     Style.Builder().fromJson(MapStyles.forTheme(context, environment.pmTilesUrl, darkTheme)),
@@ -232,29 +238,23 @@ internal fun MageRideMap(
                 .semantics { contentDescription = description },
         )
 
-        if (onRecentre != null) {
-            FloatingActionButton(
-                // The movement is done HERE, not by the screen. `camera` is read once when the
-                // style loads and the `MapLibreMap` never leaves this composable, so a caller has
-                // no handle to animate with — a FAB that only called back would be an icon that
-                // promises to recentre and does not. What the callback is for is whatever the
-                // screen does *besides* moving. Δ C078.
-                onClick = {
+        MapControls(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(MageRideTheme.spacing.sm),
+            zoom = if (zoomControls) { delta -> map?.zoomBy(delta) } else null,
+            // The movement is done HERE, not by the screen. `camera` is read once when the style
+            // loads and the `MapLibreMap` never leaves this composable, so a caller has no handle
+            // to animate with — a FAB that only called back would be an icon that promises to
+            // recentre and does not. What the callback is for is whatever the screen does
+            // *besides* moving. Δ C078.
+            onRecentre = onRecentre?.let { callback ->
+                {
                     userPosition?.let { map?.centreOn(LatLng(it.lat, it.lng)) }
-                    onRecentre()
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(MageRideTheme.spacing.sm),
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.MyLocation,
-                    contentDescription = stringResource(R.string.map_recentre),
-                )
-            }
-        }
+                    callback()
+                }
+            },
+        )
     }
 }
 

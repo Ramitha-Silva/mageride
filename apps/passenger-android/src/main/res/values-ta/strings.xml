@@ -28,6 +28,8 @@
 
     <string name="map_content_description">அருகிலுள்ள வாகனங்களின் நேரடி வரைபடம்</string>
     <string name="map_recentre">எனது இடத்தை மையப்படுத்து</string>
+    <string name="map_zoom_in">பெரிதாக்கு</string>
+    <string name="map_zoom_out">சிறிதாக்கு</string>
 
     <string name="push_channel_rides_name">பயணங்கள்</string>
     <string name="push_channel_rides_description">உங்கள் ஓட்டுநர், உங்கள் பயணம், மற்றும் உங்களுக்கு அனுப்பப்படும் பிக்கப் கோரிக்கைகள்.</string>
