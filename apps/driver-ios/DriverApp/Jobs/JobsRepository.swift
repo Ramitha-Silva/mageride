@@ -1,12 +1,23 @@
 import Foundation
 import MageRideShared
 
-// NAME CLASH, AND IT IS A REAL ONE. `:shared`'s `lk.mageride.shared.domain.dispatch.DriverStanding`
-// — the level, the points and the report counter — reaches Swift as `DriverStanding`, and this app
-// ALREADY has a struct of that name: C088's `Home/StandbyRepository.swift` calls the dashboard's
-// whole status header a `DriverStanding` too. Swift resolves an unqualified name against the local
-// module first, so `DriverStanding` in this target means C088's struct and nothing warns. Every
-// reference to the Kotlin type in this cluster is therefore spelled `MageRideShared.DriverStanding`.
+// THE NAME CLASH THAT WAS HERE IS GONE, and how it was resolved is worth knowing before you
+// reintroduce it. `:shared`'s `lk.mageride.shared.domain.dispatch.DriverStanding` — the level, the
+// points and the report counter — reaches Swift as `DriverStanding`, and C088's
+// `Home/StandbyRepository.swift` had named the dashboard's whole status header `DriverStanding`
+// too. Swift resolves an unqualified name against the local module first, so the Kotlin type was
+// unreachable in this target and nothing warned.
+//
+// The original workaround was to spell it `MageRideShared.DriverStanding`, and **that cannot
+// work**: `:shared` also exports an identity object called `MageRideShared` (its `NAME` and
+// `PACKAGE` constants), and a type in scope beats a module of the same name in Swift's lookup. So
+// `MageRideShared.<anything>` resolves into that object and fails with "is not a member type of
+// class 'MageRideShared.MageRideShared'". **Module-qualifying against this framework never works —
+// do not reach for it.**
+//
+// The fix was to rename the local struct to `DashboardStanding`, which is what it always was: the
+// SCR-DI-010 status header, not a reputation standing. The Kotlin type now owns the plain name and
+// is spelled bare, here and in `JobsTestKit`.
 
 /// Everything SCR-DI-019 prints, and the one fact SCR-DI-017 gates on.
 ///
@@ -20,7 +31,7 @@ import MageRideShared
 ///   - points: Rating points banked, from whichever read answered.
 struct JobStanding {
 
-    var standing: MageRideShared.DriverStanding?
+    var standing: DriverStanding?
     var level: DriverLevelResponse?
     var acceptanceRate: Double?
     var noShows: Int?
@@ -29,7 +40,7 @@ struct JobStanding {
     /// The empty standing — *"reputation has not answered"*, which is US-6A.8's third value and the
     /// state ``DriverLevelState`` starts in.
     init(
-        standing: MageRideShared.DriverStanding? = nil,
+        standing: DriverStanding? = nil,
         level: DriverLevelResponse? = nil,
         acceptanceRate: Double? = nil,
         noShows: Int? = nil,
@@ -64,7 +75,7 @@ struct JobStanding {
     var jobBoardMinLevel: Int { Int(rules.jobBoardMinLevel) }
 
     /// The standing with the counters the stats read supplies folded in, for the level screen.
-    var detailed: MageRideShared.DriverStanding? {
+    var detailed: DriverStanding? {
         guard let standing else { return nil }
         guard let points, points != Int(standing.points) else { return standing }
         return standing.doCopy(
@@ -127,7 +138,7 @@ final class ApiJobsRepository: JobsRepository {
         let stats = await read { try await self.dispatch.getDriverStats(driverId: driverId) }
 
         return JobStanding(
-            standing: level.map { MageRideShared.DriverStanding.companion.of(response: $0) },
+            standing: level.map { DriverStanding.companion.of(response: $0) },
             level: level,
             acceptanceRate: stats?.acceptanceRate,
             noShows: stats.map { Int($0.noShows) },
@@ -141,13 +152,19 @@ final class ApiJobsRepository: JobsRepository {
     /// The radius is `JobBoard.CATCHMENT_METRES` and is sent explicitly: the contract's own default
     /// is the same 30 km, but the screen prints the number and one that showed one radius while
     /// asking for another would be lying quietly.
+    ///
+    /// The `compactMap` is not a filter. `Page<T>` exports its rows as `NSArray<id>` — the element
+    /// type parameter is dropped even though the enclosing `MRSPage<T>` keeps it — so `.items`
+    /// arrives in Swift as `[Any]` and has to be re-typed. `compactMap` rather than `as!` because an
+    /// exception thrown across this bridge cannot be caught and takes the process with it; every row
+    /// is a `ScheduledRide` by contract, so nothing is dropped in practice.
     func board(lat: Double, lng: Double, radiusMetres: Int) async throws -> [ScheduledRide] {
         try await dispatch.listJobBoard(
             lat: lat,
             lng: lng,
             radiusMetres: KotlinInt(value: Int32(radiusMetres)),
             page: PageRequest.companion.FIRST
-        ).items
+        ).items.compactMap { $0 as? ScheduledRide }
     }
 
     /// The path parameter is the **`dispatch.scheduled_rides` id**, which is what the board row
@@ -156,8 +173,10 @@ final class ApiJobsRepository: JobsRepository {
         _ = try await dispatch.postJobBoardIntent(rideId: scheduledRideId, idempotencyKey: nil)
     }
 
+    /// The `compactMap` is the erased `Page<T>` again — see ``board(lat:lng:radiusMetres:)``.
     func upcoming(driverId: String) async throws -> [ScheduledRide] {
-        try await dispatch.listDriverScheduledRides(driverId: driverId, page: PageRequest.companion.FIRST).items
+        try await dispatch.listDriverScheduledRides(driverId: driverId, page: PageRequest.companion.FIRST)
+            .items.compactMap { $0 as? ScheduledRide }
     }
 
     /// **This route requires the `passenger` role** (`ScheduledRideEndpoints`, which splits the group

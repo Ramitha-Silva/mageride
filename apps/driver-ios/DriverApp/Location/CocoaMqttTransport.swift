@@ -39,11 +39,15 @@ final class CocoaMqttTransport: NSObject, IosPositionTransport {
         return connected && client?.connState == .connected
     }
 
-    func publish(topic: String, payload: NSData, qos: Int32, retain: Bool) -> Bool {
+    /// `payload` is a `Data` because the Kotlin protocol fixes it, not by choice: `publish` declares
+    /// `NSData *` in the generated header and Swift's importer bridges that to `Data`, so an
+    /// `NSData` parameter here is a *different* method and the class stops conforming. CocoaMQTT
+    /// wants `[UInt8]`, and that conversion belongs in the body.
+    func publish(topic: String, payload: Data, qos: Int32, retain: Bool) -> Bool {
         guard let client, isConnected else { return false }
         let message = CocoaMQTT5Message(
             topic: topic,
-            payload: [UInt8](Data(referencing: payload)),
+            payload: [UInt8](payload),
             qos: CocoaMQTTQoS(rawValue: UInt8(clamping: Int(qos))) ?? .qos1,
             retained: retain
         )
@@ -73,7 +77,9 @@ final class CocoaMqttTransport: NSObject, IosPositionTransport {
 
         let will = CocoaMQTT5Message(
             topic: plan.willTopic,
-            payload: [UInt8](Data(referencing: plan.willPayload)),
+            // Bridged from `NSData *` and so already a `Data` — see `publish`. Only the `[UInt8]`
+            // CocoaMQTT takes is left to convert.
+            payload: [UInt8](plan.willPayload),
             qos: CocoaMQTTQoS(rawValue: UInt8(clamping: Int(plan.willQos))) ?? .qos1,
             retained: plan.willRetain
         )

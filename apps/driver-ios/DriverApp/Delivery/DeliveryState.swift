@@ -88,7 +88,7 @@ struct DeliveryState {
     ///
     /// `package.picked_up` is the `→ InProgress` move (P-07), so the ride's own state is the answer —
     /// not the local ``isStarted`` flag, which only says the driver has set off.
-    var isPickedUp: Bool { rideState == RideState.inProgress || isHandedOver }
+    var isPickedUp: Bool { rideState == RideState.inprogress || isHandedOver }
 
     /// Whether the parcel has been handed over.
     ///
@@ -101,7 +101,7 @@ struct DeliveryState {
     /// over a shared enum in this target gives: a Kotlin enum reaches Swift as a **class**.
     var isHandedOver: Bool {
         guard let rideState else { return false }
-        return rideState == RideState.completed || rideState == RideState.paymentPending || rideState.isTerminal
+        return rideState == RideState.completed || rideState == RideState.paymentpending || rideState.isTerminal
     }
 
     /// Which sheet the delivery has reached.

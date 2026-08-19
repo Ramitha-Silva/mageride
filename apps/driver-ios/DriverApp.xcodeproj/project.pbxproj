@@ -20,6 +20,7 @@
 		2C950FD3665CA64CEB9C9EB1 /* DriverDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 841E25D3D6F6C2A5FEC95E8E /* DriverDatabase.swift */; };
 		B7A393E253A163E613E6508C /* DriverEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A38199F79E09320D80DD55E5 /* DriverEnvironment.swift */; };
 		163CFB25666B22BED1EEC593 /* DriverGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7E2E26A773931E0ABC82D1 /* DriverGraph.swift */; };
+		0582804FE093DAA15854BA38 /* SharedTypeNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1218BB892EEF068D183D45FD /* SharedTypeNames.swift */; };
 		191610780A40F2C5C7D92DE5 /* DeliveryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D2D20C6E02DA9FD826D910 /* DeliveryModel.swift */; };
 		BDB90031ED1CD14176A603B7 /* DeliveryRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B598E5A51C35B56138F26CE2 /* DeliveryRepository.swift */; };
 		132A4CF48898337499E7DB0A /* DeliveryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8DF52F03B27147038626C4B /* DeliveryScreen.swift */; };
@@ -267,6 +268,7 @@
 		841E25D3D6F6C2A5FEC95E8E /* DriverDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverDatabase.swift"; path = "DriverDatabase.swift"; sourceTree = "<group>"; };
 		A38199F79E09320D80DD55E5 /* DriverEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverEnvironment.swift"; path = "DriverEnvironment.swift"; sourceTree = "<group>"; };
 		AE7E2E26A773931E0ABC82D1 /* DriverGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverGraph.swift"; path = "DriverGraph.swift"; sourceTree = "<group>"; };
+		1218BB892EEF068D183D45FD /* SharedTypeNames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SharedTypeNames.swift"; path = "SharedTypeNames.swift"; sourceTree = "<group>"; };
 		B7D2D20C6E02DA9FD826D910 /* DeliveryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DeliveryModel.swift"; path = "DeliveryModel.swift"; sourceTree = "<group>"; };
 		B598E5A51C35B56138F26CE2 /* DeliveryRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DeliveryRepository.swift"; path = "DeliveryRepository.swift"; sourceTree = "<group>"; };
 		C8DF52F03B27147038626C4B /* DeliveryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DeliveryScreen.swift"; path = "DeliveryScreen.swift"; sourceTree = "<group>"; };
@@ -622,6 +624,7 @@
 				841E25D3D6F6C2A5FEC95E8E /* DriverDatabase.swift */,
 				A38199F79E09320D80DD55E5 /* DriverEnvironment.swift */,
 				AE7E2E26A773931E0ABC82D1 /* DriverGraph.swift */,
+				1218BB892EEF068D183D45FD /* SharedTypeNames.swift */,
 			);
 			path = "DI";
 			sourceTree = "<group>";
@@ -1183,6 +1186,7 @@
 				2C950FD3665CA64CEB9C9EB1 /* DriverDatabase.swift in Sources */,
 				B7A393E253A163E613E6508C /* DriverEnvironment.swift in Sources */,
 				163CFB25666B22BED1EEC593 /* DriverGraph.swift in Sources */,
+				0582804FE093DAA15854BA38 /* SharedTypeNames.swift in Sources */,
 				191610780A40F2C5C7D92DE5 /* DeliveryModel.swift in Sources */,
 				BDB90031ED1CD14176A603B7 /* DeliveryRepository.swift in Sources */,
 				132A4CF48898337499E7DB0A /* DeliveryScreen.swift in Sources */,
@@ -1573,8 +1577,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
 			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = "11.11.0";
+				kind = upToNextMajorVersion;
+				minimumVersion = "11.0.0";
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

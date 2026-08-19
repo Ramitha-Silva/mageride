@@ -135,13 +135,19 @@ final class ApiWalletRepository: WalletRepository {
 
     /// The dates are **Asia/Colombo business dates** (D-13, D-38), which is what wallet-svc filters on;
     /// a range derived from the handset's zone is wrong for five and a half hours a day.
+    ///
+    /// **`Page<T>.items` arrives as `[Any]` and the element cast is this app's.** The export emits the
+    /// property as `NSArray<id>` — `Page<T>` keeps its type parameter across the bridge and its rows do
+    /// not — so the concrete type is put back here. `compactMap` rather than `as!` for this cluster's own
+    /// reason: a failed force cast raises an exception Swift cannot catch and the process terminates.
+    /// Every row is a `WalletTransaction` by contract, so nothing is dropped.
     func transactions(driverId: String, from: BusinessDate?, to: BusinessDate?) async throws -> [WalletTransaction] {
         try await wallet.listWalletTransactions(
             userId: driverId,
             from: from,
             to: to,
             page: PageRequest.companion.FIRST
-        ).items
+        ).items.compactMap { $0 as? WalletTransaction }
     }
 
     /// **This is the whole of "receipt download" on this platform.** wallet-svc has no per-transaction

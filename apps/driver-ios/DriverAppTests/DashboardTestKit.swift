@@ -209,7 +209,7 @@ final class FakeDriverIdentity: DriverIdentity {
 /// accepted, going offline stops publishing first — and a counter cannot tell those apart.
 final class FakeStandbyRepository: StandbyRepository {
 
-    var standing = DriverStanding()
+    var standing = DashboardStanding()
     var filter = directionalFilter()
     var created = DirectionalFilterCreated(
         filterId: "01JFILTER00000000000000001",
@@ -230,7 +230,7 @@ final class FakeStandbyRepository: StandbyRepository {
     private(set) var clearedCount = 0
     private(set) var searches: [String] = []
 
-    func standing(driverId: String) async -> DriverStanding { standing }
+    func standing(driverId: String) async -> DashboardStanding { standing }
 
     func goOnline(vehicleId: String, position: GeoPoint) async throws -> PresenceState {
         goneOnline.append((vehicleId, position))

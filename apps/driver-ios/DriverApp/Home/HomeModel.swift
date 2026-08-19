@@ -27,7 +27,7 @@ struct HomeState {
     var isLoading = true
     var isBusy = false
     var vehicles = LiveVehicle()
-    var standing = DriverStanding()
+    var standing = DashboardStanding()
     var journey = JourneyStanding()
     var isOnline = false
     var position: Fix?

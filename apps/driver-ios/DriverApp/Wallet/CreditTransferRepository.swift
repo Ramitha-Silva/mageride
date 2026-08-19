@@ -71,8 +71,15 @@ final class ApiCreditTransferRepository: CreditTransferRepository {
     /// twenty-six and none of them is a credit transfer, so nothing raises one. A list that only filled
     /// when a push arrived would be permanently empty. Recorded in the C073 handoff; if the type is ever
     /// minted it carries `mageride://wallet`, which ``PushRouter`` already resolves.
+    ///
+    /// **`Page<T>.items` arrives as `[Any]` and both list reads here put the element type back.** The
+    /// export emits the property as `NSArray<id>` — `Page<T>` keeps its type parameter across the bridge
+    /// and its rows do not. `compactMap` rather than `as!` for this cluster's own reason: a failed force
+    /// cast raises an exception Swift cannot catch and the process terminates. Every row is a
+    /// `TransferRow` by contract, so nothing is dropped.
     func pending() async throws -> [TransferRow] {
-        try await wallet.listPendingWalletCreditTransfers(page: PageRequest.companion.FIRST).items
+        try await wallet.listPendingWalletCreditTransfers(page: PageRequest.companion.FIRST)
+            .items.compactMap { $0 as? TransferRow }
     }
 
     /// `direction` is left unset rather than sent as `all`: the parameter's own default is every
@@ -82,7 +89,7 @@ final class ApiCreditTransferRepository: CreditTransferRepository {
             driverId: driverId,
             direction: direction,
             page: PageRequest.companion.FIRST
-        ).items
+        ).items.compactMap { $0 as? TransferRow }
     }
 
     /// `402 insufficient-wallet` when the holder cannot cover it **at approval time** rather than at
