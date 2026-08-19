@@ -157,6 +157,8 @@
 "booking_no_gtfs" = "මෙම ප්‍රදේශයේ බස් මාර්ග තොරතුරු ඉක්මනින්.";
 "booking_no_routes" = "මෙම ගමනාන්තයට සෘජු පොදු මාර්ගයක් නැත.";
 "booking_no_tiers" = "මෙම ගමනට වාහන නොමැත.";
+"booking_pickup_label" = "නැගීමේ ස්ථානය";
+"booking_destination_label" = "ගමනාන්තය";
 "booking_no_destination" = "ගමනාන්තයක් තෝරන්න";
 "booking_edit_route" = "මාර්ගය වෙනස් කරන්න";
 

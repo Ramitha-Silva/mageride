@@ -180,7 +180,19 @@ struct MutedRow: View {
     }
 }
 
-/// The wireframe's `card fill` summary — `● Galle Face ✎` over `◉ Nugegoda`.
+/// The wireframe's `card fill` summary — `● Galle Face` over `◉ Nugegoda ✎`, each end named.
+///
+/// **Both ends carry a label, and that is a defect fix rather than decoration** (Δ handset report,
+/// found on the Android twin and ported here). A pickup with no street address prints
+/// *"Current location"* — which ``LastKnownFix`` is right to do, since the fix is a coordinate
+/// nobody has geocoded — and it is ALWAYS what the top row shows, because nothing in the app writes
+/// an address onto a pickup. Two rows of the same type, one above the other, therefore read as a
+/// caption over the place the passenger was travelling to. The `cdot`s were already here; the
+/// labels are the rest of the answer.
+///
+/// **The ✎ moved to the destination row**, because `onEdit` sets ``CaptureTarget/bookingDropoff``
+/// — it opens SCR-PI-008 to change where the journey ENDS. The wireframe draws it beside the
+/// pickup, which is the cell describing a control the flow behind it does not have.
 struct JourneySummaryCard: View {
 
     let pickup: String?
@@ -188,7 +200,9 @@ struct JourneySummaryCard: View {
     let onEdit: () -> Void
 
     var body: some View {
-        VStack(spacing: MageRideSpacing.xxs) {
+        VStack(alignment: .leading, spacing: MageRideSpacing.xxs) {
+            SectionLabel(key: "booking_pickup_label")
+
             HStack(spacing: MageRideSpacing.xs) {
                 Circle()
                     .fill(MageRideColor.success)
@@ -197,14 +211,10 @@ struct JourneySummaryCard: View {
                     .mageFont(.bodySmall)
                     .foregroundStyle(MageRideColor.onSurface)
                     .lineLimit(1)
-                Spacer(minLength: MageRideSpacing.xs)
-                Button(action: onEdit) {
-                    Image(systemName: "pencil")
-                        .font(.system(size: MageRideControl.chipIcon))
-                        .foregroundStyle(MageRideColor.primary)
-                }
-                .accessibilityLabel(Text(key: "booking_edit_route"))
+                Spacer(minLength: 0)
             }
+
+            SectionLabel(key: "booking_destination_label")
 
             HStack(spacing: MageRideSpacing.xs) {
                 Circle()
@@ -214,7 +224,13 @@ struct JourneySummaryCard: View {
                     .mageFont(.bodySmall)
                     .foregroundStyle(dropoff == nil ? MageRideColor.onSurfaceVariant : MageRideColor.onSurface)
                     .lineLimit(1)
-                Spacer(minLength: 0)
+                Spacer(minLength: MageRideSpacing.xs)
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: MageRideControl.chipIcon))
+                        .foregroundStyle(MageRideColor.primary)
+                }
+                .accessibilityLabel(Text(key: "booking_edit_route"))
             }
         }
         .padding(MageRideSpacing.sm)

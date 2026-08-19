@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -28,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lk.mageride.passenger.R
@@ -169,34 +171,82 @@ internal fun RideBookingScreen(
     }
 }
 
-/** The wireframe's `● Galle Face ✎ ◆ Nugegoda` row. */
+/**
+ * The wireframe's `● Galle Face ✎ ◆ Nugegoda` card — both ends, each one named.
+ *
+ * **The two ends are labelled and dotted, and that is a defect fix rather than decoration.** This
+ * was two bare lines of text: the pickup above the drop-off, same colour, one type step apart and
+ * no marker on either. A pickup with no street address prints *"Current location"* — which
+ * `LastKnownFix` is right to do, since the fix is a coordinate nobody has geocoded — and it is
+ * ALWAYS what this row shows, because nothing in the app writes an address onto a pickup. So every
+ * passenger who chose a destination read a small grey *"Current location"* sitting directly on top
+ * of the place they were travelling to, and read it as that place's caption. Reported from a
+ * handset. The wireframe's own answer is the coloured `cdot` on each row; the labels are the rest
+ * of it.
+ *
+ * **The ✎ is on the destination row**, because [onEdit] is what sets
+ * [CaptureTarget.BOOKING_DROPOFF] — it opens SCR-PA-008 to change where the journey ENDS. It used
+ * to sit at the end of a Row whose whole surface was clickable, so a tap on the pickup line opened
+ * a picker that then rewrote the drop-off.
+ */
 @Composable
 private fun JourneySummary(pickup: String?, dropoff: String?, onEdit: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.xxs),
+    ) {
+        SectionLabel(text = stringResource(R.string.booking_pickup_label))
+        JourneyEnd(
+            dot = MageRideTheme.status.success,
+            text = pickup ?: stringResource(R.string.search_current_location),
+        )
+        SectionLabel(
+            text = stringResource(R.string.booking_destination_label),
+            modifier = Modifier.padding(top = MageRideTheme.spacing.xxs),
+        )
+        JourneyEnd(
+            dot = MaterialTheme.colorScheme.error,
+            text = dropoff ?: stringResource(R.string.booking_no_destination),
+            onEdit = onEdit,
+        )
+    }
+}
+
+/**
+ * One end of the journey: the wireframe's coloured `cdot`, the address, and the ✎ on the end that
+ * can be changed.
+ *
+ * @param onEdit `null` on an end this screen cannot edit, which is what leaves the row without a
+ *   click target as well as without the icon — an affordance and its action arrive together.
+ */
+@Composable
+private fun JourneyEnd(dot: Color, text: String, onEdit: (() -> Unit)? = null) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onEdit),
+            .then(if (onEdit == null) Modifier else Modifier.clickable(onClick = onEdit)),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.xs),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = pickup ?: stringResource(R.string.search_current_location),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = dropoff ?: stringResource(R.string.booking_no_destination),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
+        Box(
+            modifier = Modifier
+                .size(MageRideTheme.spacing.sm)
+                .background(dot, CircleShape),
+        )
+        Text(
+            text = text,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        if (onEdit != null) {
+            Icon(
+                imageVector = Icons.Filled.Edit,
+                contentDescription = stringResource(R.string.booking_edit_route),
+                modifier = Modifier.size(ControlTokens.RowIcon),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Icon(
-            imageVector = Icons.Filled.Edit,
-            contentDescription = stringResource(R.string.booking_edit_route),
-            modifier = Modifier.size(ControlTokens.RowIcon),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 

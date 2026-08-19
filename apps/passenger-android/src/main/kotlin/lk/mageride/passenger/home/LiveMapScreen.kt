@@ -97,8 +97,10 @@ internal fun LiveMapScreen(
     val openDrawer = LocalDrawerControl.current
     var filterOpen by remember { mutableStateOf(false) }
 
-    // §2.2's recents are written on SCR-PA-008 and a local table has no change feed, so the sheet
-    // re-reads them whenever this screen comes back to the front.
+    // The sheet's two lists are written on OTHER screens — recents on SCR-PA-008, saved addresses
+    // on SCR-PA-026 — and neither source has a change feed, so both are re-read whenever this
+    // screen comes back to the front. This model is scoped to the back-stack entry and survives
+    // the trip, so nothing else would ever re-read them. See `LiveMapViewModel.onResumed`.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { model.onResumed() }

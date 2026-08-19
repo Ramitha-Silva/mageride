@@ -158,6 +158,8 @@
     <string name="booking_no_gtfs">මෙම ප්‍රදේශයේ බස් මාර්ග තොරතුරු ඉක්මනින්.</string>
     <string name="booking_no_routes">මෙම ගමනාන්තයට සෘජු පොදු මාර්ගයක් නැත.</string>
     <string name="booking_no_tiers">මෙම ගමනට වාහන නොමැත.</string>
+    <string name="booking_pickup_label">නැගීමේ ස්ථානය</string>
+    <string name="booking_destination_label">ගමනාන්තය</string>
     <string name="booking_no_destination">ගමනාන්තයක් තෝරන්න</string>
     <string name="booking_edit_route">මාර්ගය වෙනස් කරන්න</string>
 

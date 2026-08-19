@@ -210,6 +210,7 @@ final class LiveMapModel: ObservableObject {
     ///
     /// Called whenever the map comes back to the front, because the row is written on **another**
     /// screen (SCR-PI-008) and a local table has no change feed a publisher could subscribe to.
+    /// ``loadShortcuts()`` is the other half of that — see it for why the screen calls both.
     func reloadRecents() async {
         state.recents = await recents.recent()
     }
@@ -332,7 +333,16 @@ final class LiveMapModel: ObservableObject {
     ///
     /// Best effort: the chips are a convenience and a passenger with no saved addresses simply has
     /// none, which is also what a failure looks like. C101 owns the screen that creates them.
-    private func loadShortcuts() async {
+    ///
+    /// **Re-read whenever the map comes back to the front, and not only from ``start()``**
+    /// (Δ handset report, found on the Android twin and ported here). A saved address is written on
+    /// **another** screen — SCR-PI-026 — and `GET /v1/me/saved-addresses` has no change feed a
+    /// publisher could subscribe to, so an address the passenger had just saved had no chip on the
+    /// map behind it. Leaving that to ``start()`` would make the chips depend on whether SwiftUI
+    /// restarted a `.task` on the way back, which is not a thing a passenger's address book should
+    /// turn on; ``LiveMapScreen`` calls this from `.onAppear` beside ``reloadRecents()``, in a task
+    /// of its own so neither read can hold the other up.
+    func loadShortcuts() async {
         guard let saved = try? await places.savedAddresses() else { return }
         state.shortcuts = saved
     }

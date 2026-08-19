@@ -305,6 +305,29 @@ class LiveMapViewModelTest {
     }
 
     @Test
+    fun a_saved_address_gets_its_chip_on_the_next_resume_and_not_on_the_next_launch() = runBlocking {
+        // **The bug this test exists for.** The ★ chips are written on ANOTHER screen (SCR-PA-026)
+        // and `GET /v1/me/saved-addresses` has no change feed. This model is scoped to the live
+        // map's back-stack entry and SURVIVES the trip there and back, so `init` does not run a
+        // second time — `loadShortcuts` had exactly one caller, and an address the passenger had
+        // just saved had no chip until the process was restarted. Reported from a handset.
+        backend.next(
+            "listSavedAddresses",
+            FakeReply.value(SavedAddressListResponse(items = listOf(HOME, WORK))),
+            FakeReply.value(SavedAddressListResponse(items = listOf(HOME, WORK, GYM))),
+        )
+        val model = viewModel(connectedPlane())
+        val opening = model.state.await { it.shortcuts.isNotEmpty() }
+        assertEquals(listOf("Home", "Work"), opening.shortcuts.map(SavedAddress::label))
+
+        // Away to SCR-PA-026, an address saved, and back.
+        model.onResumed()
+
+        val resumed = model.state.await { it.shortcuts.size == 3 }
+        assertEquals(listOf("Home", "Work", "Gym"), resumed.shortcuts.map(SavedAddress::label))
+    }
+
+    @Test
     fun the_popup_fills_its_eta_driver_and_plate_from_the_snapshot() = runBlocking {
         // The three fields the socket cannot carry. `VehicleFrame` is a position — putting a
         // driver's name in it would put a driver's name on every frame of every vehicle, several
@@ -545,6 +568,15 @@ class LiveMapViewModelTest {
             line1 = "1 Union Place",
             lat = 6.9200,
             lng = 79.8600,
+        )
+
+        /** Saved on SCR-PA-026 while the map sat in the back stack — see the resume test. */
+        val GYM = SavedAddress(
+            addressId = "01JADDR000000000000000003",
+            label = "Gym",
+            line1 = "14 Duplication Road",
+            lat = 6.9000,
+            lng = 79.8550,
         )
     }
 }

@@ -159,6 +159,9 @@ enum HomeFixtures {
     static let home = address(id: "01JADDR000000000000000001", label: "Home", lat: 6.9271, lng: 79.8612)
     static let work = address(id: "01JADDR000000000000000002", label: "Work", lat: 6.9200, lng: 79.8600)
 
+    /// Saved on SCR-PI-026 while the map sat behind it — see the re-read test.
+    static let gym = address(id: "01JADDR000000000000000003", label: "Gym", lat: 6.9000, lng: 79.8550)
+
     static func place(
         _ name: String,
         lat: Double,

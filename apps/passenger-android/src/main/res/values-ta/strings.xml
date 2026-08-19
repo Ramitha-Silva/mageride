@@ -158,6 +158,8 @@
     <string name="booking_no_gtfs">இந்தப் பகுதிக்கான பேருந்து வழித் தகவல் விரைவில்.</string>
     <string name="booking_no_routes">இந்த இலக்கை நேரடியாக அடையும் பொது வழி இல்லை.</string>
     <string name="booking_no_tiers">இந்தப் பயணத்திற்கு வாகனங்கள் இல்லை.</string>
+    <string name="booking_pickup_label">ஏறும் இடம்</string>
+    <string name="booking_destination_label">பயண இலக்கு</string>
     <string name="booking_no_destination">ஒரு இலக்கைத் தேர்ந்தெடுக்கவும்</string>
     <string name="booking_edit_route">வழியை மாற்று</string>
 
