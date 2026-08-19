@@ -32,6 +32,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lk.mageride.passenger.R
+import lk.mageride.passenger.location.LastKnownFix
 import lk.mageride.passenger.onboarding.PhoneNumber
 import lk.mageride.passenger.ride.PaymentRails
 import lk.mageride.passenger.ui.MoneyFormat
@@ -42,9 +43,11 @@ import lk.mageride.passenger.ui.component.PhoneNumberField
 import lk.mageride.passenger.ui.component.SectionLabel
 import lk.mageride.passenger.ui.theme.ControlTokens
 import lk.mageride.passenger.ui.theme.MageRideTheme
+import lk.mageride.shared.data.models.GeoPoint
 import lk.mageride.shared.data.models.PackageSize
 import lk.mageride.shared.data.models.fare.PaymentMethod
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 /**
  * SCR-PA-012 — sending a parcel (US-20.1/20.2/20.8, P-06).
@@ -69,6 +72,10 @@ internal fun PackageBookingScreen(
     model: PackageBookingViewModel = koinViewModel(),
 ) {
     val state by model.state.collectAsStateWithLifecycle()
+
+    // The Map method's opening camera — see `ProxyRiderScreen` for why this is read and not
+    // collected.
+    val lastFix = koinInject<LastKnownFix>()
     var pasteFor by remember { mutableStateOf<PackageEnd?>(null) }
     var mapFor by remember { mutableStateOf<PackageEnd?>(null) }
 
@@ -241,7 +248,7 @@ internal fun PackageBookingScreen(
             label = stringResource(
                 if (end == PackageEnd.PICKUP) R.string.package_pickup else R.string.package_dropoff,
             ),
-            around = (if (end == PackageEnd.PICKUP) state.pickup else state.dropoff)?.point,
+            around = state.openingCamera(end, lastFix),
             onUse = { place ->
                 model.setPlace(end, place)
                 mapFor = null
@@ -250,6 +257,18 @@ internal fun PackageBookingScreen(
         )
     }
 }
+
+/**
+ * Where the Map picker opens for [end]: whatever that end already holds, else the booker's own fix.
+ *
+ * A function rather than an expression at the call site because `PackageBookingScreen` sits exactly
+ * on detekt's cyclomatic ceiling — and because "open where the thing already is, otherwise where
+ * the passenger is" is a rule, not a layout. Without the fallback the picker opens on
+ * `MapCamera.Default` — Colombo Fort, zoom 12 — for a booker standing anywhere else, with its CTA
+ * disabled until the first camera settle produces a centre.
+ */
+private fun PackageBookingState.openingCamera(end: PackageEnd, lastFix: LastKnownFix): GeoPoint? =
+    (if (end == PackageEnd.PICKUP) pickup else dropoff)?.point ?: lastFix.point
 
 /** P-06's `( S )( M )( L )`. */
 @Composable

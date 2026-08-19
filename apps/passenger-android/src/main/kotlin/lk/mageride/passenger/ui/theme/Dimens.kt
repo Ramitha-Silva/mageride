@@ -162,6 +162,15 @@ internal object ControlTokens {
      */
     val SheetMap: Dp = 320.dp
 
+    /**
+     * How far `MapPickSheet`'s search results may fall down over its map.
+     *
+     * Half of [SheetMap], so the pin and the ground it is over stay visible under the list — the
+     * results are there to move the map, and a list that covered the map would hide the thing it
+     * was moving. Longer answers scroll inside it.
+     */
+    val PredictionOverlay: Dp = 160.dp
+
     /** SCR-PA-014's radar sweep — the widening ring while dispatch looks for a driver (C080). */
     val RadarSize: Dp = 120.dp
 

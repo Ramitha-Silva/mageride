@@ -1,6 +1,8 @@
 package lk.mageride.passenger.booking
 
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import lk.mageride.passenger.MainDispatcher
 import lk.mageride.passenger.await
 import lk.mageride.passenger.location.LastKnownFix
@@ -27,6 +29,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * SCR-PA-009, and the two fences that are the reason it is a view model.
@@ -51,6 +55,48 @@ class RideBookingViewModelTest {
     fun setUp() {
         main.install()
         draft.begin(dropoff = NUGEGODA, pickup = COLOMBO)
+    }
+
+    @Test
+    fun a_pickup_captured_on_another_screen_re_quotes_the_journey() = runBlocking {
+        // `refresh()`'s own KDoc says *"called on entry and whenever an end of the journey moves"*,
+        // and nothing made the second half true. SCR-PA-010b captures a proxy pickup into the
+        // shared draft and pops back here; this view model lives on the same back-stack entry and
+        // survives the trip, so the fares and the bus routes on screen were still the ones quoted
+        // from where the BOOKER was standing. Naming the rider's pin in the summary without this
+        // would make the screen contradict itself — the right pickup over the wrong price.
+        val model = viewModel()
+        model.state.await { it.tiers.isNotEmpty() }
+        assertEquals(COLOMBO.point, bookings.askedFaresFrom.first(), "the opening quote is the booker's fix")
+
+        draft.expect(CaptureTarget.PROXY_PICKUP)
+        draft.capture(MAHARAGAMA_PIN)
+
+        model.state.await { it.draft.pickup == MAHARAGAMA_PIN }
+        awaitCall("the fares are re-asked from the pin") { bookings.askedFaresFrom.contains(MAHARAGAMA_PIN.point) }
+        assertTrue(bookings.askedRoutesFrom.contains(MAHARAGAMA_PIN.point), "and the bus list with it")
+    }
+
+    @Test
+    fun a_pickup_somebody_picked_is_not_the_passengers_own_fix() = runBlocking {
+        // **The defect this test exists for.** A `Place` cannot say where it came from, and the two
+        // sources render differently on SCR-PA-009: the passenger's own fix carries no address and
+        // is honestly "Current location", while a proxy rider's pin carries no address EITHER and
+        // is a specific place somewhere else entirely. Without this flag the summary told a booker
+        // their ride started where THEY were standing — the one thing booking for someone else
+        // means it does not — and the coordinates the booker had just pinned were nowhere on
+        // screen. Reported from a handset.
+        lastFix.record(PassengerFix(lat = COLOMBO.lat, lng = COLOMBO.lng))
+        draft.begin(dropoff = NUGEGODA)
+        assertFalse(draft.current.pickupIsChosen, "the fix nobody chose is not a choice")
+
+        // SCR-PA-010b's Map method, which is a pin and nothing else — no address, on purpose.
+        draft.expect(CaptureTarget.PROXY_PICKUP)
+        assertTrue(draft.capture(MAHARAGAMA_PIN), "somebody was waiting for it")
+
+        assertTrue(draft.current.pickupIsChosen)
+        assertEquals(MAHARAGAMA_PIN, draft.current.pickup)
+        assertNull(draft.current.pickup?.address, "and it still has no name, which is what the pin is for")
     }
 
     @Test
@@ -341,6 +387,19 @@ class RideBookingViewModelTest {
 
     // ------------------------------------------------------------------------------------------
 
+    /**
+     * Waits for [predicate] against the fake's recording rather than against state.
+     *
+     * A re-quote answers the same prices as the first one, so there is no state change to await —
+     * what changed is *where it was asked from*, and only the repository saw that.
+     */
+    private suspend fun awaitCall(what: String, predicate: () -> Boolean) {
+        withTimeout(WAIT) {
+            while (!predicate()) delay(POLL)
+        }
+        assertTrue(predicate(), what)
+    }
+
     private fun viewModel() = main.own(RideBookingViewModel(draft = draft, bookings = bookings, keys = keys))
 
     private fun direct() = TransitOption(
@@ -364,6 +423,14 @@ class RideBookingViewModelTest {
     )
 
     private companion object {
+
+        /** An unnamed pin two towns from [COLOMBO] — SCR-PA-010b's Map method, as it arrives. */
+        val MAHARAGAMA_PIN = Place(lat = 6.8480, lng = 79.9265)
+
+        /** Long enough for a re-quote on a loaded host, short enough to fail rather than hang. */
+        val WAIT = 5.seconds
+        val POLL = 5.milliseconds
+
         val COLOMBO = Place(lat = 6.9344, lng = 79.8428, address = "Colombo Fort")
         val NUGEGODA = Place(lat = 6.8649, lng = 79.8997, address = "Nugegoda")
 
