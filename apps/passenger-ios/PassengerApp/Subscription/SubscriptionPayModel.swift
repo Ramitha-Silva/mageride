@@ -38,7 +38,7 @@ struct SubscriptionPayState {
     var isBankAppAvailable = true
 
     /// What this subscriber owes. `nil` on a Free subscription, which has no payment UI at all.
-    var fare: Money? { subscription.flatMap { ModeBBilling.shared.fareFor(subscription: $0) } }
+    var fare: Money? { subscription.flatMap { ModeBBilling_.shared.fareFor(subscription: $0) } }
 
     /// The amount actually being paid — the server's once there is a payment, the fare before.
     var amount: Money? { payment?.money ?? fare }

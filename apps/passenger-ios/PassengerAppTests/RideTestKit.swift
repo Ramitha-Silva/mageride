@@ -328,7 +328,7 @@ enum RideFixtures {
     static func cancelled(penaltyMinor: Int64?) -> CancelRideResponse {
         CancelRideResponse(
             rideId: rideId,
-            state: RideState.cancelledByRiderAfterAccept,
+            state: RideState.cancelledbyriderafteraccept,
             version: 4,
             penalty: penaltyMinor.map {
                 CancellationPenalty(

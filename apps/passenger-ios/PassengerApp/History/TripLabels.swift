@@ -172,21 +172,21 @@ enum RideStateLabel {
         case RideState.paid:
             return ("history_state_paid", .ok)
 
-        case RideState.cashSettled:
+        case RideState.cashsettled:
             return ("history_state_cash", .muted)
 
         // P-08's terminal state for a parcel, and the only signal a `RideHistoryRow` carries that it
         // *was* one — see ``RideHistoryRow/isPackage``.
-        case RideState.cashOnDeliveryCollected:
+        case RideState.cashondeliverycollected:
             return ("history_state_cod", .muted)
 
-        case RideState.cancelledByRiderBeforeAccept,
-             RideState.cancelledByRiderAfterAccept,
-             RideState.cancelledByDriver,
-             RideState.expiredNoDriver:
+        case RideState.cancelledbyriderbeforeaccept,
+             RideState.cancelledbyriderafteraccept,
+             RideState.cancelledbydriver,
+             RideState.expirednodriver:
             return ("history_state_cancelled", .error)
 
-        case RideState.noShowRider, RideState.noShowDriver:
+        case RideState.noshowrider, RideState.noshowdriver:
             return ("history_state_no_show", .error)
 
         // `Completed` and `PaymentPending` are not terminal and should not reach a history list;

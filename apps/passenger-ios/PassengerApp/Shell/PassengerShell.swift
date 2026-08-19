@@ -85,7 +85,11 @@ struct PassengerShell: View {
                 }
                 .tabItem {
                     Label {
-                        Text(tab.labelKey, bundle: MageRideColor.bundle)
+                        // Wrapped explicitly because `labelKey` is a `String` variable, not a
+                        // literal: `Text(_:bundle:)` takes a `LocalizedStringKey`, and only a string
+                        // LITERAL converts to one on its own. Every other call in this target passes
+                        // a literal, which is why this is the one that needs it spelled out.
+                        Text(LocalizedStringKey(tab.labelKey), bundle: MageRideColor.bundle)
                     } icon: {
                         Image(systemName: tab.symbolName)
                     }

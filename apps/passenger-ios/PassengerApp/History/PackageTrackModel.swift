@@ -50,8 +50,8 @@ struct PackageTrackState {
     /// ``PaymentMethodScreen``'s note about `onChange(of:)`).
     var step: Int {
         guard let status else { return 0 }
-        if status == PackageStatus.pickedUp { return 1 }
-        if status == PackageStatus.inTransit { return 2 }
+        if status == PackageStatus.pickedup { return 1 }
+        if status == PackageStatus.intransit { return 2 }
         if status == PackageStatus.delivered { return PackageTrackState.deliveredStep }
         return 0
     }

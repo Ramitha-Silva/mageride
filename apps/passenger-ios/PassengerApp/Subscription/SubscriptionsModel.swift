@@ -118,7 +118,7 @@ final class SubscriptionsModel: ObservableObject {
         // Drawn without the pills first: the list is what the passenger came for, and holding it back
         // for N statements would leave the screen empty while they load.
         state.cards = held.map {
-            SubscriptionCard(subscription: $0, fare: ModeBBilling.shared.fareFor(subscription: $0), monthStatus: nil)
+            SubscriptionCard(subscription: $0, fare: ModeBBilling_.shared.fareFor(subscription: $0), monthStatus: nil)
         }
         state.isLoading = false
 

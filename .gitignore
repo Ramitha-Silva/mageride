@@ -78,6 +78,10 @@ xcuserdata/
 DerivedData/
 Pods/
 .swiftpm/
+# SwiftPM's own build directory, which appears inside `shared/swiftpm/MageRideH3` the moment
+# anything runs `swift build` or `swift test` there (VENDOR.md tells an upgrader to do exactly
+# that). It is ~326 MB of object files and a compiled H3 static library.
+.build/
 Carthage/Build/
 *.ipa
 *.dSYM.zip

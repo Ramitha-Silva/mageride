@@ -96,8 +96,16 @@ final class ApiSupportRepository: SupportRepository {
         try await support.getFaqArticle(articleId: articleId, lang: language)
     }
 
+    /// **`Page<T>.items` arrives as `[Any]`, and only this read needs the cast.** The export emits
+    /// the property as `NSArray<id>` — `Page<T>` keeps its type parameter across the bridge and its
+    /// rows do not — so the concrete type is put back here. ``faq(language:)`` above is untouched
+    /// because `listFaqArticles` answers a `FaqListResponse`, not a `Page`, and that envelope's
+    /// `items` is already typed. `compactMap` rather than `as!` for this target's own reason: a
+    /// failed force cast raises an exception Swift cannot catch and the process terminates. Every
+    /// row is a `Ticket` by contract, so nothing is dropped.
     func tickets(userId: String) async throws -> [Ticket] {
-        try await support.listSupportTickets(userId: userId, page: PageRequest.companion.FIRST).items
+        try await support.listSupportTickets(userId: userId, page: PageRequest.companion.FIRST)
+            .items.compactMap { $0 as? Ticket }
     }
 
     func ticket(userId: String, ticketId: String) async throws -> TicketDetail {
@@ -116,11 +124,15 @@ final class ApiSupportRepository: SupportRepository {
     /// `memcpy`. The same helper C100's transfer slip goes through, and it is the
     /// **provenance-free** form on purpose: `POST /v1/support/screenshots` declares no `capturedVia`
     /// part beside the file (AL-43), and a screenshot is picked rather than scanned.
+    ///
+    /// `data:` takes the `Data` as it is: the helper's Kotlin parameter is an `NSData`, and the
+    /// importer bridges an Objective-C `NSData *` parameter to `Data` on the Swift side — so an
+    /// `as NSData` here is a cast *away* from what the call wants, not towards it.
     func uploadScreenshot(fileName: String, data: Data) async throws -> String {
         try await support.uploadSupportScreenshot(
             file: IosCapturedDocumentKt.fileUploadOf(
                 fileName: fileName,
-                data: data as NSData,
+                data: data,
                 contentType: ApiSupportRepository.screenshotContentType
             ),
             idempotencyKey: nil

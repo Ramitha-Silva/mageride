@@ -73,7 +73,11 @@ struct FindingDriverScreen: View {
     private var map: some View {
         MageRideMap(
             pins: pins,
-            camera: model.state.ride?.pickup.map { MapCamera(lat: $0.lat, lng: $0.lng) } ?? .colombo
+            // The parentheses are the fix. `pickup` is a non-optional `Place`, so in
+            // `ride?.pickup.map { }` the `map` binds to the **Place** rather than to the optional
+            // chain — and a Kotlin `Place` has no `map`. Parenthesising makes the whole chain the
+            // `Place?` being mapped, which is what the `?? .colombo` fallback already assumed.
+            camera: (model.state.ride?.pickup).map { MapCamera(lat: $0.lat, lng: $0.lng) } ?? .colombo
         )
         .allowsHitTesting(false)
         .overlay { RadarPulse() }

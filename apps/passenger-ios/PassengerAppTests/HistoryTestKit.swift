@@ -138,8 +138,8 @@ enum HistoryFixtures {
     /// `bookerId` is what decides which of SCR-PI-020 and SCR-PI-021 is drawn — see
     /// ``PackageTrackModel/party(of:signedInUserId:)``.
     static func packageRide(
-        state: RideState = RideState.inProgress,
-        packageStatus: PackageStatus? = PackageStatus.pickupPending,
+        state: RideState = RideState.inprogress,
+        packageStatus: PackageStatus? = PackageStatus.pickuppending,
         bookerId: String? = senderId,
         counterpartyPhone: String? = driverPhone,
         driver: RideDriver? = rideDriver()

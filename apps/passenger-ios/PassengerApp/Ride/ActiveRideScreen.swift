@@ -197,7 +197,13 @@ struct ActiveRideScreen: View {
                 Image(systemName: "xmark")
                     .font(.system(size: MageRideControl.chipIcon))
                     .foregroundStyle(MageRideColor.onSurfaceVariant)
-                    .frame(width: MageRideControl.minimumTapTarget, minHeight: MageRideControl.outlinedAction)
+                    // `minWidth`, not `width`: SwiftUI has no `frame(width:minHeight:)` overload —
+                    // the exact-size one is `frame(width:height:alignment:)` and the flexible one
+                    // takes only `min`/`ideal`/`max`, so the two cannot be mixed. Both values are
+                    // floors anyway, and stating them as such is what was meant: 44 pt is the tap
+                    // target this button must never fall under, and 46 pt is `outlinedAction`'s
+                    // height, which is what keeps it aligned with the SOS button beside it.
+                    .frame(minWidth: MageRideControl.minimumTapTarget, minHeight: MageRideControl.outlinedAction)
                     .background(
                         MageRideColor.background,
                         in: RoundedRectangle(cornerRadius: MageRideRadius.md, style: .continuous)
