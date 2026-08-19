@@ -88,9 +88,14 @@ struct LiveMapScreen: View {
         .toolbar(.hidden, for: .navigationBar)
         .task { model.start() }
         .onDisappear { model.stop() }
-        // §2.2's recents are written on SCR-PI-008 and a local table has no change feed, so the
-        // sheet re-reads them whenever the map comes back to the front.
-        .onAppear { Task { await model.reloadRecents() } }
+        // The sheet's two lists are written on OTHER screens — recents on SCR-PI-008, saved
+        // addresses on SCR-PI-026 — and neither source has a change feed, so both are re-read
+        // whenever the map comes back to the front. Two tasks rather than one, so a slow or failing
+        // read cannot hold the other up. See `LiveMapModel.loadShortcuts()`.
+        .onAppear {
+            Task { await model.reloadRecents() }
+            Task { await model.loadShortcuts() }
+        }
         .sheet(isPresented: $isFilterOpen) {
             // Closure literals rather than `model.setMode` / `model.setType`: a method reference on
             // a `@MainActor` model is a `@MainActor` function value, and handing one to a plain

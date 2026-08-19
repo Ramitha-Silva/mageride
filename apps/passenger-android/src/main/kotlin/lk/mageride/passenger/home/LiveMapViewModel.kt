@@ -150,6 +150,9 @@ internal data class LiveMapState(
  * **This screen also owns the cell tick** — see [CELL_TICK]. It is the only caller of
  * [PassengerLiveMap.refreshCells], and without it a held boundary crossing never lands.
  *
+ * **Both of the sheet's lists are re-read on resume**, because both are written on other screens —
+ * see [onResumed].
+ *
  * @param cellTick How often a held boundary crossing is re-evaluated. A parameter only so a test
  *   can assert the tick without sleeping through it; nothing in the app passes one.
  */
@@ -214,13 +217,21 @@ internal class LiveMapViewModel(
     }
 
     /**
-     * Re-reads §2.2's recents.
+     * Re-reads both of the sheet's lists — §2.2's recents and US-7.13's shortcuts.
      *
-     * Called when the map is resumed, because the row is written on **another screen**
-     * (SCR-PA-008) and a local table has no change feed a `StateFlow` could subscribe to.
+     * Called when the map is resumed, because **neither list is written here**: a recent is written
+     * on SCR-PA-008 and a saved address on SCR-PA-026, and neither the local table nor
+     * `GET /v1/me/saved-addresses` has a change feed a `StateFlow` could subscribe to.
+     *
+     * **The shortcuts were missing from this (Δ handset report).** This model is scoped to the
+     * live map's back-stack entry, which SURVIVES the trip to SCR-PA-026 and back — so the `init`
+     * block does not run again, [loadShortcuts] had exactly one caller, and an address the
+     * passenger had just saved got no chip until the process was restarted. The two reads are
+     * launched separately so a slow or failing one does not hold the other up.
      */
     fun onResumed() {
         viewModelScope.launch { loadRecents() }
+        viewModelScope.launch { loadShortcuts() }
     }
 
     /** SCR-PA-006's mode row. Instant and client-side — no re-query (the wireframe says so). */

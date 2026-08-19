@@ -306,6 +306,25 @@ final class LiveMapModelTests: XCTestCase {
         XCTAssertTrue(model.state.shortcuts.isEmpty, "no chips, and no error either")
     }
 
+    /// **The bug this test exists for.** The ★ chips are written on **another** screen (SCR-PI-026)
+    /// and `GET /v1/me/saved-addresses` has no change feed either, so the chips need the same
+    /// re-read the recents get. Leaving it to ``LiveMapModel/start()`` would make an address book
+    /// depend on whether SwiftUI restarted a `.task` on the way back from the screen that wrote it —
+    /// on the Android twin, where the model outlives the trip outright, an address the passenger had
+    /// just saved had no chip until the process was restarted. Reported from a handset.
+    @MainActor
+    func testASavedAddressGetsItsChipOnTheNextAppearance() async {
+        let model = await connectedModel()
+        await eventually("opening chips") { await MainActor.run { !model.state.shortcuts.isEmpty } }
+        XCTAssertEqual(model.state.shortcuts.map(\.label), ["Home", "Work"])
+
+        // Away to SCR-PI-026, an address saved, and back.
+        places.saved = [HomeFixtures.home, HomeFixtures.work, HomeFixtures.gym]
+        await model.loadShortcuts()
+
+        XCTAssertEqual(model.state.shortcuts.map(\.label), ["Home", "Work", "Gym"])
+    }
+
     /// §2.2's `place_recents` is local-only and has no change feed, and the row is written on
     /// **another** screen (SCR-PI-008). So coming back to the map re-reads it — otherwise a place the
     /// passenger just searched for would be missing from the list of places they searched.

@@ -200,6 +200,12 @@
     <string name="booking_no_gtfs">Bus route info coming soon for this area.</string>
     <string name="booking_no_routes">No public route reaches this destination directly.</string>
     <string name="booking_no_tiers">No vehicles are available for this journey.</string>
+    <!-- The journey summary's two ends. Both are NAMED (Δ handset report): the pickup line
+         sat directly above the destination with nothing to tell them apart, so a passenger
+         read "Current location" as a caption for the place they were travelling TO. -->
+    <string name="booking_pickup_label">Pickup</string>
+    <string name="booking_destination_label">Travel destination</string>
+
     <string name="booking_no_destination">Choose a destination</string>
     <string name="booking_edit_route">Edit route</string>
 

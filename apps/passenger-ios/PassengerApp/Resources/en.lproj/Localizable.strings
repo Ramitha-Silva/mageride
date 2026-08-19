@@ -211,6 +211,12 @@
 "booking_no_gtfs" = "Bus route info coming soon for this area.";
 "booking_no_routes" = "No public route reaches this destination directly.";
 "booking_no_tiers" = "No vehicles are available for this journey.";
+/* The journey summary's two ends, both named: the pickup line sat directly above the
+   destination with nothing to tell them apart, so a passenger read "Current location" as a
+   caption for the place they were travelling TO */
+"booking_pickup_label" = "Pickup";
+"booking_destination_label" = "Travel destination";
+
 "booking_no_destination" = "Choose a destination";
 "booking_edit_route" = "Edit route";
 
