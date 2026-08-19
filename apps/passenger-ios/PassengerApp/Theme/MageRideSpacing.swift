@@ -178,6 +178,13 @@ enum MageRideControl {
     /// preview card and two buttons — the cell's frame, measured.
     static let pasteSheetHeight: CGFloat = 460
 
+    /// How far ``MapPickSheet``'s search results may fall down over its map.
+    ///
+    /// Half of the map they are drawn on, so the pin and the ground under it stay visible beneath
+    /// the list — the results are there to move the map, and a list that covered it would hide the
+    /// thing it was moving. Longer answers scroll inside it.
+    static let predictionOverlay: CGFloat = 110
+
     /// SCR-PI-009's map, which is a backdrop rather than the work (`flex:0 0 150px`).
     static let bookingMapHeight: CGFloat = 150
 

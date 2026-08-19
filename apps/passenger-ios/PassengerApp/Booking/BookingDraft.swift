@@ -55,6 +55,17 @@ struct BookingDraftState {
     /// Where it starts. Defaults to the passenger's fix and is editable everywhere.
     var pickup: Place?
 
+    /// Whether ``pickup`` is a place **somebody picked** — a proxy rider's pin, a pasted link, a
+    /// searched address — rather than the passenger's own fix.
+    ///
+    /// It exists because a ``Place`` cannot say where it came from and the two read differently on
+    /// SCR-PI-009: a fix has no address (see ``LastKnownFix/asPlace``) and is honestly called
+    /// *"Current location"*, while a pin the booker dropped for somebody else is a real, specific
+    /// place that happens to have no name — printing *"Current location"* over it says the ride
+    /// starts where the BOOKER is standing, which is exactly what booking for someone else means it
+    /// does not.
+    var pickupIsChosen = false
+
     /// Where it ends. SCR-PI-008 sets it; SCR-PI-013 makes it mandatory (AL-36).
     var dropoff: Place?
 
@@ -184,7 +195,9 @@ final class BookingDraft: ObservableObject {
 
         switch target {
         case .bookingDropoff, .scheduleDropoff: state.dropoff = place
-        case .bookingPickup, .proxyPickup: state.pickup = place
+        case .bookingPickup, .proxyPickup:
+            state.pickup = place
+            state.pickupIsChosen = true
         case .packagePickup: state.packagePickup = place
         case .packageDropoff: state.packageDropoff = place
         }
@@ -210,6 +223,8 @@ final class BookingDraft: ObservableObject {
         var fresh = BookingDraftState()
         fresh.dropoff = dropoff
         fresh.pickup = pickup ?? lastFix.asPlace
+        // The caller passing one is the only way a fresh draft starts anywhere but here.
+        fresh.pickupIsChosen = pickup != nil
         fresh.paymentMethod = defaultRail
         state = fresh
     }

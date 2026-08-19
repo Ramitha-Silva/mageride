@@ -88,8 +88,9 @@ struct RideBookingScreen: View {
                     .frame(maxWidth: .infinity)
 
                 JourneySummaryCard(
-                    pickup: model.state.draft.pickup?.address,
-                    dropoff: model.state.draft.dropoff?.address,
+                    pickup: model.state.draft.pickup,
+                    pickupIsChosen: model.state.draft.pickupIsChosen,
+                    dropoff: model.state.draft.dropoff,
                     onEdit: onEditRoute
                 )
 

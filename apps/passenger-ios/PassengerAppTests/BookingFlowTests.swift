@@ -49,6 +49,28 @@ final class BookingDraftTests: XCTestCase {
         XCTAssertFalse(cold.state.isQuotable)
     }
 
+    /// **The defect this one exists for.** A ``Place`` cannot say where it came from, and the two
+    /// sources render differently on SCR-PI-009: the passenger's own fix carries no address and is
+    /// honestly *"Current location"*, while a proxy rider's pin carries no address EITHER and is a
+    /// specific place somewhere else entirely. Without this flag the summary told a booker their
+    /// ride started where THEY were standing — the one thing booking for someone else means it does
+    /// not — and the coordinates the booker had just pinned were nowhere on screen. Reported from a
+    /// handset.
+    @MainActor
+    func testAPickupSomebodyPickedIsNotThePassengersOwnFix() {
+        lastFix.record(PassengerFix(lat: BookingFixtures.colombo.lat, lng: BookingFixtures.colombo.lng))
+        draft.begin(dropoff: BookingFixtures.nugegoda)
+        XCTAssertFalse(draft.state.pickupIsChosen, "the fix nobody chose is not a choice")
+
+        // SCR-PI-010b's Map method, which is a pin and nothing else — no address, on purpose.
+        draft.expect(.proxyPickup)
+        XCTAssertTrue(draft.capture(BookingFixtures.maharagamaPin), "somebody was waiting for it")
+
+        XCTAssertTrue(draft.state.pickupIsChosen)
+        XCTAssertEqual(draft.state.pickup?.lat, BookingFixtures.maharagamaPin.lat)
+        XCTAssertNil(draft.state.pickup?.address, "and it still has no name, which is what the pin is for")
+    }
+
     /// **A place with nobody waiting for it is a new booking.** That is the home sheet's *"Where
     /// to?"*, and it is the difference between beginning a booking and editing one.
     @MainActor

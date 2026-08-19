@@ -185,12 +185,12 @@ struct PasteLinkSheet: View {
     }
 }
 
-/// The **Map** capture method — drop a pin by moving the map under it.
+/// The **Map** capture method — search for the area, then drop a pin by moving the map under it.
 ///
 /// **This is not a wireframe screen and has no SCR-PI id**, which is itself worth stating: the
 /// frames offer *"Map pin"* / *"Map"* as a capture method on SCR-PI-010b and SCR-PI-012, and
-/// *"📌 Select on map"* on SCR-PI-008, but draw no screen for any of them. A `.sheet` is therefore
-/// the conservative reading — it is what SCR-PI-012a is for its own method, it needs no back-stack
+/// *"Select on map"* on SCR-PI-008, but draw no screen for any of them. A `.sheet` is therefore the
+/// conservative reading — it is what SCR-PI-012a is for its own method, it needs no back-stack
 /// entry, and it leaves the form underneath exactly as the passenger left it. Recorded in the C079
 /// handoff and restated in C097's.
 ///
@@ -198,60 +198,177 @@ struct PasteLinkSheet: View {
 /// distribution this app links, and the centre-pin pattern is the one every ride app uses anyway: it
 /// works with one thumb and needs no precise touch on a small marker. ``MageRideMap`` `onCameraIdle`
 /// is the half that reports where it settled.
+///
+/// **The search box is what makes the pin usable across a city** (Δ handset report, ported from the
+/// Android twin). Panning was the only way to move this map, so a pickup two towns away meant
+/// dragging there at whatever zoom the sheet opened on — and with no fix passed in it opened on
+/// `MapCamera.colombo` wherever the booker actually was. Typing puts the map on the junction; the
+/// pin still decides the metres. See ``MapPickModel`` for what a search result does and does not
+/// commit.
+///
+/// **`.large` only**, which is a defect fix rather than a preference: at `.medium` the map pushed
+/// *"Use this location"* off the bottom of the sheet, and the gesture a passenger would try to
+/// reveal it lands on a map that pans instead.
 struct MapPickSheet: View {
+
+    @StateObject private var model: MapPickModel
 
     let titleKey: String
     let around: GeoPoint?
     let onUse: (Place) -> Void
     let onDismiss: () -> Void
 
-    @State private var centre: GeoPoint?
+    init(
+        places: PassengerPlaces,
+        titleKey: String,
+        around: GeoPoint?,
+        onUse: @escaping (Place) -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
+        _model = StateObject(wrappedValue: MapPickModel(places: places))
+        self.titleKey = titleKey
+        self.around = around
+        self.onUse = onUse
+        self.onDismiss = onDismiss
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MageRideSpacing.sm) {
-            Text(key: titleKey)
-                .mageFont(.title)
-                .foregroundStyle(MageRideColor.onSurface)
+        ScrollView {
+            VStack(alignment: .leading, spacing: MageRideSpacing.sm) {
+                Text(key: titleKey)
+                    .mageFont(.title)
+                    .foregroundStyle(MageRideColor.onSurface)
 
-            ZStack {
-                MageRideMap(
-                    camera: around.map { MapCamera(lat: $0.lat, lng: $0.lng) } ?? .colombo,
-                    onCameraIdle: { centre = $0 }
+                LabelledTextField(
+                    labelKey: "map_pick_search",
+                    value: Binding(
+                        get: { model.state.query },
+                        set: { model.onQueryChanged($0) }
+                    ),
+                    placeholder: "search_drop_placeholder".localised
                 )
-                // The fixed marker, drawn over the map rather than as an annotation — which is what
-                // makes it stay exactly at the centre through every gesture.
-                Image(systemName: "mappin")
-                    .font(.system(size: MageRideControl.listRowIcon))
-                    .foregroundStyle(MageRideColor.primary)
-                    .accessibilityHidden(true)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: MageRideControl.pinPreview * 2.5)
-            .clipShape(RoundedRectangle(cornerRadius: MageRideRadius.md, style: .continuous))
 
-            Text(centre.map { Coordinates.format(lat: $0.lat, lng: $0.lng) } ?? "map_pick_move".localised)
-                .mageFont(.caption)
-                .monospacedDigit()
-                .foregroundStyle(MageRideColor.onSurfaceVariant)
+                ZStack(alignment: .top) {
+                    MageRideMap(
+                        camera: around.map { MapCamera(lat: $0.lat, lng: $0.lng) } ?? .colombo,
+                        // A search result moves the map — see `focus`, which is what this sheet
+                        // needed and what `camera` cannot be used for while the map moves the pin.
+                        focus: model.state.focus,
+                        onCameraIdle: { model.onPinMoved($0) }
+                    )
 
-            Button {
-                guard let centre else { return }
-                onUse(Place(lat: centre.lat, lng: centre.lng, address: nil))
-                onDismiss()
-            } label: {
-                Text(key: "paste_use")
+                    // The fixed marker, drawn over the map rather than as an annotation — which is
+                    // what makes it stay exactly at the centre through every gesture.
+                    Image(systemName: "mappin")
+                        .font(.system(size: MageRideControl.listRowIcon))
+                        .foregroundStyle(MageRideColor.primary)
+                        .accessibilityHidden(true)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    // Over the map rather than above it: the sheet keeps one height whether or not a
+                    // search is open, so the CTA never moves under the passenger's thumb.
+                    predictions
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: MageRideControl.pinPreview * 2.5)
+                .clipShape(RoundedRectangle(cornerRadius: MageRideRadius.md, style: .continuous))
+
+                Text(pinLabel)
+                    .mageFont(.bodySmall)
+                    .monospacedDigit()
+                    .foregroundStyle(
+                        model.state.selection == nil
+                            ? MageRideColor.onSurfaceVariant
+                            : MageRideColor.onSurface
+                    )
+
+                Button {
+                    guard let selection = model.state.selection else { return }
+                    onUse(selection)
+                    onDismiss()
+                } label: {
+                    Text(key: "paste_use")
+                }
+                .buttonStyle(.mageCta)
+                .disabled(model.state.selection == nil)
             }
-            .buttonStyle(.mageCta)
-            .disabled(centre == nil)
+            .padding(.horizontal, MageRideSpacing.md)
+            .padding(.top, MageRideSpacing.md)
+            .padding(.bottom, MageRideSpacing.lg)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, MageRideSpacing.md)
-        .padding(.top, MageRideSpacing.md)
-        .padding(.bottom, MageRideSpacing.lg)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(MageRideColor.surface)
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .onAppear { centre = around }
+        .onAppear { model.opened(around: around) }
+    }
+
+    /// The search results, as a card over the top of the map.
+    ///
+    /// Nothing at all when there is nothing to say — an empty field, or a query too short to spend a
+    /// request on — so the map is unobstructed for the gesture the sheet is actually for.
+    @ViewBuilder
+    private var predictions: some View {
+        if !model.state.predictions.isEmpty || model.state.searching || model.state.geocoderDown {
+            VStack(alignment: .leading, spacing: 0) {
+                if model.state.searching {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(MageRideSpacing.xs)
+                } else if model.state.geocoderDown {
+                    // The pin is unaffected by a geocoder that cannot answer, so this says so and
+                    // leaves the map alone — the same call AL-14 makes about a reverse geocode.
+                    Text(key: "search_geocoder_down")
+                        .mageFont(.bodySmall)
+                        .foregroundStyle(MageRideColor.onSurfaceVariant)
+                        .padding(MageRideSpacing.xs)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(model.state.predictions, id: \.displayName) { place in
+                                Button {
+                                    model.onPredictionChosen(place)
+                                } label: {
+                                    predictionRow(place)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: MageRideControl.predictionOverlay)
+                }
+            }
+            .background(
+                MageRideColor.surface,
+                in: RoundedRectangle(cornerRadius: MageRideRadius.md, style: .continuous)
+            )
+            .padding(MageRideSpacing.xs)
+        }
+    }
+
+    /// One result: the star or pin its source earns it, and what it is called.
+    private func predictionRow(_ place: GeocodedPlace) -> some View {
+        let saved = place.source == GeocodedPlaceSource.saved || place.source == GeocodedPlaceSource.recent
+
+        return HStack(spacing: MageRideSpacing.xs) {
+            Image(systemName: saved ? "star" : "mappin.and.ellipse")
+                .font(.system(size: MageRideControl.chipIcon))
+                .foregroundStyle(MageRideColor.onSurfaceVariant)
+            Text(place.displayName)
+                .mageFont(.bodySmall)
+                .foregroundStyle(MageRideColor.onSurface)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(MageRideSpacing.xs)
+        .contentShape(Rectangle())
+    }
+
+    /// What the pin is currently called: the searched name, the coordinates, or the prompt.
+    private var pinLabel: String {
+        if let chosen = model.state.chosen { return chosen.displayName }
+        if let centre = model.state.centre { return Coordinates.format(lat: centre.lat, lng: centre.lng) }
+        return "map_pick_move".localised
     }
 }
 

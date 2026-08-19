@@ -195,8 +195,14 @@ struct MutedRow: View {
 /// pickup, which is the cell describing a control the flow behind it does not have.
 struct JourneySummaryCard: View {
 
-    let pickup: String?
-    let dropoff: String?
+    let pickup: Place?
+
+    /// Whether ``pickup`` is a place somebody PICKED rather than the passenger's own fix — see
+    /// ``BookingDraftState/pickupIsChosen``. It decides whether a pickup with no address reads as
+    /// *"Current location"* or as the coordinates it was pinned at.
+    let pickupIsChosen: Bool
+
+    let dropoff: Place?
     let onEdit: () -> Void
 
     var body: some View {
@@ -207,7 +213,7 @@ struct JourneySummaryCard: View {
                 Circle()
                     .fill(MageRideColor.success)
                     .frame(width: MageRideControl.routeDot, height: MageRideControl.routeDot)
-                Text(pickup ?? "search_current_location".localised)
+                Text(pickupText)
                     .mageFont(.bodySmall)
                     .foregroundStyle(MageRideColor.onSurface)
                     .lineLimit(1)
@@ -220,7 +226,7 @@ struct JourneySummaryCard: View {
                 Circle()
                     .fill(MageRideColor.error)
                     .frame(width: MageRideControl.routeDot, height: MageRideControl.routeDot)
-                Text(dropoff ?? "booking_no_destination".localised)
+                Text(dropoff.map(PlaceLabel.of) ?? "booking_no_destination".localised)
                     .mageFont(.bodySmall)
                     .foregroundStyle(dropoff == nil ? MageRideColor.onSurfaceVariant : MageRideColor.onSurface)
                     .lineLimit(1)
@@ -238,6 +244,17 @@ struct JourneySummaryCard: View {
             MageRideColor.surfaceVariant,
             in: RoundedRectangle(cornerRadius: MageRideRadius.md, style: .continuous)
         )
+    }
+
+    /// A pickup somebody PICKED is named, or shown as the coordinates it was pinned at — only the
+    /// passenger's own fix is *"Current location"*.
+    ///
+    /// A proxy rider's pin has no address and is not where the booker is standing, so printing the
+    /// fix's label over it was a lie the booker could not correct.
+    private var pickupText: String {
+        guard let pickup else { return "search_current_location".localised }
+        if pickupIsChosen { return PlaceLabel.of(pickup) }
+        return pickup.address ?? "search_current_location".localised
     }
 }
 
@@ -266,6 +283,20 @@ struct LocationMethodPicker: View {
     }
 }
 
+/// What a captured place reads as: its **name**, or the coordinates it was pinned at.
+///
+/// A place with no address is not a place with no answer — a pin dropped on an unnamed lane is
+/// exactly what the Map method is for, and *"Pinned at 6.92710, 79.86120"* is a passenger telling a
+/// driver where to come. Every screen that shows a captured place goes through here, so
+/// SCR-PI-009's summary and SCR-PI-010b's row cannot drift apart.
+enum PlaceLabel {
+
+    static func of(_ place: Place) -> String {
+        if let address = place.address, !address.isEmpty { return address }
+        return "capture_pinned".localisedFormat(place.lat, place.lng)
+    }
+}
+
 /// What a captured place reads as under its control, or the prompt when there is none yet.
 struct CapturedPlaceRow: View {
 
@@ -281,7 +312,6 @@ struct CapturedPlaceRow: View {
 
     private var text: String {
         guard let place else { return emptyKey.localised }
-        if let address = place.address, !address.isEmpty { return address }
-        return "capture_pinned".localisedFormat(place.lat, place.lng)
+        return PlaceLabel.of(place)
     }
 }

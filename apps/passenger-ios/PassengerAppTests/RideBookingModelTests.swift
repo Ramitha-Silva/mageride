@@ -233,6 +233,33 @@ final class RideBookingModelTests: XCTestCase {
         XCTAssertFalse(RideBookingModel.passengerTiers.map(\.wire).contains(RideVehicleType.truck.wire))
     }
 
+    /// ``RideBookingModel/refresh()``'s own note says *"called on entry and whenever an end of the
+    /// journey moves"*, and nothing made the second half true. SCR-PI-010b captures a proxy pickup
+    /// into the shared draft and comes back here; this model survives the trip, so the fares and the
+    /// bus routes on screen were still the ones quoted from where the BOOKER was standing. Naming
+    /// the rider's pin in the summary without this would make the screen contradict itself — the
+    /// right pickup over the wrong price.
+    @MainActor
+    func testAPickupCapturedOnAnotherScreenReQuotesTheJourney() async {
+        let model = await started()
+        await eventually("the opening quote") { await MainActor.run { !self.bookings.askedFaresFrom.isEmpty } }
+        XCTAssertEqual(bookings.askedFaresFrom.first?.lat, BookingFixtures.colombo.lat)
+
+        draft.expect(.proxyPickup)
+        draft.capture(BookingFixtures.maharagamaPin)
+
+        await eventually("re-quoted from the pin") {
+            await MainActor.run {
+                self.bookings.askedFaresFrom.contains { $0.lat == BookingFixtures.maharagamaPin.lat }
+            }
+        }
+        XCTAssertTrue(
+            bookings.askedRoutesFrom.contains { $0.lat == BookingFixtures.maharagamaPin.lat },
+            "and the bus list with it"
+        )
+        _ = model
+    }
+
     // MARK: -
 
     @MainActor
