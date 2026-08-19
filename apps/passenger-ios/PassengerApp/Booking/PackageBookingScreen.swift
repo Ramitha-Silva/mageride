@@ -21,6 +21,11 @@ struct PackageBookingScreen: View {
     @StateObject private var model: PackageBookingModel
 
     private let bookings: BookingRepository
+
+    /// The Map method's geocoder and opening camera — see ``ProxyRiderScreen`` for both.
+    private let places: PassengerPlaces
+    private let lastFix: LastKnownFix
+
     let onBack: () -> Void
     let onSearch: (PackageEnd) -> Void
     let onBooked: (String) -> Void
@@ -33,6 +38,8 @@ struct PackageBookingScreen: View {
         bookings: BookingRepository,
         keys: IdempotencyKeys,
         otps: PackageOtps,
+        places: PassengerPlaces,
+        lastFix: LastKnownFix,
         onBack: @escaping () -> Void,
         onSearch: @escaping (PackageEnd) -> Void,
         onBooked: @escaping (String) -> Void
@@ -41,6 +48,8 @@ struct PackageBookingScreen: View {
             wrappedValue: PackageBookingModel(draft: draft, bookings: bookings, keys: keys, otps: otps)
         )
         self.bookings = bookings
+        self.places = places
+        self.lastFix = lastFix
         self.onBack = onBack
         self.onSearch = onSearch
         self.onBooked = onBooked
@@ -125,8 +134,9 @@ struct PackageBookingScreen: View {
         }
         .sheet(item: $mapEnd) { end in
             MapPickSheet(
+                places: places,
                 titleKey: end == .pickup ? "package_pickup" : "package_dropoff",
-                around: (end == .pickup ? model.state.pickup : model.state.dropoff)?.point,
+                around: (end == .pickup ? model.state.pickup : model.state.dropoff)?.point ?? lastFix.point,
                 onUse: { model.setPlace(end, $0) },
                 onDismiss: { mapEnd = nil }
             )

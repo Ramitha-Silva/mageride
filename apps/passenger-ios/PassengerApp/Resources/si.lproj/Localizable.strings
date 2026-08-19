@@ -169,6 +169,7 @@
 "capture_request" = "ඉල්ලන්න";
 "capture_pinned" = "%1$.5f, %2$.5f හි සලකුණු කර ඇත";
 "map_pick_move" = "සලකුණ තැබීමට සිතියම ගෙන යන්න";
+"map_pick_search" = "ස්ථානයක් සොයන්න";
 
 /* SCR-PI-010b — the proxy rider */
 "proxy_title" = "වෙනත් අයෙකු වෙනුවෙන් වෙන් කරන්න";

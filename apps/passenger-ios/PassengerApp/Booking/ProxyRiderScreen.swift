@@ -26,6 +26,14 @@ struct ProxyRiderScreen: View {
     @StateObject private var model: ProxyRiderModel
 
     private let bookings: BookingRepository
+
+    /// The geocoder behind the Map method's search box, and the fix it opens over. Held rather than
+    /// reached for: ``MapPickSheet`` builds its own model, and a picker that opens on
+    /// `MapCamera.colombo` opens on Colombo Fort for a booker standing anywhere else — with its CTA
+    /// disabled until the first camera settle produces a centre.
+    private let places: PassengerPlaces
+    private let lastFix: LastKnownFix
+
     let onBack: () -> Void
     let onSearch: () -> Void
     let onDone: () -> Void
@@ -37,12 +45,16 @@ struct ProxyRiderScreen: View {
         draft: BookingDraft,
         bookings: BookingRepository,
         live: PassengerLiveMap,
+        places: PassengerPlaces,
+        lastFix: LastKnownFix,
         onBack: @escaping () -> Void,
         onSearch: @escaping () -> Void,
         onDone: @escaping () -> Void
     ) {
         _model = StateObject(wrappedValue: ProxyRiderModel(draft: draft, bookings: bookings, live: live))
         self.bookings = bookings
+        self.places = places
+        self.lastFix = lastFix
         self.onBack = onBack
         self.onSearch = onSearch
         self.onDone = onDone
@@ -120,8 +132,9 @@ struct ProxyRiderScreen: View {
         }
         .sheet(isPresented: $isMapOpen) {
             MapPickSheet(
+                places: places,
                 titleKey: "proxy_pickup_method",
-                around: model.state.pickup?.point,
+                around: model.state.pickup?.point ?? lastFix.point,
                 onUse: { model.setPickup($0) },
                 onDismiss: { isMapOpen = false }
             )

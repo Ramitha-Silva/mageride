@@ -169,6 +169,7 @@
 "capture_request" = "கோரு";
 "capture_pinned" = "%1$.5f, %2$.5f இல் குறிக்கப்பட்டது";
 "map_pick_move" = "குறியை வைக்க வரைபடத்தை நகர்த்தவும்";
+"map_pick_search" = "இடத்தைத் தேடுங்கள்";
 
 /* SCR-PI-010b — the proxy rider */
 "proxy_title" = "வேறு ஒருவருக்காக முன்பதிவு";

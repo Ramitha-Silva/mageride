@@ -50,11 +50,22 @@ final class FakeBookingRepository: BookingRepository, @unchecked Sendable {
     private(set) var declined: [String] = []
     private(set) var routeReads = 0
 
+    /// Where each quote was asked FROM, in order.
+    ///
+    /// ``estimatedTypes`` records what was priced and not where, which is enough for AL-19 and
+    /// blind to the thing SCR-PI-009 gets wrong when a pickup moves under it — see
+    /// `aPickupCapturedOnAnotherScreenReQuotesTheJourney`.
+    private(set) var askedFaresFrom: [GeoPoint] = []
+
+    /// The same, for the public list.
+    private(set) var askedRoutesFrom: [GeoPoint] = []
+
     /// Whether `getBusesOnRoute` was ever reachable from here. It is not, and AL-17 is why — see
     /// ``BookingRepository``, which declares no such method.
     let hasRouteNumberLookup = false
 
     func transitOptions(from: GeoPoint, to: GeoPoint) async throws -> TransitOptionsResponse {
+        askedRoutesFrom.append(from)
         if let transitFailure { throw transitFailure }
         return options
     }
@@ -72,6 +83,7 @@ final class FakeBookingRepository: BookingRepository, @unchecked Sendable {
         kind: FareEstimateKind
     ) async throws -> FareEstimateResponse {
         estimatedTypes.append(vehicleType)
+        askedFaresFrom.append(from)
         if let estimateFailure { throw estimateFailure }
         return FareEstimateResponse(
             fareEstimateToken: estimateToken,
@@ -167,6 +179,9 @@ enum BookingFixtures {
 
     static let colombo = Place(lat: 6.9344, lng: 79.8428, address: "Galle Face")
     static let nugegoda = Place(lat: 6.8649, lng: 79.8997, address: "Nugegoda")
+
+    /// An unnamed pin two towns from ``colombo`` — SCR-PI-010b's Map method, as it arrives.
+    static let maharagamaPin = Place(lat: 6.8480, lng: 79.9265, address: nil)
 
     /// A halt ~1.5 km from Colombo Fort — comfortably past BR-23.2's 400 m radius, so the walk hint
     /// is drawn.

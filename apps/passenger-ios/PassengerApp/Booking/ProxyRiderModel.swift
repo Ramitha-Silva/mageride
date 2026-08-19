@@ -141,7 +141,13 @@ final class ProxyRiderModel: ObservableObject {
     /// Whatever the chosen method produced — a search result, a dropped pin, or a pasted link.
     func setPickup(_ place: Place) {
         state.pickup = place
-        draft.update { $0.pickup = place }
+        draft.update {
+            $0.pickup = place
+            // `pickupIsChosen`, because every one of the four methods produces a place somebody
+            // picked — which is what stops SCR-PI-009 printing "Current location" over the rider's
+            // pin. See ``BookingDraftState/pickupIsChosen``.
+            $0.pickupIsChosen = true
+        }
     }
 
     /// *"Request rider location"* — the FCM round trip (P-02).

@@ -40,6 +40,11 @@ struct MapPin: Equatable {
 ///   - pins: §0.3's pickup and dropoff markers.
 ///   - geofence: MAP-10's 100 m circle, at the point being arrived at. `nil` everywhere else.
 ///   - camera: Where to open, and where to move when it changes.
+///   - focus: A point the SCREEN wants the camera on, applied every time it becomes non-nil with a
+///     value the map has not already flown to. Distinct from `camera`: that carries a zoom and is a
+///     *state* the map is kept at, so driving it from a pin that the map itself moves would have the
+///     camera fighting the pan that caused it. This is a one-shot request — set it, the map flies,
+///     clear it on the next real pan. ``MapPickSheet``'s search is what needed one.
 ///   - onRecentre: §0.3's recentre FAB (*"both apps"*). `nil` hides it; a non-nil callback shows it,
 ///     and tapping it animates back to `userPosition` **here** before calling back — the caller has
 ///     no map handle to animate with, so a FAB that only called back would be an icon that promises
@@ -61,6 +66,7 @@ struct MageRideMap: View {
     var pins: [MapPin] = []
     var geofence: GeoPoint?
     var camera: MapCamera = .colombo
+    var focus: GeoPoint?
     var onRecentre: (() -> Void)?
     var onCameraIdle: ((GeoPoint) -> Void)?
     var onVehicleTap: ((String) -> Void)?
@@ -80,6 +86,7 @@ struct MageRideMap: View {
                 pins: pins,
                 geofence: geofence,
                 camera: camera,
+                focus: focus,
                 pmTilesUrl: pmTilesUrl,
                 onCameraIdle: onCameraIdle,
                 onVehicleTap: onVehicleTap,
@@ -154,6 +161,7 @@ private struct MapLibreHost: UIViewRepresentable {
     let pins: [MapPin]
     let geofence: GeoPoint?
     let camera: MapCamera
+    let focus: GeoPoint?
     let pmTilesUrl: String
     let onCameraIdle: ((GeoPoint) -> Void)?
     let onVehicleTap: ((String) -> Void)?
@@ -203,6 +211,23 @@ private struct MapLibreHost: UIViewRepresentable {
             coordinator.appliedCamera = camera
         }
 
+        // The screen asking for a move — see `focus`. Compared on the coordinates rather than on
+        // the object, and forgotten as soon as the request is cleared, which is what lets the same
+        // place be asked for twice: a passenger who taps a result, pans away and taps it again is
+        // asking a second time, and the second ask must move the map as the first one did.
+        if let focus {
+            if !coordinator.hasFlownTo(focus) {
+                view.setCenter(
+                    CLLocationCoordinate2D(latitude: focus.lat, longitude: focus.lng),
+                    zoomLevel: MapCamera.defaultZoom,
+                    animated: true
+                )
+                coordinator.rememberFlight(to: focus)
+            }
+        } else {
+            coordinator.forgetFlight()
+        }
+
         coordinator.draw(
             vehicles: vehicles,
             userPosition: userPosition,
@@ -237,6 +262,27 @@ private struct MapLibreHost: UIViewRepresentable {
         var appliedCamera: MapCamera?
         var onVehicleTap: ((String) -> Void)?
         var onCameraIdle: ((GeoPoint) -> Void)?
+
+        /// The last point a `focus` request flew to, as coordinates rather than as the object.
+        ///
+        /// `GeoPoint` crosses from Kotlin, so comparing two of them is comparing whatever the
+        /// bridge decided `isEqual:` means; two `Double`s cannot be wrong about it.
+        private var flownToLat: Double?
+        private var flownToLng: Double?
+
+        func hasFlownTo(_ point: GeoPoint) -> Bool {
+            flownToLat == point.lat && flownToLng == point.lng
+        }
+
+        func rememberFlight(to point: GeoPoint) {
+            flownToLat = point.lat
+            flownToLng = point.lng
+        }
+
+        func forgetFlight() {
+            flownToLat = nil
+            flownToLng = nil
+        }
 
         private weak var mapView: MLNMapView?
         private var style: MLNStyle?

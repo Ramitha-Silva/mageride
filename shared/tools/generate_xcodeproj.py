@@ -114,7 +114,11 @@ class Tree:
             (project.app_target, root / project.app_target),
             (project.test_target, root / project.test_target),
         ):
-            for path in sorted(directory.rglob("*")):
+            # Sorted on the POSIX string, not on the `Path`. `PurePath` comparison uses the HOST's
+            # rules — `PureWindowsPath` case-folds and `PurePosixPath` does not — so the same tree
+            # scanned on Windows emitted the same ids in a different ORDER, and a one-file change
+            # arrived as a diff touching every group. See `rel`, which the ids themselves needed.
+            for path in sorted(directory.rglob("*"), key=lambda entry: entry.as_posix()):
                 if any(part.endswith(".lproj") for part in path.parts):
                     continue
                 if any(part.endswith(".xcassets") for part in path.parts[:-1]):
@@ -128,8 +132,8 @@ class Tree:
 
         # `.lproj` siblings become one variant group per table, which is how Xcode models a
         # localised resource: one entry in `Resources`, one child per language.
-        for lproj in sorted((root / project.app_target / "Resources").glob("*.lproj")):
-            for table in sorted(lproj.glob("*.strings")):
+        for lproj in sorted((root / project.app_target / "Resources").glob("*.lproj"), key=lambda p: p.as_posix()):
+            for table in sorted(lproj.glob("*.strings"), key=lambda p: p.as_posix()):
                 # NOT added to `self.files`: a localised table's reference is emitted by the
                 # variant-group section with a language-scoped path, and a second reference with
                 # the same id would be a duplicate object.
@@ -137,7 +141,15 @@ class Tree:
 
 
 def rel(root: pathlib.Path, path: pathlib.Path) -> str:
-    return str(path.relative_to(root))
+    """The path as the project file spells it — always POSIX, on every host.
+
+    `str()` on a `PurePath` uses the HOST's separator, and this string is both what Xcode reads and
+    what every object id is a hash of. Generated on Windows it produced `Booking\MapPickModel.swift`
+    — a path Xcode cannot resolve, and a different sha1 for every file in the project, so a one-file
+    change rewrote all 211 ids. `as_posix()` is what `str()` already returns on Linux and macOS, so
+    the output there is unchanged; this only stops a Windows session rewriting the whole file.
+    """
+    return path.relative_to(root).as_posix()
 
 
 def file_type(path: pathlib.Path) -> str:

@@ -47,6 +47,8 @@ struct BookingDestinationView: View {
                 draft: graph.draft,
                 bookings: graph.bookings,
                 live: graph.live,
+                places: graph.places,
+                lastFix: graph.lastFix,
                 onBack: { navigator.pop() },
                 onSearch: {
                     graph.draft.expect(.proxyPickup)
@@ -61,6 +63,8 @@ struct BookingDestinationView: View {
                 bookings: graph.bookings,
                 keys: graph.idempotencyKeys,
                 otps: graph.packageOtps,
+                places: graph.places,
+                lastFix: graph.lastFix,
                 onBack: { navigator.pop() },
                 onSearch: { end in
                     graph.draft.expect(end == .pickup ? .packagePickup : .packageDropoff)

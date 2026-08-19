@@ -227,6 +227,7 @@
 "capture_request" = "Request";
 "capture_pinned" = "Pinned at %1$.5f, %2$.5f";
 "map_pick_move" = "Move the map to place the pin";
+"map_pick_search" = "Search a place";
 
 /* SCR-PI-010b — the proxy rider */
 "proxy_title" = "Book for someone else";

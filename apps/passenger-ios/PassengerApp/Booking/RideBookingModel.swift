@@ -156,9 +156,32 @@ final class RideBookingModel: ObservableObject {
     func start() {
         guard subscriptions.isEmpty else { return }
         draft.$state
-            .sink { [weak self] latest in self?.state.draft = latest }
+            .sink { [weak self] latest in
+                guard let self else { return }
+                let moved = !Self.samePoint(latest.pickup, self.state.draft.pickup) ||
+                    !Self.samePoint(latest.dropoff, self.state.draft.dropoff)
+                self.state.draft = latest
+
+                // **Both lists are quoted FROM the journey's ends, and this is what makes
+                // ``refresh()``'s own "whenever an end of the journey moves" true.** Nothing else
+                // in the app called it: SCR-PI-010b captures a proxy pickup and SCR-PI-008 an
+                // edited destination, both of them write the shared draft, and both come back to
+                // this screen — whose model survives the trip and was therefore still showing
+                // fares quoted from where the BOOKER was standing.
+                if moved { self.refresh() }
+            }
             .store(in: &subscriptions)
         refresh()
+    }
+
+    /// Whether two ends of a journey are the same coordinate.
+    ///
+    /// Compared as `Double`s rather than as ``Place``s: a `Place` crosses from Kotlin, so `==` on
+    /// one is whatever the bridge decided `isEqual:` means, and this decides whether a round trip
+    /// to the geocoder goes out.
+    private static func samePoint(_ lhs: Place?, _ rhs: Place?) -> Bool {
+        guard let lhs, let rhs else { return lhs == nil && rhs == nil }
+        return lhs.lat == rhs.lat && lhs.lng == rhs.lng
     }
 
     /// Re-reads both lists. Called on entry and whenever an end of the journey moves.
