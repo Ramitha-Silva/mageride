@@ -103,7 +103,7 @@ final class HomeModelTests: XCTestCase {
 
     func testGoingOfflineStopsPublishingBeforeTheCallIsMade() async {
         identity.live = LiveVehicle(vehicles: [approvedTuk()], live: approvedTuk())
-        standby.standing = DriverStanding(directional: directionalFilter(active: true, secondsLeft: 3_600))
+        standby.standing = DashboardStanding(directional: directionalFilter(active: true, secondsLeft: 3_600))
         let model = makeModel()
         model.start()
         await model.refresh()
@@ -121,7 +121,7 @@ final class HomeModelTests: XCTestCase {
     /// **DT-04** — going offline clears the filter, and the use is **not** refunded.
     func testGoingOfflineClearsTheDirectionalFilterButNotTheDayReserves() async {
         identity.live = LiveVehicle(vehicles: [approvedTuk()], live: approvedTuk())
-        standby.standing = DriverStanding(
+        standby.standing = DashboardStanding(
             directional: directionalFilter(active: true, usesRemaining: 1, secondsLeft: 3_600, label: "Nugegoda")
         )
         let model = makeModel()
@@ -269,13 +269,13 @@ final class HomeModelTests: XCTestCase {
     }
 }
 
-/// The derived answers on ``DriverStanding`` — US-9.1's gate and US-9.9's nudge, which two banners and
+/// The derived answers on ``DashboardStanding`` — US-9.1's gate and US-9.9's nudge, which two banners and
 /// one offer note are all drawn from.
-final class DriverStandingTests: XCTestCase {
+final class DashboardStandingTests: XCTestCase {
 
     /// The first trip of the day is free, so the gate bites on the *next* one.
     func testTheSecondTripWarningIsSilentUntilATripHasBeenTaken() {
-        var standing = DriverStanding(
+        var standing = DashboardStanding(
             wallet: driverWallet(availableMinor: 5_000),
             dailyFee: todaysFee(dailyRateMinor: 10_000, tripsToday: 0, firstTripFree: true)
         )
@@ -288,7 +288,7 @@ final class DriverStandingTests: XCTestCase {
     }
 
     func testAPaidDayNeverWarns() {
-        let standing = DriverStanding(
+        let standing = DashboardStanding(
             wallet: driverWallet(availableMinor: 0),
             dailyFee: todaysFee(status: DailyFeeDayStatus.paid, tripsToday: 3)
         )
@@ -298,15 +298,15 @@ final class DriverStandingTests: XCTestCase {
 
     /// US-9.9's `< Rs 200` nudge comes from `:shared`'s rules, not from a number on this screen.
     func testTheLowBalanceNudgeIsSharedsThresholdAndNotALocalOne() {
-        let low = DriverStanding(wallet: driverWallet(availableMinor: 15_000))
+        let low = DashboardStanding(wallet: driverWallet(availableMinor: 15_000))
         XCTAssertEqual(low.lowBalanceThresholdMinor, 20_000, "D5' §9.4's Rs 200 default")
 
-        let healthy = DriverStanding(wallet: driverWallet(availableMinor: 20_000))
+        let healthy = DashboardStanding(wallet: driverWallet(availableMinor: 20_000))
         XCTAssertNil(healthy.lowBalanceThresholdMinor, "exactly the threshold is not below it")
     }
 
     func testNoWalletReadMeansNoAlertAtAll() {
-        XCTAssertNil(DriverStanding().walletAlert)
-        XCTAssertNil(DriverStanding().lowBalanceThresholdMinor)
+        XCTAssertNil(DashboardStanding().walletAlert)
+        XCTAssertNil(DashboardStanding().lowBalanceThresholdMinor)
     }
 }

@@ -88,8 +88,14 @@ final class ApiHistoryRepository: HistoryRepository {
         self.dispatch = dispatch
     }
 
+    /// **`Page<T>.items` arrives as `[Any]`.** The export emits the property as `NSArray<id>` —
+    /// `Page<T>` keeps its type parameter across the bridge and its rows do not — so the concrete
+    /// type is put back here. `compactMap` rather than `as!` for this target's own reason: a failed
+    /// force cast raises an exception Swift cannot catch and the process terminates. Every row is a
+    /// `RideHistoryRow` by contract, so nothing is dropped.
     func rides() async throws -> [RideHistoryRow] {
-        try await rideApi.listRideHistory(page: PageRequest.companion.FIRST).items
+        try await rideApi.listRideHistory(page: PageRequest.companion.FIRST)
+            .items.compactMap { $0 as? RideHistoryRow }
     }
 
     func trip(userId: String, tripId: String) async throws -> TripDetail {
@@ -124,8 +130,8 @@ extension RideHistoryRow {
     /// driver: the row carries no `driver` block, and the state says which kind of cancel it was.
     var hasReachableDriver: Bool {
         driver != nil
-            && state != RideState.cancelledByRiderBeforeAccept
-            && state != RideState.expiredNoDriver
+            && state != RideState.cancelledbyriderbeforeaccept
+            && state != RideState.expirednodriver
     }
 
     /// Whether this row belongs on the **Packages** tab.
@@ -135,5 +141,5 @@ extension RideHistoryRow {
     /// ride and a package paid by any other rail are indistinguishable in this row — C081 recorded it
     /// and the C099 handoff restates it, because adding `kind` to the row is a `ride.yaml` change
     /// rather than an app change.
-    var isPackage: Bool { state == RideState.cashOnDeliveryCollected }
+    var isPackage: Bool { state == RideState.cashondeliverycollected }
 }

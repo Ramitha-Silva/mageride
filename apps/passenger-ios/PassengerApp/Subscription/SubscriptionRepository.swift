@@ -93,11 +93,17 @@ final class ApiSubscriptionRepository: SubscriptionRepository {
         )
     }
 
+    /// **`Page<T>.items` arrives as `[Any]`**, here and on ``payments(subscriptionId:)``. The export
+    /// emits the property as `NSArray<id>` — `Page<T>` keeps its type parameter across the bridge and
+    /// its rows do not — so the concrete type is put back at each of the two paged reads.
+    /// `compactMap` rather than `as!` for this target's own reason: a failed force cast raises an
+    /// exception Swift cannot catch and the process terminates. Every row is a `Subscription` (and
+    /// below, a `SubscriptionPayment`) by contract, so nothing is dropped.
     func subscriptions(passengerId: String) async throws -> [Subscription] {
         try await subscriptionApi.listPassengerSubscriptions(
             passengerId: passengerId,
             page: PageRequest.companion.FIRST
-        ).items
+        ).items.compactMap { $0 as? Subscription }
     }
 
     func unsubscribe(subscriptionId: String, idempotencyKey: String?) async throws -> Subscription {
@@ -127,6 +133,10 @@ final class ApiSubscriptionRepository: SubscriptionRepository {
     /// `memcpy`. The same helper `apps/driver-ios`'s support screenshot goes through, and it is the
     /// **provenance-free** form on purpose: a transfer slip is not a `docs.uploads` document and the
     /// contract declares no `capturedVia` part beside it (AL-43).
+    ///
+    /// `data:` takes the `Data` as it is: the helper's Kotlin parameter is an `NSData`, and the
+    /// importer bridges an Objective-C `NSData *` parameter to `Data` on the Swift side — so an
+    /// `as NSData` here is a cast *away* from what the call wants, not towards it.
     func uploadSlip(
         paymentId: String,
         fileName: String,
@@ -137,7 +147,7 @@ final class ApiSubscriptionRepository: SubscriptionRepository {
             paymentId: paymentId,
             file: IosCapturedDocumentKt.fileUploadOf(
                 fileName: fileName,
-                data: data as NSData,
+                data: data,
                 contentType: ApiSubscriptionRepository.slipContentType
             ),
             idempotencyKey: idempotencyKey
@@ -148,7 +158,7 @@ final class ApiSubscriptionRepository: SubscriptionRepository {
         try await subscriptionApi.listSubscriptionPayments(
             subscriptionId: subscriptionId,
             page: PageRequest.companion.FIRST
-        ).items
+        ).items.compactMap { $0 as? SubscriptionPayment }
     }
 
     /// Fetches the owner's QR through the typed client rather than through an image loader.

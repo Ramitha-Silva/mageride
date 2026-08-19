@@ -10,7 +10,7 @@ import MageRideShared
 ///     US-9.7).
 ///   - earnings: *"Today: 4 trips · Rs 3,180"*.
 ///   - directional: The Directional chip's state (DT-08).
-struct DriverStanding {
+struct DashboardStanding {
 
     var level: Int?
     var wallet: Wallet?
@@ -69,7 +69,7 @@ struct DriverStanding {
 protocol StandbyRepository: AnyObject {
 
     /// The whole status header and sheet, best-effort per field.
-    func standing(driverId: String) async -> DriverStanding
+    func standing(driverId: String) async -> DashboardStanding
 
     /// `POST /v1/standby/online` (US-6A.1).
     func goOnline(vehicleId: String, position: GeoPoint) async throws -> PresenceState
@@ -115,8 +115,8 @@ final class ApiStandbyRepository: StandbyRepository {
         self.iam = iam
     }
 
-    func standing(driverId: String) async -> DriverStanding {
-        DriverStanding(
+    func standing(driverId: String) async -> DashboardStanding {
+        DashboardStanding(
             level: await read { Int(try await self.dispatch.getDriverLevel(driverId: driverId).level) },
             wallet: await read { try await self.wallet.getWallet(userId: driverId) },
             dailyFee: await read { try await self.subscription.getTodaysDailyFee(driverId: driverId) },

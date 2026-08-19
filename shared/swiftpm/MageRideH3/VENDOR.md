@@ -1,7 +1,8 @@
 # Vendored: H3
 
 `Sources/CH3` is a verbatim copy of the H3 core library's C sources. Nothing in it has been edited
-except the one file CMake generates (below).
+except the one file CMake generates (below), and nothing has been **moved** except the one header
+SPM cannot leave in place (below that). No line of vendored C differs from upstream.
 
 | | |
 |---|---|
@@ -30,8 +31,29 @@ template:
 `Sources/CH3/include/h3api.h` is that file. Nothing else about it differs from the template, and the
 macros are informational — no code in this package or in either app reads them.
 
+**The one moved file.** `polygonAlgos.h` sits in `Sources/CH3/` rather than in
+`Sources/CH3/include/`, where the copy rule above would otherwise have put it. Its **contents are
+untouched**; only its path differs.
+
+It is not a header in the ordinary sense — it is a template body, included by `polygon.c` and
+`linkedGeo.c` *after* each defines `TYPE`, `IS_EMPTY`, `INIT_ITERATION` and `ITERATE`, and it opens
+with four `#error` directives that say exactly that. Upstream's CMake build never compiles it on its
+own, so upstream can keep it in `include/`. SPM cannot: `publicHeadersPath` generates an umbrella
+*directory* module map, and clang compiles every header underneath it standalone to build the
+module. That yields 15 errors from this one file and fails the precompiled module, which fails every
+app linking the package.
+
+Moving it is the smallest possible fix — a quoted `#include "polygonAlgos.h"` searches the
+includer's own directory first, so both `.c` files still resolve it with no edit. The alternative,
+a hand-written `module.modulemap` listing every header explicitly, would have to be re-checked on
+every upgrade.
+
+**On upgrading, move it again.** A fresh copy of `src/h3lib/include/*.h` will put it back, and the
+failure returns.
+
 **Upgrading.** Re-copy the two directories from the new tag, re-run the substitution above with the
-new version numbers, update this file, and run `swift test` in this package: `H3ContractTests` pins
+new version numbers, move `polygonAlgos.h` down one level as described above, update this file, and
+run `swift test` in this package: `H3ContractTests` pins
 the R-06 view (res 7 + `ring(2)` = 19 cells) and the res-7 → res-5 parent relationship that
 `GeoCells` depends on. A version bump that changed either would be a platform-wide incident, which
 is what those assertions exist to turn into a failing build.

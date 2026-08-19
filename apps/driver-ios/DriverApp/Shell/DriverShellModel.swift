@@ -60,7 +60,19 @@ final class DriverShellModel: ObservableObject {
         // Ask before anything else does (Δ C075 on the Android side). Without this the first thing
         // a driver below the floor sees is a login screen whose OTP request failed.
         versionCheck = Task { [graph] in
-            _ = try? await graph.api.version.checkAppVersion()
+            // All three arguments are spelled out because a Kotlin default does not survive the
+            // export. These ARE `VersionApi`'s own defaults: a `nil` platform and version make
+            // `:shared` fall back to `transport.config`, which `IosAppConfig` has already set from
+            // `DriverEnvironment` — passing them from here would be a second copy of both.
+            //
+            // `publishSignal: true` is the load-bearing one. It is what publishes D-31's
+            // upgrade-required signal onto `graph.upgrades`, which this class subscribed to above;
+            // passing `false` would leave the update gate waiting for an event nothing raises.
+            _ = try? await graph.api.version.checkAppVersion(
+                platform: nil,
+                currentVersion: nil,
+                publishSignal: true
+            )
         }
     }
 

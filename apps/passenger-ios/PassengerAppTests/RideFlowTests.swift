@@ -156,13 +156,13 @@ final class ActiveRideModelTests: XCTestCase {
     /// where it belongs — and a cancelled one has neither.
     @MainActor
     func testASettledRideGoesToTheReceiptAndACancelledOneToTheMap() async {
-        rides.ride = RideFixtures.ride(state: RideState.cashSettled)
+        rides.ride = RideFixtures.ride(state: RideState.cashsettled)
         let settled = model()
         settled.start()
         await eventually("receipt") { await MainActor.run { settled.state.handOff == .receipt } }
         settled.stop()
 
-        rides.ride = RideFixtures.ride(state: RideState.cancelledByDriver)
+        rides.ride = RideFixtures.ride(state: RideState.cancelledbydriver)
         let cancelled = model()
         cancelled.start()
         await eventually("finished") { await MainActor.run { cancelled.state.handOff == .finished } }
@@ -174,7 +174,7 @@ final class ActiveRideModelTests: XCTestCase {
     /// away would take the retry with it.
     @MainActor
     func testAnExpiredSearchStaysOnTheScreenAndOffersARetry() async {
-        rides.ride = RideFixtures.ride(state: RideState.expiredNoDriver)
+        rides.ride = RideFixtures.ride(state: RideState.expirednodriver)
         let model = model()
         model.start()
 
@@ -286,19 +286,19 @@ final class ActiveRideModelTests: XCTestCase {
     /// journey are both done.
     func testPaymentStatesAreNotTerminalForThePassenger() {
         XCTAssertFalse(RideState.completed.isTerminalForPassenger)
-        XCTAssertFalse(RideState.paymentPending.isTerminalForPassenger)
+        XCTAssertFalse(RideState.paymentpending.isTerminalForPassenger)
         XCTAssertTrue(RideState.paid.isTerminalForPassenger)
-        XCTAssertTrue(RideState.cashSettled.isTerminalForPassenger)
-        XCTAssertTrue(RideState.expiredNoDriver.isTerminalForPassenger)
+        XCTAssertTrue(RideState.cashsettled.isTerminalForPassenger)
+        XCTAssertTrue(RideState.expirednodriver.isTerminalForPassenger)
     }
 
     /// `CashSettled` is a settled ride even though nothing moved through the platform;
     /// `PaymentPending` is what puts *"Pay now"* on the receipt.
     func testCashInTheVehicleCountsAsSettled() {
-        XCTAssertTrue(RideState.cashSettled.isSettled)
+        XCTAssertTrue(RideState.cashsettled.isSettled)
         XCTAssertTrue(RideState.paid.isSettled)
-        XCTAssertTrue(RideState.cashOnDeliveryCollected.isSettled)
-        XCTAssertFalse(RideState.paymentPending.isSettled)
+        XCTAssertTrue(RideState.cashondeliverycollected.isSettled)
+        XCTAssertFalse(RideState.paymentpending.isSettled)
     }
 
     /// `DriverPosition` moves the marker and nothing else — one read is cheaper than reconciling a
@@ -805,7 +805,7 @@ final class RateAndSummaryTests: XCTestCase {
     /// PaymentPending → *"Pay now"*; Paid / CashSettled → the receipt. The cell's own state line.
     @MainActor
     func testAnUnsettledRideGetsAPayNowCta() async {
-        rides.ride = RideFixtures.accepted(state: RideState.paymentPending)
+        rides.ride = RideFixtures.accepted(state: RideState.paymentpending)
         let model = TripSummaryModel(rideId: RideFixtures.rideId, rides: rides, ratings: ratings)
         model.load()
 
@@ -818,7 +818,7 @@ final class RateAndSummaryTests: XCTestCase {
     /// rather than once.
     @MainActor
     func testARatedRideIsNotOfferedARatingAgain() async {
-        rides.ride = RideFixtures.accepted(state: RideState.cashSettled)
+        rides.ride = RideFixtures.accepted(state: RideState.cashsettled)
         let model = TripSummaryModel(rideId: RideFixtures.rideId, rides: rides, ratings: ratings)
         model.load()
         await eventually("loaded") { await MainActor.run { model.state.ride != nil } }

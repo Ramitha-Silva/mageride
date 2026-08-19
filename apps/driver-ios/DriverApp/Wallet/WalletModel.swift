@@ -26,7 +26,11 @@ struct WalletState {
     /// `nil` at zero rather than `Rs 0`: the line only belongs on the screen of a driver who has one,
     /// and a driver with no debt should not be reading two numbers for one wallet.
     var outstandingDebtMinor: Int64? {
-        standing.standing?.outstandingDebt.amountMinor.flatMap { $0 > 0 ? $0 : nil }
+        // The parentheses are the fix, not decoration. `amountMinor` is a non-optional `Int64`, so
+        // in `a?.b.c.flatMap { }` the `flatMap` binds to the `Int64` rather than to the optional
+        // chain — and `Int64` has no `flatMap`. Parenthesising makes the whole chain the `Int64?`
+        // being mapped, which is what "nil at zero" needs.
+        (standing.standing?.outstandingDebt.amountMinor).flatMap { $0 > 0 ? $0 : nil }
     }
 
     /// US-9.9 / D5' §9.4, evaluated against the driver's own threshold rather than a baked one.

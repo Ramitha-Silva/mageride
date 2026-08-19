@@ -206,8 +206,8 @@ struct ActiveRideScreen: View {
     private var ctaStyle: MageRideCtaStyle {
         guard let rideState = model.state.rideState else { return .mageCta(loading: model.state.isBusy) }
         switch rideState {
-        case RideState.driverArrived: return .mageCtaStatus(MageRideColor.success, loading: model.state.isBusy)
-        case RideState.inProgress: return .mageCtaStatus(MageRideColor.error, loading: model.state.isBusy)
+        case RideState.driverarrived: return .mageCtaStatus(MageRideColor.success, loading: model.state.isBusy)
+        case RideState.inprogress: return .mageCtaStatus(MageRideColor.error, loading: model.state.isBusy)
         default: return .mageCta(loading: model.state.isBusy)
         }
     }

@@ -38,12 +38,18 @@ final class ApiEarningsRepository: EarningsRepository {
     /// The dates are **Asia/Colombo** business dates (D-13, D-38), which is what the server evaluates
     /// `?period=` in as well; passing the summary's own `rangeFrom`/`rangeTo` back is what keeps the
     /// card and the rows under it describing the same days.
+    ///
+    /// **`Page<T>.items` arrives as `[Any]` and the element cast is this app's.** The export emits the
+    /// property as `NSArray<id>` — the enclosing `Page<T>` is generic on the bridge and its rows are not
+    /// — so the concrete type has to be put back on this side. `compactMap` rather than `as!` for the
+    /// reason C091 wrote down: a failed force cast raises an exception Swift cannot catch and the process
+    /// terminates. Every row is a `SessionEarning` by contract, so nothing is dropped.
     func sessions(driverId: String, from: BusinessDate, to: BusinessDate) async throws -> [SessionEarning] {
         try await query.listEarningSessions(
             driverId: driverId,
             from: from,
             to: to,
             page: PageRequest.companion.FIRST
-        ).items
+        ).items.compactMap { $0 as? SessionEarning }
     }
 }

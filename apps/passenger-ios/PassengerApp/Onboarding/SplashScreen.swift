@@ -23,7 +23,12 @@ struct SplashScreen: View {
     init(
         sessions: PassengerSessions,
         profiles: PassengerProfileRepository,
-        rides: RideApi,
+        // ``ActiveRideLookup``, not `RideApi`. The seam is what ``SplashModel`` takes and what
+        // `PassengerGraph.activeRides` supplies; naming the Kotlin client here made this the only
+        // file in the target that would have needed `import MageRideShared`, and it did not compile
+        // either way. The wrong type read as "cannot find type 'RideApi'" purely because the import
+        // was missing — adding the import would have turned one honest error into a real one.
+        rides: ActiveRideLookup,
         preferences: AppPreferences,
         onResolved: @escaping (PassengerRoute) -> Void
     ) {

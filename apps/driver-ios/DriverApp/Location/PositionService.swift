@@ -210,8 +210,11 @@ final class PositionService: NSObject, ObservableObject {
     }
 
     /// A downlink command on `veh/{vehicleId}/cmd`. Decoded by `:shared` (R-07).
+    ///
+    /// No cast: `onCommand(payload:)` is `NSData *` in the generated header, and Swift's importer
+    /// bridges that to `Data` on the way in.
     private func onCommand(_ payload: Data) {
-        _ = pipeline?.onCommand(payload: payload as NSData)
+        _ = pipeline?.onCommand(payload: payload)
     }
 
     // MARK: - The drain

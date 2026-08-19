@@ -36,6 +36,7 @@
 		918C5BF0F53795B848047E58 /* PassengerDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A63DB6E3CFA1956995596FD /* PassengerDatabase.swift */; };
 		8CDB50DCB0034921F415D470 /* PassengerEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24DA004F925603B84EF220CB /* PassengerEnvironment.swift */; };
 		346D6137FC046C51897AD94B /* PassengerGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EE066024FBCF6E5C5D3F799 /* PassengerGraph.swift */; };
+		B0D470ABB9025B1A7CB43FD1 /* SharedTypeNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93980C2D05FC472F6C87B4AF /* SharedTypeNames.swift */; };
 		22099F210C0A2244C1C4CD4C /* SharedH3Grid.swift in Sources */ = {isa = PBXBuildFile; fileRef = F034848E4D15168E84E1FB0A /* SharedH3Grid.swift */; };
 		E66CCD73FA343C4DD4097DF2 /* HistoryDestinationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23872877268AE56419F9B7B0 /* HistoryDestinationView.swift */; };
 		09381528EF1E3BB904DF6FEF /* HistoryRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49841BE3D727E940E0236609 /* HistoryRepository.swift */; };
@@ -257,6 +258,7 @@
 		5A63DB6E3CFA1956995596FD /* PassengerDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerDatabase.swift"; path = "PassengerDatabase.swift"; sourceTree = "<group>"; };
 		24DA004F925603B84EF220CB /* PassengerEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerEnvironment.swift"; path = "PassengerEnvironment.swift"; sourceTree = "<group>"; };
 		5EE066024FBCF6E5C5D3F799 /* PassengerGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerGraph.swift"; path = "PassengerGraph.swift"; sourceTree = "<group>"; };
+		93980C2D05FC472F6C87B4AF /* SharedTypeNames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SharedTypeNames.swift"; path = "SharedTypeNames.swift"; sourceTree = "<group>"; };
 		F034848E4D15168E84E1FB0A /* SharedH3Grid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SharedH3Grid.swift"; path = "SharedH3Grid.swift"; sourceTree = "<group>"; };
 		23872877268AE56419F9B7B0 /* HistoryDestinationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "HistoryDestinationView.swift"; path = "HistoryDestinationView.swift"; sourceTree = "<group>"; };
 		49841BE3D727E940E0236609 /* HistoryRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "HistoryRepository.swift"; path = "HistoryRepository.swift"; sourceTree = "<group>"; };
@@ -579,6 +581,7 @@
 				5A63DB6E3CFA1956995596FD /* PassengerDatabase.swift */,
 				24DA004F925603B84EF220CB /* PassengerEnvironment.swift */,
 				5EE066024FBCF6E5C5D3F799 /* PassengerGraph.swift */,
+				93980C2D05FC472F6C87B4AF /* SharedTypeNames.swift */,
 			);
 			path = "DI";
 			sourceTree = "<group>";
@@ -1066,6 +1069,7 @@
 				918C5BF0F53795B848047E58 /* PassengerDatabase.swift in Sources */,
 				8CDB50DCB0034921F415D470 /* PassengerEnvironment.swift in Sources */,
 				346D6137FC046C51897AD94B /* PassengerGraph.swift in Sources */,
+				B0D470ABB9025B1A7CB43FD1 /* SharedTypeNames.swift in Sources */,
 				22099F210C0A2244C1C4CD4C /* SharedH3Grid.swift in Sources */,
 				E66CCD73FA343C4DD4097DF2 /* HistoryDestinationView.swift in Sources */,
 				09381528EF1E3BB904DF6FEF /* HistoryRepository.swift in Sources */,
@@ -1417,8 +1421,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
 			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = "11.11.0";
+				kind = upToNextMajorVersion;
+				minimumVersion = "11.0.0";
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

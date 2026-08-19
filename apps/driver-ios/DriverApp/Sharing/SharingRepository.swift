@@ -79,11 +79,16 @@ final class ApiSharingRepository: SharingRepository {
         ).grantId
     }
 
+    /// **`Page<T>.items` arrives as `[Any]` and both list reads below put the element type back.** The
+    /// export emits the property as `NSArray<id>` — `Page<T>` keeps its type parameter across the bridge
+    /// and its rows do not. `compactMap` rather than `as!` for the reason C091 wrote down: a failed force
+    /// cast raises an exception Swift cannot catch and the process terminates. Every row is a
+    /// `Subscriber` (and below, an `AccessRequest`) by contract, so nothing is dropped.
     func grantees(vehicleId: String) async throws -> [Subscriber] {
         try await registry.listVehicleSubscribers(
             vehicleId: vehicleId,
             page: PageRequest.companion.FIRST
-        ).items
+        ).items.compactMap { $0 as? Subscriber }
     }
 
     func revoke(vehicleId: String, userId: String) async throws {
@@ -94,7 +99,7 @@ final class ApiSharingRepository: SharingRepository {
         try await subscription.listModeBAccessRequests(
             vehicleId: vehicleId,
             page: PageRequest.companion.FIRST
-        ).items
+        ).items.compactMap { $0 as? AccessRequest }
     }
 
     func accept(requestId: String) async throws {

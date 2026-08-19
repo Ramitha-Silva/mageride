@@ -134,7 +134,14 @@ struct OfferTakeover: View {
         // A wrapping row: three badges in Sinhala do not fit one line on a 4.7" handset, and a
         // truncated *"Third-party booking"* is the one badge whose meaning is the whole word.
         FlowRow(spacing: MageRideSpacing.xxs) {
-            if state.detail?.kind == RideKind.proxy || state.offer?.isProxy == true {
+            // Through `:shared` because `isProxy` is `NSObject`'s. `state.offer?.isProxy` binds to
+            // the inherited `NSObject.isProxy()` — the `NSProxy` test — and not to the Kotlin
+            // property, which is unreachable from Swift under that name whatever the call site
+            // does. That method answers `false` for every object here, so writing `isProxy()` would
+            // have compiled and quietly dropped P-05's badge from every proxy booking. Same trap as
+            // `IosTicketKt.ticketDescription`; see `IosRideOffer.kt`.
+            if state.detail?.kind == RideKind.proxy
+                || state.offer.map({ IosRideOfferKt.rideOfferIsProxy(offer: $0) }) == true {
                 SolidBadge(label: "offer_badge_proxy".localised, accent: MageRideColor.secondary)
             }
             if let size = state.detail?.packageSize ?? state.offer?.packageSize {

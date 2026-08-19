@@ -107,11 +107,11 @@ final class PackageTrackModelTests: XCTestCase {
         XCTAssertEqual(state.step, 0)
         XCTAssertFalse(state.isDelivered)
 
-        state.status = PackageStatus.pickupPending
+        state.status = PackageStatus.pickuppending
         XCTAssertEqual(state.step, 0)
-        state.status = PackageStatus.pickedUp
+        state.status = PackageStatus.pickedup
         XCTAssertEqual(state.step, 1)
-        state.status = PackageStatus.inTransit
+        state.status = PackageStatus.intransit
         XCTAssertEqual(state.step, 2)
         state.status = PackageStatus.delivered
         XCTAssertEqual(state.step, PackageTrackState.deliveredStep)
@@ -227,8 +227,8 @@ final class TripHistoryModelTests: XCTestCase {
     func testThePackagesTabIsTheHistoryFilteredByItsOnlySignal() async {
         history.rows = [
             HistoryFixtures.row(rideId: "R1", state: RideState.paid),
-            HistoryFixtures.row(rideId: "R2", state: RideState.cashOnDeliveryCollected),
-            HistoryFixtures.row(rideId: "R3", state: RideState.cashSettled),
+            HistoryFixtures.row(rideId: "R2", state: RideState.cashondeliverycollected),
+            HistoryFixtures.row(rideId: "R3", state: RideState.cashsettled),
         ]
 
         let model = model()
@@ -248,8 +248,8 @@ final class TripHistoryModelTests: XCTestCase {
     /// passenger sees, the other is what a stale list or a mis-wired callback cannot get around.
     @MainActor
     func testACancelledBeforeAssignmentTripHasNoReachableDriverAndCostsNoRead() async {
-        let cancelled = HistoryFixtures.row(state: RideState.cancelledByRiderBeforeAccept, driver: nil)
-        let expired = HistoryFixtures.row(state: RideState.expiredNoDriver, driver: HistoryFixtures.historyDriver())
+        let cancelled = HistoryFixtures.row(state: RideState.cancelledbyriderbeforeaccept, driver: nil)
+        let expired = HistoryFixtures.row(state: RideState.expirednodriver, driver: HistoryFixtures.historyDriver())
 
         XCTAssertFalse(cancelled.hasReachableDriver)
         XCTAssertFalse(expired.hasReachableDriver)
@@ -418,14 +418,14 @@ final class HistoryLabelTests: XCTestCase {
     func testEveryTerminalStateHasItsOwnPill() {
         let terminal: [RideState] = [
             RideState.paid,
-            RideState.cashSettled,
-            RideState.cashOnDeliveryCollected,
-            RideState.cancelledByRiderBeforeAccept,
-            RideState.cancelledByRiderAfterAccept,
-            RideState.cancelledByDriver,
-            RideState.expiredNoDriver,
-            RideState.noShowRider,
-            RideState.noShowDriver,
+            RideState.cashsettled,
+            RideState.cashondeliverycollected,
+            RideState.cancelledbyriderbeforeaccept,
+            RideState.cancelledbyriderafteraccept,
+            RideState.cancelledbydriver,
+            RideState.expirednodriver,
+            RideState.noshowrider,
+            RideState.noshowdriver,
         ]
 
         for state in terminal {
@@ -438,10 +438,10 @@ final class HistoryLabelTests: XCTestCase {
 
         // And the states that are *not* terminal do land there, which is the honest reading of a
         // ride-svc history row that carries one.
-        XCTAssertEqual(RideStateLabel.pill(for: RideState.paymentPending).key, "summary_unpaid")
+        XCTAssertEqual(RideStateLabel.pill(for: RideState.paymentpending).key, "summary_unpaid")
 
         XCTAssertEqual(RideStateLabel.pill(for: RideState.paid).key, "history_state_paid")
-        XCTAssertEqual(RideStateLabel.pill(for: RideState.cancelledByDriver).key, "history_state_cancelled")
+        XCTAssertEqual(RideStateLabel.pill(for: RideState.cancelledbydriver).key, "history_state_cancelled")
     }
 
     /// **Every time on a history card is read in Colombo, never in the handset's zone** (D-38). The

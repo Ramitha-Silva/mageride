@@ -148,7 +148,11 @@ struct DriverHomeMap: View {
         [
             fix.map { "\($0.lat),\($0.lng),\($0.headingDeg ?? -1)" } ?? "",
             token?.wire ?? "",
-            heading.map(String.init) ?? "",
+            // `String.init` unqualified is dozens of overloads, and offering the type checker all of
+            // them inside an array literal it is already inferring is what produced a bare "failed
+            // to produce diagnostic" here rather than an error anyone could act on. The closure
+            // picks `String(_: Double)` and the expression checks in one step.
+            heading.map { String($0) } ?? "",
             geofence.map { "\($0.lat),\($0.lng)" } ?? "",
         ].joined(separator: "|")
     }

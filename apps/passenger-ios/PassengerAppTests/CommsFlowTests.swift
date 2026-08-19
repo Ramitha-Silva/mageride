@@ -31,7 +31,7 @@ final class VoipCallModelTests: XCTestCase {
         engine = FakeVoipEngine()
         session = FakeCallSession()
         rides.ride = RideFixtures.ride(
-            state: RideState.inProgress,
+            state: RideState.inprogress,
             driver: RideFixtures.driver(),
             counterpartyPhone: RideFixtures.driverPhone
         )

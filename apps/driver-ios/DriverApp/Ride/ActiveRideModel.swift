@@ -83,7 +83,7 @@ struct ActiveRideState {
     /// already answered, and a second attestation is not a thing they can give.
     var awaitingQrConfirm: Bool {
         guard settlesByDriverQr, !isQrAttested, let rideState else { return false }
-        return rideState == RideState.completed || rideState == RideState.paymentPending
+        return rideState == RideState.completed || rideState == RideState.paymentpending
     }
 
     /// Where MAP-10's 100 m circle goes — the point the driver is being sent to *now*.
@@ -96,8 +96,8 @@ struct ActiveRideState {
     var geofence: GeoPoint? {
         guard let rideState else { return nil }
         switch rideState {
-        case RideState.accepted, RideState.driverArrived: return ride?.pickup.point
-        case RideState.inProgress: return ride?.dropoff.point
+        case RideState.accepted, RideState.driverarrived: return ride?.pickup.point
+        case RideState.inprogress: return ride?.dropoff.point
         default: return nil
         }
     }
@@ -116,8 +116,8 @@ struct ActiveRideState {
     var navigationHintKey: String {
         guard let rideState else { return "ride_finished" }
         switch rideState {
-        case RideState.accepted, RideState.driverArrived: return "ride_navigate_pickup"
-        case RideState.inProgress: return "ride_navigate_drop"
+        case RideState.accepted, RideState.driverarrived: return "ride_navigate_pickup"
+        case RideState.inprogress: return "ride_navigate_drop"
         default: return "ride_finished"
         }
     }
@@ -130,8 +130,8 @@ struct ActiveRideState {
         guard let rideState else { return nil }
         switch rideState {
         case RideState.accepted: return "ride_arrived"
-        case RideState.driverArrived: return "ride_start"
-        case RideState.inProgress: return "ride_complete"
+        case RideState.driverarrived: return "ride_start"
+        case RideState.inprogress: return "ride_complete"
         default: return nil
         }
     }
@@ -240,10 +240,10 @@ final class ActiveRideModel: ObservableObject {
         case RideState.accepted:
             await send(.markArrived) { try await self.rides.arrive(rideId: self.rideId, version: $0) }
 
-        case RideState.driverArrived:
+        case RideState.driverarrived:
             open(.startOtp)
 
-        case RideState.inProgress:
+        case RideState.inprogress:
             await send(.complete) { try await self.rides.complete(rideId: self.rideId, version: $0) }
 
         default:
@@ -275,7 +275,7 @@ final class ActiveRideModel: ObservableObject {
         do {
             let settled: Bool
             if received {
-                settled = try await rides.confirmQrPayment(rideId: rideId) == PaymentState.driverConfirmedQR
+                settled = try await rides.confirmQrPayment(rideId: rideId) == PaymentState.driverconfirmedqr
             } else {
                 // The dispute is the answer too: the ride is off this driver's hands either way, and a
                 // Support → Finance ticket is not something they wait on at the kerb.

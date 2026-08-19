@@ -120,18 +120,40 @@ final class SignalRLiveHubTransport: NSObject, LiveHubTransport {
         }
 
         // Read before the handshake, not inside the closure: see this type's documentation.
-        let accessToken = await tokens.accessToken() ?? ""
+        // `try` because `TokenProvider.accessToken()` is a Kotlin `suspend` function, and a suspend
+        // function exports with an `NSError**` out-parameter — so it reaches Swift as `async throws`
+        // whether or not it can actually fail. The error is propagated rather than swallowed: this
+        // function is already `throws`, and `?? ""` is there for a **nil** token (a signed-out
+        // passenger has none), which is a different thing from the read having failed.
+        let accessToken = try await tokens.accessToken() ?? ""
 
         let handshake = HubDelegate(onClosed: onClosed)
         let hub = HubConnectionBuilder(url: url)
             .withHttpConnectionOptions { options in
                 options.accessTokenProvider = { accessToken }
             }
-            // `signalr-hub.md` §1's two timings, through the one door a `Duration` may cross this
-            // bridge — see `IosLiveHub`. Read as raw integers they would be about 3.9 × 10^13
-            // seconds and the client would never ping.
-            .withKeepAlive(keepAliveInterval: hubContract.keepAliveSeconds)
-            .withServerTimeout(timeout: hubContract.serverTimeoutSeconds)
+            // `signalr-hub.md` §1's keepalive, through the one door a `Duration` may cross this
+            // bridge — see `IosLiveHub`. Read as a raw integer it would be about 3.9 × 10^13
+            // seconds and the client would never ping. `keepAliveInterval` is a `Double` of
+            // seconds, which is exactly what `IosLiveHub` hands over.
+            //
+            // **`serverTimeoutSeconds` is deliberately NOT set, because this client has nowhere to
+            // put it.** SignalR-Client-Swift 1.2.1 models no server timeout at all: its
+            // `HubConnectionOptions` carries `keepAliveInterval` and `callbackQueue` and nothing
+            // else, and the only timeout anywhere in the package is
+            // `HttpConnectionOptions.requestTimeout`, which bounds a single HTTP request rather
+            // than the silence after which a live connection is presumed dead. The builder methods
+            // this line used to call — `withKeepAlive` and `withServerTimeout` — do not exist on it
+            // in any version this package has shipped.
+            //
+            // The contract still carries the value and `IosLiveHub` still publishes it, so nothing
+            // upstream needs changing when a client that can honour it arrives. What is lost until
+            // then is only the *early* detection of a hung connection: the delegate's `onClosed`
+            // still fires on a transport-level drop, which is the common case, and C093's
+            // reconnect path is driven from there.
+            .withHubConnectionOptions { options in
+                options.keepAliveInterval = hubContract.keepAliveSeconds
+            }
             .withHubConnectionDelegate(delegate: handshake)
             .build()
 

@@ -15,7 +15,7 @@ struct SubscriptionPaymentsState {
     var errorKey: String?
 
     /// The vehicle's monthly fare, for the header. `nil` on a Free subscription.
-    var fare: Money? { subscription.flatMap { ModeBBilling.shared.fareFor(subscription: $0) } }
+    var fare: Money? { subscription.flatMap { ModeBBilling_.shared.fareFor(subscription: $0) } }
 
     /// Genuinely empty rather than still loading.
     var isEmpty: Bool { !isLoading && payments.isEmpty }

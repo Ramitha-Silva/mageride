@@ -161,7 +161,7 @@ final class ProxyRiderModel: ObservableObject {
                 state.secondsLeft = Int(created.ttl)
                 state.errorKey = nil
 
-                if created.state == LocationRequestState.riderNotRegistered {
+                if created.state == LocationRequestState.ridernotregistered {
                     // P-03 again, this time from ride-svc's own view. The lookup can say
                     // "registered" and the create still refuse — a user deleted between the two.
                     state.riderRegistered = false

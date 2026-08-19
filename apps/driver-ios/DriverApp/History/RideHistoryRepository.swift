@@ -75,8 +75,13 @@ final class ApiRideHistoryRepository: RideHistoryRepository {
         self.tripState = tripState
     }
 
+    /// **`Page<T>.items` arrives as `[Any]`** — the export emits the property as `NSArray<id>`, so
+    /// `Page<T>` keeps its type parameter across the bridge and its rows do not. `compactMap`
+    /// rather than `as!` for the reason C091 wrote down: a failed force cast raises an exception Swift
+    /// cannot catch and the process terminates. Every row is a `TripSummary` by contract.
     func trips(driverId: String) async throws -> [TripSummary] {
-        try await query.listTrips(userId: driverId, page: PageRequest.companion.FIRST).items
+        try await query.listTrips(userId: driverId, page: PageRequest.companion.FIRST)
+            .items.compactMap { $0 as? TripSummary }
     }
 
     func detail(driverId: String, tripId: String) async throws -> TripDetail {

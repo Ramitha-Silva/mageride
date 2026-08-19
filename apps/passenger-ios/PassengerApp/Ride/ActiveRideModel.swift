@@ -171,7 +171,7 @@ final class ActiveRideModel: ObservableObject {
             guard !Task.isCancelled else { return }
             state.ride = detail
             state.errorKey = nil
-            state.noDriver = state.noDriver || detail.state == RideState.expiredNoDriver
+            state.noDriver = state.noDriver || detail.state == RideState.expirednodriver
             state.handOff = ActiveRideModel.handOff(for: detail.state)
         } catch is CancellationError {
             return
@@ -287,17 +287,17 @@ final class ActiveRideModel: ObservableObject {
     /// available"* plus a retry over the same screen, which is US-6A.11's own wording.
     private static func handOff(for rideState: RideState) -> RideHandOff? {
         switch rideState {
-        case RideState.completed, RideState.paymentPending:
+        case RideState.completed, RideState.paymentpending:
             return .payment
 
-        case RideState.paid, RideState.cashSettled, RideState.cashOnDeliveryCollected:
+        case RideState.paid, RideState.cashsettled, RideState.cashondeliverycollected:
             return .receipt
 
-        case RideState.cancelledByRiderBeforeAccept,
-             RideState.cancelledByRiderAfterAccept,
-             RideState.cancelledByDriver,
-             RideState.noShowRider,
-             RideState.noShowDriver:
+        case RideState.cancelledbyriderbeforeaccept,
+             RideState.cancelledbyriderafteraccept,
+             RideState.cancelledbydriver,
+             RideState.noshowrider,
+             RideState.noshowdriver:
             return .finished
 
         default:

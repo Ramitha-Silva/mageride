@@ -186,14 +186,14 @@ extension RideState {
     var isTerminalForPassenger: Bool {
         switch self {
         case RideState.paid,
-             RideState.cashSettled,
-             RideState.cashOnDeliveryCollected,
-             RideState.cancelledByRiderBeforeAccept,
-             RideState.cancelledByRiderAfterAccept,
-             RideState.cancelledByDriver,
-             RideState.expiredNoDriver,
-             RideState.noShowRider,
-             RideState.noShowDriver:
+             RideState.cashsettled,
+             RideState.cashondeliverycollected,
+             RideState.cancelledbyriderbeforeaccept,
+             RideState.cancelledbyriderafteraccept,
+             RideState.cancelledbydriver,
+             RideState.expirednodriver,
+             RideState.noshowrider,
+             RideState.noshowdriver:
             return true
         default:
             return false
@@ -206,6 +206,6 @@ extension RideState {
     /// though nothing moved through the platform. `PaymentPending` does not, which is what puts the
     /// CTA on the receipt.
     var isSettled: Bool {
-        self == RideState.paid || self == RideState.cashSettled || self == RideState.cashOnDeliveryCollected
+        self == RideState.paid || self == RideState.cashsettled || self == RideState.cashondeliverycollected
     }
 }

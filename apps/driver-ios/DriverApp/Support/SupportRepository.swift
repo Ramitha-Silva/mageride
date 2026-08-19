@@ -96,8 +96,16 @@ final class ApiSupportRepository: SupportRepository {
         try await support.getFaqArticle(articleId: articleId, lang: nil)
     }
 
+    /// **`Page<T>.items` arrives as `[Any]`, and only the paged reads need the cast.** The export emits
+    /// the property as `NSArray<id>` — `Page<T>` keeps its type parameter across the bridge and its rows
+    /// do not — so the concrete type is put back at each of the two paged calls here. ``faq()`` above is
+    /// untouched because `listFaqArticles` answers a `FaqListResponse`, not a `Page`, and that envelope's
+    /// `items` is already typed. `compactMap` rather than `as!` for this target's own reason: a failed
+    /// force cast raises an exception Swift cannot catch and the process terminates. Every row is a
+    /// `Ticket` (and below, a `TripSummary`) by contract, so nothing is dropped.
     func tickets(userId: String) async throws -> [Ticket] {
-        try await support.listSupportTickets(userId: userId, page: PageRequest.companion.FIRST).items
+        try await support.listSupportTickets(userId: userId, page: PageRequest.companion.FIRST)
+            .items.compactMap { $0 as? Ticket }
     }
 
     func ticket(userId: String, ticketId: String) async throws -> TicketDetail {
@@ -105,7 +113,8 @@ final class ApiSupportRepository: SupportRepository {
     }
 
     func trips(driverId: String) async throws -> [TripSummary] {
-        try await query.listTrips(userId: driverId, page: PageRequest.companion.FIRST).items
+        try await query.listTrips(userId: driverId, page: PageRequest.companion.FIRST)
+            .items.compactMap { $0 as? TripSummary }
     }
 
     func uploadScreenshot(_ image: CapturedImage) async throws -> String {
@@ -117,10 +126,14 @@ final class ApiSupportRepository: SupportRepository {
         // document and `POST /v1/support/screenshots` declares no `…CapturedVia` part beside it, so
         // AL-43's provenance stamp is dropped here for the same reason C089 drops it on the delivery
         // proof — the Verification-Officer queue is not where this file lands.
+        //
+        // `data:` takes the `Data` as it is: the helper's Kotlin parameter is an `NSData`, and the
+        // importer bridges an Objective-C `NSData *` parameter to `Data` on the Swift side — so an
+        // `as NSData` here is a cast *away* from what the call wants, not towards it.
         try await support.uploadSupportScreenshot(
             file: IosCapturedDocumentKt.fileUploadOf(
                 fileName: image.fileName,
-                data: image.data as NSData,
+                data: image.data,
                 contentType: image.mimeType
             ),
             idempotencyKey: nil

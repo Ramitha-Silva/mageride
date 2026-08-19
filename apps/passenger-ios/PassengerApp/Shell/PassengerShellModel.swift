@@ -80,7 +80,19 @@ final class PassengerShellModel: ObservableObject {
         })
 
         versionCheck = Task { [graph] in
-            _ = try? await graph.api.version.checkAppVersion()
+            // All three arguments are spelled out because a Kotlin default does not survive the
+            // export. These ARE `VersionApi`'s own defaults: a `nil` platform and version make
+            // `:shared` fall back to `transport.config`, which `IosAppConfig` has already set from
+            // `PassengerEnvironment` — passing them from here would be a second copy of both.
+            //
+            // `publishSignal: true` is the load-bearing one. It is what publishes D-31's
+            // upgrade-required signal onto `graph.upgrades`, which this class subscribed to above;
+            // passing `false` would leave the update gate waiting for an event nothing raises.
+            _ = try? await graph.api.version.checkAppVersion(
+                platform: nil,
+                currentVersion: nil,
+                publishSignal: true
+            )
         }
 
         live.connect()

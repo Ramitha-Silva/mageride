@@ -39,10 +39,15 @@ struct MageRideCtaStyle: ButtonStyle {
         // inside a `ButtonStyle` — a style is not a View and its properties are read once — so the
         // disabled state has to be read somewhere that has a `body`. This is the standard shape,
         // and getting it wrong produces a CTA that never dims when the form is incomplete.
-        Body(configuration: configuration, background: background, foreground: foreground, isLoading: isLoading)
+        CtaBody(configuration: configuration, background: background, foreground: foreground, isLoading: isLoading)
     }
 
-    private struct Body: View {
+    // NOT called `Body`. `ButtonStyle` declares `associatedtype Body: View`, so a nested type of
+    // that name is taken as the witness for it — and a `private` witness for an `internal`
+    // protocol conformance is "must be as accessible as its enclosing type", which then reads as
+    // `MageRideCtaStyle` not conforming to `ButtonStyle` at all. `makeBody` returns `some View`, so
+    // the associated type is inferred; the nested view only has to not collide with its name.
+    private struct CtaBody: View {
         let configuration: ButtonStyleConfiguration
         let background: Color
         let foreground: Color

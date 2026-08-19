@@ -34,10 +34,16 @@ final class SplashModel: ObservableObject {
         await sessions.restore()
         let signedIn = sessions.isSignedIn
 
+        // Hoisted out of the argument list because `&&` takes its right-hand side as an
+        // `@autoclosure`, which is not async — so `signedIn && (await hasProfile())` does not
+        // compile. The short-circuit is preserved deliberately: `hasProfile()` is a network read and
+        // a signed-out driver has no profile to ask about.
+        let profileComplete = signedIn ? await hasProfile() : false
+
         destination = OnboardingRouter.next(
             signedIn: signedIn,
             firstRunComplete: preferences.firstRunComplete,
-            profileComplete: signedIn && (await hasProfile()),
+            profileComplete: profileComplete,
             permissionsAcknowledged: preferences.permissionsAcknowledged
         )
     }

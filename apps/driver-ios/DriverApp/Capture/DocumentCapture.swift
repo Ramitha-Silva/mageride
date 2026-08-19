@@ -44,10 +44,13 @@ struct CapturedImage: Equatable {
     /// The conversion is Kotlin's (`IosCapturedDocument.kt`) and deliberately so: `FileUpload` takes
     /// a `ByteArray`, whose only Swift-facing mutator is one Objective-C message per byte, and a
     /// three-megabyte photograph is three million of them. Kotlin does it with one `memcpy`.
+    ///
+    /// The `data:` parameter is `NSData *` in the generated header, which Swift's importer bridges
+    /// to `Data` — so the value goes over as it is, and an `as NSData` cast is what fails to build.
     func asDocument() -> CapturedDocument {
         IosCapturedDocumentKt.capturedDocument(
             fileName: fileName,
-            data: data as NSData,
+            data: data,
             contentType: mimeType,
             capturedVia: capturedVia
         )

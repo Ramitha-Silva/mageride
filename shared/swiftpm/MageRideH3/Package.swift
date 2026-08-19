@@ -40,6 +40,21 @@ let package = Package(
         // library's own sources include them by bare name (`#include "baseCells.h"`) and SPM only
         // adds `publicHeadersPath` to the header search path. Exposing the private headers to
         // importers is harmless: nothing outside this package imports `CH3` (see `MageRideH3`).
+        //
+        // **With one exception, and it is not about visibility.** `publicHeadersPath` makes SPM
+        // generate an UMBRELLA DIRECTORY module map, so clang compiles every header under
+        // `include/` on its own to build the module. `polygonAlgos.h` cannot survive that: it is a
+        // template body that `polygon.c` and `linkedGeo.c` include *after* defining `TYPE`,
+        // `IS_EMPTY`, `INIT_ITERATION` and `ITERATE`, and it opens with four `#error`s saying so.
+        // Standalone it emits 15 errors and takes the whole precompiled module with it, which
+        // fails every app that links this package.
+        //
+        // So it lives beside the two `.c` files that include it instead — a quoted `#include`
+        // searches the includer's own directory first, so nothing about the vendored source had to
+        // change. See `VENDOR.md`; that relocation is the only structural deviation from upstream.
+        // It is also the reason this package compiles here and never did before: the DRIVER app
+        // links no H3 at all (AL-31 — its home map joins no geocell group), so C094's passenger
+        // build is the first thing that ever asked clang to make this module.
         .target(
             name: "CH3",
             path: "Sources/CH3",

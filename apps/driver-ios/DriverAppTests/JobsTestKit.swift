@@ -79,7 +79,7 @@ func jobStanding(
 ) -> JobStanding {
     let response = levelResponse(level: level, ratingPoints: points, levelUpThreshold: levelUpThreshold)
     return JobStanding(
-        standing: MageRideShared.DriverStanding.companion.of(response: response),
+        standing: DriverStanding.companion.of(response: response),
         level: response,
         acceptanceRate: acceptanceRate,
         noShows: noShows,
