@@ -262,6 +262,7 @@
 
     <!-- SCR-PA-012a · paste link. -->
     <string name="map_pick_move">Move the map to place the pin</string>
+    <string name="map_pick_search">Search a place</string>
     <string name="paste_title">Paste a link</string>
     <string name="paste_label_pickup">PICKUP</string>
     <string name="paste_label_dropoff">DROP-OFF</string>

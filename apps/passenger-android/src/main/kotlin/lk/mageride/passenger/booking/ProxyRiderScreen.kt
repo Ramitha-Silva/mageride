@@ -28,6 +28,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lk.mageride.passenger.R
+import lk.mageride.passenger.location.LastKnownFix
 import lk.mageride.passenger.onboarding.PhoneNumber
 import lk.mageride.passenger.ui.component.InlineError
 import lk.mageride.passenger.ui.component.LabelledTextField
@@ -38,6 +39,7 @@ import lk.mageride.passenger.ui.theme.ControlTokens
 import lk.mageride.passenger.ui.theme.MageRideTheme
 import lk.mageride.shared.data.models.ride.LocationRequestState
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 /**
  * SCR-PA-010b — booking for somebody else (US-8.16–8.19, P-01…P-03).
@@ -66,6 +68,13 @@ internal fun ProxyRiderScreen(
     val state by model.state.collectAsStateWithLifecycle()
     var pasteOpen by remember { mutableStateOf(false) }
     var mapOpen by remember { mutableStateOf(false) }
+
+    // Where the Map method's picker OPENS. Nothing is captured from it — the pin is — but a picker
+    // that opens on `MapCamera.Default` opens on Colombo Fort at zoom 12 for a booker standing in
+    // Jaffna, and its CTA is disabled until the first camera settle because there is no centre yet.
+    // Read rather than collected: `LastKnownFix` is the fix the map already saw, and a second
+    // collector on the fused provider is what this app forbids.
+    val lastFix = koinInject<LastKnownFix>()
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -168,7 +177,7 @@ internal fun ProxyRiderScreen(
     if (mapOpen) {
         MapPickSheet(
             label = stringResource(R.string.proxy_pickup_method),
-            around = state.pickup?.point,
+            around = state.pickup?.point ?: lastFix.point,
             onUse = { place ->
                 model.setPickup(place)
                 mapOpen = false

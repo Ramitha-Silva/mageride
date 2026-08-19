@@ -211,6 +211,7 @@
     <string name="package_otp_noted">කේතය සටහන් කරගත්තා</string>
 
     <string name="map_pick_move">සලකුණ තැබීමට සිතියම ගෙන යන්න</string>
+    <string name="map_pick_search">ස්ථානයක් සොයන්න</string>
     <string name="paste_title">සබැඳියක් අලවන්න</string>
     <string name="paste_label_pickup">බාරදෙන</string>
     <string name="paste_label_dropoff">ලබාදෙන</string>

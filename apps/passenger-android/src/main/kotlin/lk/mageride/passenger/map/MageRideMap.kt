@@ -79,6 +79,10 @@ internal data class MapPin(val kind: String, val lat: Double, val lng: Double)
  * @param pins §0.3's pickup and dropoff markers.
  * @param geofence MAP-10's 100 m circle, at the point being arrived at. `null` everywhere else.
  * @param camera Where to open — read once, when the style loads.
+ * @param focus A point the SCREEN wants the camera on, applied every time it changes. Distinct from
+ *   [camera], which says where the map *opens* and is read once: the `MapLibreMap` never leaves this
+ *   composable, so before this a caller had no way to move the map at all. `MapPickSheet`'s search
+ *   is what needed one — a result that does not move the pin is a search that answered nothing.
  * @param onRecentre §0.3's recentre FAB ("both apps"). `null` hides it; a non-null callback shows
  *   it, and tapping it animates back to [userPosition] before calling back. Δ C078.
  * @param onCameraIdle Where the map settled, after a pan or a zoom. This is how a centre-pin
@@ -109,6 +113,7 @@ internal fun MageRideMap(
     pins: List<MapPin> = emptyList(),
     geofence: GeoPoint? = null,
     camera: MapCamera = MapCamera.Default,
+    focus: GeoPoint? = null,
     darkTheme: Boolean = isSystemInDarkTheme(),
     onRecentre: (() -> Unit)? = null,
     onCameraIdle: ((GeoPoint) -> Unit)? = null,
@@ -228,6 +233,14 @@ internal fun MageRideMap(
 
     LaunchedEffect(style, pins, userPosition) {
         style?.drawPins(pins, userPosition)
+    }
+
+    // The screen moving the camera after the map has opened — see [focus]. Keyed on the point, so
+    // asking for the same place twice is one animation; a caller that wants a second one clears the
+    // focus when the map is panned away, which is what `MapPickViewModel.onPinMoved` does.
+    LaunchedEffect(map, focus) {
+        val target = focus ?: return@LaunchedEffect
+        map?.centreOn(LatLng(target.lat, target.lng))
     }
 
     Box(modifier = modifier) {

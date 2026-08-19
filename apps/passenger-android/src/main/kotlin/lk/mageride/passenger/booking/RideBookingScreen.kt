@@ -42,6 +42,7 @@ import lk.mageride.passenger.ui.component.MageRideCta
 import lk.mageride.passenger.ui.component.SectionLabel
 import lk.mageride.passenger.ui.theme.ControlTokens
 import lk.mageride.passenger.ui.theme.MageRideTheme
+import lk.mageride.shared.data.models.Place
 import lk.mageride.shared.data.models.ride.RidePaymentMethod
 import org.koin.androidx.compose.koinViewModel
 
@@ -119,8 +120,9 @@ internal fun RideBookingScreen(
             verticalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.sm),
         ) {
             JourneySummary(
-                pickup = state.draft.pickup?.address,
-                dropoff = state.draft.dropoff?.address,
+                pickup = state.draft.pickup,
+                pickupIsChosen = state.draft.pickupIsChosen,
+                dropoff = state.draft.dropoff,
                 onEdit = onEditRoute,
             )
 
@@ -190,7 +192,7 @@ internal fun RideBookingScreen(
  * a picker that then rewrote the drop-off.
  */
 @Composable
-private fun JourneySummary(pickup: String?, dropoff: String?, onEdit: () -> Unit) {
+private fun JourneySummary(pickup: Place?, pickupIsChosen: Boolean, dropoff: Place?, onEdit: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.xxs),
@@ -198,7 +200,16 @@ private fun JourneySummary(pickup: String?, dropoff: String?, onEdit: () -> Unit
         SectionLabel(text = stringResource(R.string.booking_pickup_label))
         JourneyEnd(
             dot = MageRideTheme.status.success,
-            text = pickup ?: stringResource(R.string.search_current_location),
+            // A pickup somebody PICKED is named, or shown as the coordinates it was pinned at —
+            // only the passenger's own fix is "Current location". See
+            // [BookingDraftState.pickupIsChosen]: a proxy rider's pin has no address and is not
+            // where the booker is standing, so printing the fix's label over it was a lie the
+            // booker could not correct.
+            text = when {
+                pickup == null -> stringResource(R.string.search_current_location)
+                pickupIsChosen -> placeLabel(pickup)
+                else -> pickup.address ?: stringResource(R.string.search_current_location)
+            },
         )
         SectionLabel(
             text = stringResource(R.string.booking_destination_label),
@@ -206,7 +217,7 @@ private fun JourneySummary(pickup: String?, dropoff: String?, onEdit: () -> Unit
         )
         JourneyEnd(
             dot = MaterialTheme.colorScheme.error,
-            text = dropoff ?: stringResource(R.string.booking_no_destination),
+            text = dropoff?.let { placeLabel(it) } ?: stringResource(R.string.booking_no_destination),
             onEdit = onEdit,
         )
     }

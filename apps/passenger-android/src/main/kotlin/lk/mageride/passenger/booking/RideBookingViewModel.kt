@@ -134,7 +134,19 @@ internal class RideBookingViewModel(
 
     init {
         viewModelScope.launch {
-            draft.state.collect { latest -> mutableState.update { it.copy(draft = latest) } }
+            draft.state.collect { latest ->
+                val moved = latest.pickup?.point != mutableState.value.draft.pickup?.point ||
+                    latest.dropoff?.point != mutableState.value.draft.dropoff?.point
+                mutableState.update { it.copy(draft = latest) }
+
+                // **Both lists are quoted FROM the journey's ends, and this is what makes
+                // [refresh]'s own "whenever an end of the journey moves" true.** Nothing else in
+                // the app called it: SCR-PA-010b captures a proxy pickup and SCR-PA-008 an edited
+                // destination, both of them write the shared draft, and both pop back to this
+                // screen — whose view model survives on the same back-stack entry and was
+                // therefore still showing fares quoted from where the BOOKER was standing.
+                if (moved) refresh()
+            }
         }
         refresh()
     }

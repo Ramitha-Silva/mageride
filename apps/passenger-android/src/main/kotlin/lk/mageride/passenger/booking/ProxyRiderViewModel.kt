@@ -143,7 +143,10 @@ internal class ProxyRiderViewModel(
     /** Whatever the chosen method produced — a search result, a dropped pin, or a pasted link. */
     fun setPickup(place: Place) {
         mutableState.update { it.copy(pickup = place) }
-        draft.update { it.copy(pickup = place) }
+        // `pickupIsChosen`, because every one of the four methods produces a place somebody
+        // picked — which is what stops SCR-PA-009 printing "Current location" over the rider's
+        // pin. See `BookingDraftState.pickupIsChosen`.
+        draft.update { it.copy(pickup = place, pickupIsChosen = true) }
     }
 
     /**

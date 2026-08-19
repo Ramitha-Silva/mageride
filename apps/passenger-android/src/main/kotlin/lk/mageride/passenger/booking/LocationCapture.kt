@@ -56,11 +56,23 @@ internal fun PickupMethod.label(): Int = when (this) {
     PickupMethod.REQUEST -> R.string.capture_request
 }
 
+/**
+ * What a captured place reads as: its **name**, or the coordinates it was pinned at.
+ *
+ * A place with no address is not a place with no answer — a pin dropped on an unnamed lane is
+ * exactly what the Map method is for, and *"Pinned at 6.92710, 79.86120"* is a passenger telling a
+ * driver where to come. Every screen that shows a captured place goes through here, so SCR-PA-009's
+ * summary and SCR-PA-010b's row cannot drift apart.
+ */
+@Composable
+internal fun placeLabel(place: Place): String = place.address?.takeIf(String::isNotBlank)
+    ?: stringResource(R.string.capture_pinned, place.lat, place.lng)
+
 /** What a captured place reads as under its control, or the prompt when there is none yet. */
 @Composable
 internal fun CapturedPlace(place: Place?, emptyLabel: String, modifier: Modifier = Modifier) {
     Text(
-        text = place?.address ?: place?.let { stringResource(R.string.capture_pinned, it.lat, it.lng) } ?: emptyLabel,
+        text = place?.let { placeLabel(it) } ?: emptyLabel,
         modifier = modifier.fillMaxWidth(),
         style = MaterialTheme.typography.bodyMedium,
         color = if (place == null) {

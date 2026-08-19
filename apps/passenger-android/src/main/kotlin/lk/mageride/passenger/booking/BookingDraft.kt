@@ -43,6 +43,14 @@ internal enum class CaptureTarget {
  * One booking, as the passenger has filled it in so far.
  *
  * @property pickup Where it starts. Defaults to the passenger's fix and is editable everywhere.
+ * @property pickupIsChosen Whether [pickup] is a place **somebody picked** — a proxy rider's pin, a
+ *   pasted link, a searched address — rather than the passenger's own fix.
+ *
+ *   It exists because a `Place` cannot say where it came from and the two read differently on
+ *   SCR-PA-009: a fix has no address (see `LastKnownFix.asPlace`) and is honestly called *"Current
+ *   location"*, while a pin the booker dropped for somebody else is a real, specific place that
+ *   happens to have no name — printing *"Current location"* over it says the ride starts where the
+ *   BOOKER is standing, which is exactly what booking for someone else means it does not.
  * @property dropoff Where it ends. SCR-PA-008 sets it; SCR-PA-013 makes it mandatory (AL-36).
  * @property vehicleType The Mode C tier picked on SCR-PA-009, or `null` while a public route is
  *   selected — a bus is not a tier and is never booked.
@@ -57,6 +65,7 @@ internal enum class CaptureTarget {
  */
 internal data class BookingDraftState(
     val pickup: Place? = null,
+    val pickupIsChosen: Boolean = false,
     val dropoff: Place? = null,
     val bookingFor: BookingFor = BookingFor.ME,
     val subject: BookingSubject = BookingSubject.PERSON,
@@ -178,8 +187,8 @@ internal class BookingDraft(private val payments: PaymentPreference, private val
         update { draft ->
             when (target) {
                 CaptureTarget.BOOKING_DROPOFF, CaptureTarget.SCHEDULE_DROPOFF -> draft.copy(dropoff = place)
-                CaptureTarget.BOOKING_PICKUP -> draft.copy(pickup = place)
-                CaptureTarget.PROXY_PICKUP -> draft.copy(pickup = place)
+                CaptureTarget.BOOKING_PICKUP -> draft.copy(pickup = place, pickupIsChosen = true)
+                CaptureTarget.PROXY_PICKUP -> draft.copy(pickup = place, pickupIsChosen = true)
                 CaptureTarget.PACKAGE_PICKUP -> draft.copy(packagePickup = place)
                 CaptureTarget.PACKAGE_DROPOFF -> draft.copy(packageDropoff = place)
             }
@@ -208,6 +217,8 @@ internal class BookingDraft(private val payments: PaymentPreference, private val
         mutableState.value = BookingDraftState(
             dropoff = dropoff,
             pickup = pickup ?: lastFix.asPlace(),
+            // The caller passing one is the only way a fresh draft starts anywhere but here.
+            pickupIsChosen = pickup != null,
             paymentMethod = payments.current,
         )
     }

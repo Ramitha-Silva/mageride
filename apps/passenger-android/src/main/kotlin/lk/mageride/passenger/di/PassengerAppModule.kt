@@ -8,6 +8,7 @@ import kotlinx.coroutines.SupervisorJob
 import lk.mageride.passenger.booking.ApiBookingRepository
 import lk.mageride.passenger.booking.BookingDraft
 import lk.mageride.passenger.booking.BookingRepository
+import lk.mageride.passenger.booking.MapPickViewModel
 import lk.mageride.passenger.booking.PackageBookingViewModel
 import lk.mageride.passenger.booking.PasteLinkViewModel
 import lk.mageride.passenger.booking.ProxyRiderViewModel
@@ -235,6 +236,7 @@ private fun Module.bookingBindings() {
     viewModel { PackageBookingViewModel(draft = get(), bookings = get(), keys = get(), otps = get()) }
     viewModel { ScheduleRideViewModel(draft = get(), bookings = get()) }
     viewModel { PasteLinkViewModel(bookings = get()) }
+    viewModel { MapPickViewModel(query = get()) }
 }
 
 /**

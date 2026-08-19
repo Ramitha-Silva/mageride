@@ -211,6 +211,7 @@
     <string name="package_otp_noted">குறியீட்டைக் குறித்துக்கொண்டேன்</string>
 
     <string name="map_pick_move">குறியை வைக்க வரைபடத்தை நகர்த்தவும்</string>
+    <string name="map_pick_search">இடத்தைத் தேடுங்கள்</string>
     <string name="paste_title">ஒரு இணைப்பை ஒட்டு</string>
     <string name="paste_label_pickup">எடுக்கும்</string>
     <string name="paste_label_dropoff">சேர்க்கும்</string>

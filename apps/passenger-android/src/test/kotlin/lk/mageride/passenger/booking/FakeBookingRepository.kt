@@ -67,7 +67,20 @@ internal class FakeBookingRepository : BookingRepository {
     val parsedLinks = mutableListOf<String>()
     val locationRequestsFor = mutableListOf<PhoneE164>()
 
+    /**
+     * Where each quote was asked FROM, in order.
+     *
+     * [estimated] records what was priced and not where, which is enough for AL-19 and blind to the
+     * thing SCR-PA-009 gets wrong when a pickup moves under it — see
+     * `a_pickup_captured_on_another_screen_re_quotes_the_journey`.
+     */
+    val askedFaresFrom = mutableListOf<GeoPoint>()
+
+    /** The same, for the public list. */
+    val askedRoutesFrom = mutableListOf<GeoPoint>()
+
     override suspend fun transitOptions(from: GeoPoint, to: GeoPoint): TransitOptionsResponse {
+        askedRoutesFrom += from
         if (transitFails) error("transit-svc is unreachable")
         return transitAnswer
     }
@@ -81,6 +94,7 @@ internal class FakeBookingRepository : BookingRepository {
         kind: FareEstimateKind,
     ): FareEstimateResponse {
         estimated += vehicleType to kind
+        askedFaresFrom += from
         if (vehicleType in estimateFails) error("no price for $vehicleType")
         return FareEstimateResponse(
             fareEstimateToken = "token-${vehicleType.wire}",
