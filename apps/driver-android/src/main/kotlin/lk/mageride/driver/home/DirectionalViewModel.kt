@@ -157,11 +157,19 @@ internal class DirectionalViewModel(
         observeDevice()
     }
 
-    /** Re-reads the filter and the ★ Home shortcut. */
+    /**
+     * Re-reads the filter and the ★ Home shortcut.
+     *
+     * Both reads are resolved **before** `update` is called. It is a compare-and-set loop whose
+     * lambda kotlinx may evaluate *"multiple times, if value is being concurrently updated"*, and
+     * [observeDevice] updates `tickAt` once a second — a suspending call inside it re-fires on
+     * every tick the read outlives.
+     */
     fun refresh() {
         launchGuarded {
             val filter = standby.directional()
-            mutableState.update { it.copy(filter = filter, suggestions = homeShortcuts()) }
+            val shortcuts = homeShortcuts()
+            mutableState.update { it.copy(filter = filter, suggestions = shortcuts) }
         }
     }
 
@@ -174,7 +182,8 @@ internal class DirectionalViewModel(
             val here = mutableState.value.position
             val hits = query.searchPlaces(query = text, lat = here?.lat, lng = here?.lng, limit = SEARCH_LIMIT)
             val places = hits.places.map { DirectionalDestination(label = it.displayName, point = it.point) }
-            mutableState.update { state -> state.copy(suggestions = homeShortcuts() + places) }
+            val shortcuts = homeShortcuts()
+            mutableState.update { state -> state.copy(suggestions = shortcuts + places) }
         }
     }
 

@@ -20,6 +20,9 @@ import kotlin.time.ExperimentalTime
  * @property loading The first read is in flight — the wireframe's shimmer stats.
  * @property busy A toggle or a journey command is in flight; the control stays put and spins.
  * @property vehicles What the driver has, and which one is live (US-9.6, D-03).
+ * @property vehiclesKnown Whether `GET /v1/vehicles/mine` has ever answered. *"No vehicle"* and
+ *   *"the read failed"* are the same empty [LiveVehicle] and must not be the same screen — see
+ *   [needsVehicle].
  * @property standing The status header and the standby sheet (SCR-DA-010).
  * @property journey The Mode A/B tracking session (SCR-DA-011).
  * @property online Whether `POST /v1/standby/online` has been accepted for the live vehicle.
@@ -36,6 +39,7 @@ internal data class HomeState(
     val loading: Boolean = true,
     val busy: Boolean = false,
     val vehicles: LiveVehicle = LiveVehicle(),
+    val vehiclesKnown: Boolean = false,
     val standing: DriverStanding = DriverStanding(),
     val journey: JourneyStanding = JourneyStanding(),
     val online: Boolean = false,
@@ -59,8 +63,15 @@ internal data class HomeState(
      */
     val canGoOnline: Boolean get() = vehicles.canGoOnline
 
-    /** Whether the empty state routes to SCR-DA-026a rather than to My Vehicles' list. */
-    val needsVehicle: Boolean get() = !loading && !vehicles.canGoOnline
+    /**
+     * Whether the empty state routes to SCR-DA-026a rather than to My Vehicles' list.
+     *
+     * Gated on [vehiclesKnown], because a failed vehicle read leaves the same empty [LiveVehicle]
+     * a driver with no vehicle has. Without the gate a `403` or a flat tunnel put *"add a vehicle
+     * to go online"* in front of a driver whose tuk is approved and sitting in the list — the
+     * error banner and a contradiction of it, at once.
+     */
+    val needsVehicle: Boolean get() = !loading && vehiclesKnown && !vehicles.canGoOnline
 
     /** US-9.9's `< Rs 200` nudge on the standby sheet. */
     val walletAlert: WalletAlert get() = standing.walletAlert

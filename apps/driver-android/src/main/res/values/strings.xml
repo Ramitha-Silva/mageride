@@ -772,4 +772,11 @@
     <string name="error_ride_terminal">This trip has ended, so there is nobody left to reach.</string>
     <string name="error_not_ride_participant">This is not your trip.</string>
 
+    <!-- The kernel's cross-cutting codes (C002). Every call can answer one, and with no copy of
+         their own they all arrived as `error_generic` — see `OnboardingErrors.platformCode`. -->
+    <string name="error_forbidden">Your account does not have access to that. Contact support.</string>
+    <string name="error_service_down">MageRide is having trouble right now. Try again in a moment.</string>
+    <string name="error_upgrade_required">Update the app to keep using it.</string>
+    <string name="error_attestation_failed">This copy of the app could not be verified. Install MageRide Driver from the Play Store.</string>
+
 </resources>

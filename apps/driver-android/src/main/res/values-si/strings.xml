@@ -717,4 +717,10 @@
     <string name="error_ride_terminal">මෙම ගමන අවසන් වී ඇති නිසා සම්බන්ධ වීමට කිසිවෙකු නැත.</string>
     <string name="error_not_ride_participant">මෙය ඔබේ ගමන නොවේ.</string>
 
+    <!-- හරය හරහා පොදු කේත (C002). -->
+    <string name="error_forbidden">ඔබේ ගිණුමට එයට ප්‍රවේශය නැත. සහාය අමතන්න.</string>
+    <string name="error_service_down">දැනට MageRide සේවාවේ දෝෂයක් ඇත. මොහොතකින් නැවත උත්සාහ කරන්න.</string>
+    <string name="error_upgrade_required">දිගටම භාවිත කිරීමට යෙදුම යාවත්කාලීන කරන්න.</string>
+    <string name="error_attestation_failed">මෙම යෙදුමේ පිටපත සත්‍යාපනය කළ නොහැකි විය. Play Store එකෙන් MageRide Driver ස්ථාපනය කරන්න.</string>
+
 </resources>
