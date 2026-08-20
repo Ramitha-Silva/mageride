@@ -119,6 +119,9 @@ internal class DriverProfileViewModel(private val identity: DriverIdentity, priv
             val profile = profiles.profile()
             val contacts = profiles.emergencyContacts()
             val driverId = identity.driverId
+            // Read before the state is touched: `update` is a compare-and-set loop and re-runs its
+            // lambda when it loses, which would re-fire this read.
+            val standing = driverId?.let { id -> profiles.standing(id) }
 
             mutableState.update {
                 it.copy(
@@ -128,7 +131,7 @@ internal class DriverProfileViewModel(private val identity: DriverIdentity, priv
                     // path, so it is the one this screen is about. `firstOrNull` behind it covers
                     // an account that has contacts but no primary flag set.
                     contact = contacts.firstOrNull(EmergencyContact::isPrimary) ?: contacts.firstOrNull(),
-                    standing = if (driverId == null) it.standing else profiles.standing(driverId),
+                    standing = standing ?: it.standing,
                 )
             }
         }
@@ -183,7 +186,12 @@ internal class DriverProfileViewModel(private val identity: DriverIdentity, priv
         val current = mutableState.value
         if (!current.canSaveName) return
 
-        write { mutableState.update { it.copy(profile = profiles.saveName(current.nameDraft), sheet = null) } }
+        // The `PUT` is made before `update`, never inside it: a driver still typing in the field
+        // moves the state under the compare-and-set, and a mutation in that lambda is sent twice.
+        write {
+            val profile = profiles.saveName(current.nameDraft)
+            mutableState.update { it.copy(profile = profile, sheet = null) }
+        }
     }
 
     /**
@@ -230,7 +238,10 @@ internal class DriverProfileViewModel(private val identity: DriverIdentity, priv
         if (current.saving) return
         val updated = group.applied(current.notificationPreferences, enabled)
 
-        write { mutableState.update { it.copy(profile = profiles.saveNotificationPreferences(updated)) } }
+        write {
+            val profile = profiles.saveNotificationPreferences(updated)
+            mutableState.update { it.copy(profile = profile) }
+        }
     }
 
     /**

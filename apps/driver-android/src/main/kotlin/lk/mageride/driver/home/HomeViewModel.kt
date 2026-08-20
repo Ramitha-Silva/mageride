@@ -64,27 +64,56 @@ internal class HomeViewModel(
         observeDevice()
     }
 
-    /** Re-reads the vehicle, the standing, the journey and any ride already in hand. */
+    /**
+     * Re-reads the vehicle, the standing, the journey and any ride already in hand.
+     *
+     * **Every read is resolved before the state is touched, and no suspending call may move back
+     * inside `update`.** `MutableStateFlow.update` is a compare-and-set *loop* — kotlinx says so
+     * in its own contract, *"function may be evaluated multiple times, if value is being
+     * concurrently updated"* — and [observeDevice] writes `tickAt` once a second and `position` on
+     * every fix. A lambda holding six round trips therefore loses the CAS whenever those round
+     * trips outlast one tick, and re-fires all six; on a cold start, where the first calls carry a
+     * DNS lookup and a TLS handshake, it loses every time.
+     *
+     * **A dead read leaves its own field alone rather than blanking the dashboard.** That is the
+     * rule `StandbyRepository.standing` already applies to its five reads, applied to the other
+     * three: a driver whose ride-svc read failed still needs their vehicle, their wallet and their
+     * go-online toggle, and the first failure becomes copy (D-26) instead of the screen.
+     */
     fun refresh() {
         mutableState.update { it.copy(loading = true, error = null) }
         launchGuarded(onFailure = { mutableState.update { state -> state.copy(loading = false) } }) {
             val driverId = identity.driverId
-            val vehicles = identity.liveVehicle()
-            val live = vehicles.live
+            val vehicles = attempt { identity.liveVehicle() }
+            val live = vehicles.getOrNull()?.live
+            val scheduled = vehicles.getOrNull()?.isScheduledMode == true
+
+            val standing = driverId?.let { id -> attempt { standby.standing(id) } }
+            // SCR-DA-011 only. A Mode C vehicle has no tracking session and asking trip-state-svc
+            // about one would be the R-01 fence crossed for nothing.
+            val journey = if (live != null && scheduled) attempt { journeys.standing(live.vehicleId) } else null
+            val activeRide = driverId?.let { id -> attempt { rides.active(id) } }
+
+            val message = listOfNotNull(vehicles, standing, journey, activeRide)
+                .firstNotNullOfOrNull { read -> read.exceptionOrNull() }
+                ?.let(OnboardingErrors::messageFor)
 
             mutableState.update {
                 it.copy(
                     loading = false,
-                    vehicles = vehicles,
-                    standing = if (driverId == null) it.standing else standby.standing(driverId),
-                    // SCR-DA-011 only. A Mode C vehicle has no tracking session and asking
-                    // trip-state-svc about one would be the R-01 fence crossed for nothing.
-                    journey = if (live != null && vehicles.isScheduledMode) {
-                        journeys.standing(live.vehicleId)
-                    } else {
-                        JourneyStanding()
-                    },
-                    activeRideId = driverId?.let { id -> rides.active(id)?.rideId },
+                    vehicles = vehicles.getOrDefault(it.vehicles),
+                    vehiclesKnown = it.vehiclesKnown || vehicles.isSuccess,
+                    standing = standing?.getOrDefault(it.standing) ?: it.standing,
+                    journey = if (scheduled) journey?.getOrDefault(it.journey) ?: it.journey else JourneyStanding(),
+                    // A failed read must not clear a ride the driver is holding, and a successful
+                    // one that answers `null` must not keep one they have finished. The failure
+                    // arm names its throwable `_` so that `it` is still the state being folded —
+                    // a second `refresh` may have landed a ride while this one's read was failing.
+                    activeRideId = activeRide?.fold(
+                        onSuccess = { ride -> ride?.rideId },
+                        onFailure = { _ -> it.activeRideId },
+                    ),
+                    error = message,
                 )
             }
         }
@@ -263,6 +292,21 @@ internal class HomeViewModel(
         /** One second — fine enough for a `01:12:40` timer and for a Directional countdown. */
         val TICK = 1.seconds
     }
+}
+
+/**
+ * Attempts [block], answering a [Result] instead of throwing the dashboard away.
+ *
+ * Not `runCatching`: that swallows `CancellationException` as well, which turns a cancelled
+ * `viewModelScope` into a fake failure and leaves the coroutine that raised it undead.
+ */
+@Suppress("TooGenericExceptionCaught") // The boundary between a dead read and copy for it.
+private suspend fun <T> attempt(block: suspend () -> T): Result<T> = try {
+    Result.success(block())
+} catch (cause: CancellationException) {
+    throw cause
+} catch (cause: Throwable) {
+    Result.failure(cause)
 }
 
 /**

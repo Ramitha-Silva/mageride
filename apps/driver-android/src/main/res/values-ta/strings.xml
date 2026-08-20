@@ -716,4 +716,10 @@
     <string name="error_ride_terminal">இந்தப் பயணம் முடிந்துவிட்டது, எனவே தொடர்பு கொள்ள யாரும் இல்லை.</string>
     <string name="error_not_ride_participant">இது உங்கள் பயணம் அல்ல.</string>
 
+    <!-- மையக் குறியீடுகள் (C002). -->
+    <string name="error_forbidden">உங்கள் கணக்குக்கு அதற்கான அணுகல் இல்லை. ஆதரவைத் தொடர்பு கொள்ளவும்.</string>
+    <string name="error_service_down">MageRide சேவையில் தற்போது கோளாறு உள்ளது. சிறிது நேரம் கழித்து மீண்டும் முயற்சிக்கவும்.</string>
+    <string name="error_upgrade_required">தொடர்ந்து பயன்படுத்த செயலியைப் புதுப்பிக்கவும்.</string>
+    <string name="error_attestation_failed">இந்தச் செயலியின் நகலைச் சரிபார்க்க முடியவில்லை. Play Store இலிருந்து MageRide Driver ஐ நிறுவவும்.</string>
+
 </resources>

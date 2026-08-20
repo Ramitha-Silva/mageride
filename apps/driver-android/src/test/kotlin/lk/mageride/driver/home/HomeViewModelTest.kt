@@ -1,6 +1,8 @@
 package lk.mageride.driver.home
 
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.runBlocking
+import lk.mageride.driver.R
 import lk.mageride.driver.onboarding.MainDispatcher
 import lk.mageride.driver.onboarding.await
 import lk.mageride.driver.ride.ActiveRideRepository
@@ -180,6 +182,63 @@ class HomeViewModelTest {
         assertFalse(backend.called("getActiveSession"))
     }
 
+    @Test
+    fun a_forbidden_vehicle_read_says_so_and_does_not_claim_the_driver_has_no_vehicle() = runBlocking {
+        // The shape a first run takes on an account that never got the `driver` role: every
+        // `/v1/vehicles` route is `RequireMageRideRole(driver)` and the only grant in the backend
+        // is at account creation, so `GET /v1/vehicles/mine` answers `403 forbidden`.
+        //
+        // Two things used to go wrong at once. The copy was `error_generic` — "Something went
+        // wrong", which is true of everything — and the empty `LiveVehicle` left behind by the
+        // throw also read as *"add a vehicle to go online"*, so the dashboard showed an error and
+        // a contradiction of it in the same column above the map.
+        backend.fails("listMyVehicles", HttpStatusCode.Forbidden, "forbidden")
+
+        val model = viewModel()
+        model.state.await { !it.loading }
+        val state = model.state.value
+
+        assertEquals(R.string.error_forbidden, state.error)
+        assertFalse(state.vehiclesKnown, "the read never answered, so nothing is known about vehicles")
+        assertFalse(state.needsVehicle, "a dead read is not a driver without a vehicle")
+        assertFalse(state.canGoOnline, "and the toggle stays shut either way")
+    }
+
+    @Test
+    fun a_dead_ride_read_leaves_the_rest_of_the_dashboard_standing() = runBlocking {
+        // `StandbyRepository.standing` already says a dead read must not blank the dashboard and
+        // holds its five to it; the vehicle and the ride reads were outside that rule and threw
+        // the whole screen away instead. The vehicle answered here, so the chip, the toggle and
+        // the sheet are all still owed to the driver.
+        backend.returns("listMyVehicles", VehicleListResponse(listOf(liveVehicle())))
+        backend.fails("getActiveDriverRide", HttpStatusCode.InternalServerError, "internal-error")
+
+        val model = viewModel(stubActiveRide = false)
+        model.state.await { !it.loading }
+        val state = model.state.value
+
+        assertEquals(HOME_VEHICLE_ID, state.vehicles.live?.vehicleId, "the vehicle read succeeded")
+        assertTrue(state.vehiclesKnown)
+        assertTrue(state.canGoOnline, "US-9.6's gate is about the vehicle, not about ride-svc")
+        assertEquals(R.string.error_service_down, state.error, "and the driver is told which kind of failure it was")
+    }
+
+    @Test
+    fun one_refresh_reads_each_endpoint_once() = runBlocking {
+        // The reads used to sit inside `MutableStateFlow.update`, which re-runs its lambda every
+        // time the compare-and-set loses — and `observeDevice` writes `tickAt` once a second and
+        // `position` on every fix, so it loses whenever the round trips outlast a tick. This is
+        // the invariant that broke: one refresh, one read each.
+        backend.returns("listMyVehicles", VehicleListResponse(listOf(liveVehicle())))
+
+        val model = viewModel()
+        model.state.await { !it.loading }
+
+        listOf("listMyVehicles", "getActiveDriverRide", "getWallet", "getDirectionalFilter").forEach { operation ->
+            assertEquals(1, backend.calls.count { it.operationId == operation }, "$operation was read more than once")
+        }
+    }
+
     private fun session(state: SessionState) = Session(
         sessionId = Fixtures.TRIP_ID,
         vehicleId = HOME_VEHICLE_ID,
@@ -189,10 +248,11 @@ class HomeViewModelTest {
         startedAt = Fixtures.NOW,
     )
 
-    private suspend fun viewModel(): HomeViewModel {
+    private suspend fun viewModel(stubActiveRide: Boolean = true): HomeViewModel {
         // No ride in hand unless a test says so — otherwise the fake synthesises one from the
-        // contract and Home would report a trip to resume in every case.
-        backend.returns<RideDetail?>("getActiveDriverRide", null)
+        // contract and Home would report a trip to resume in every case. A test that stubs the
+        // read itself passes `false`, because `returns` would replace what it programmed.
+        if (stubActiveRide) backend.returns<RideDetail?>("getActiveDriverRide", null)
         val api = backend.mageRideApi()
         return HomeViewModel(
             identity = DriverIdentity(

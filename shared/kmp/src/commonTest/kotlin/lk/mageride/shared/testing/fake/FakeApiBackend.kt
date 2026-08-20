@@ -19,6 +19,7 @@ import lk.mageride.shared.data.api.OperationIdAttribute
 import lk.mageride.shared.serialization.MageRideJson
 import lk.mageride.shared.testing.fixture.DtoFixtures
 import lk.mageride.shared.testing.fixture.Fixtures
+import kotlin.concurrent.Volatile
 
 /**
  * A MockEngine that answers **every one of the 176 operations** without being told how.
@@ -51,14 +52,26 @@ import lk.mageride.shared.testing.fixture.Fixtures
  */
 public class FakeApiBackend {
 
-    private val recorded = mutableListOf<FakeCall>()
+    /**
+     * What the fake has served, as an **immutable list replaced on each call** rather than a
+     * mutable one appended to.
+     *
+     * The writer runs inside [lock], but [calls], [callsTo], [called] and [describeCalls] are not
+     * `suspend` and so cannot take a coroutine `Mutex` — they read this field directly. Against a
+     * `mutableListOf` that is a `ConcurrentModificationException` in whichever assertion happens to
+     * iterate while a background coroutine is still recording, which is a flake with somebody
+     * else's test name on it. Copy-on-write makes a reader's snapshot immutable by construction;
+     * `@Volatile` is what makes it the *latest* snapshot.
+     */
+    @Volatile
+    private var recorded: List<FakeCall> = emptyList()
     private val standing = mutableMapOf<String, FakeReply>()
     private val queued = mutableMapOf<String, ArrayDeque<FakeReply>>()
     private val synthesised = mutableMapOf<String, FakeReply>()
     private val lock = Mutex()
 
     /** Every call the fake has served, oldest first. */
-    public val calls: List<FakeCall> get() = recorded.toList()
+    public val calls: List<FakeCall> get() = recorded
 
     /** The engine to hand to `mageRideHttpClient` — or use [mageRideApi], which does it for you. */
     public val engine: MockEngine = MockEngine { request ->
@@ -135,7 +148,7 @@ public class FakeApiBackend {
 
     /** Forgets every recorded call and every stub. The synthesised defaults are unaffected. */
     public fun reset() {
-        recorded.clear()
+        recorded = emptyList()
         standing.clear()
         queued.clear()
     }

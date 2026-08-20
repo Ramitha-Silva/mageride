@@ -31,25 +31,92 @@ internal object OnboardingErrors {
 
         is MageRideError.RateLimited -> R.string.error_otp_rate_limited
 
-        is MageRideError -> forCode(cause.code)
+        is MageRideError -> forCode(cause.code) ?: byType(cause)
 
         else -> R.string.error_generic
     }
 
     /**
-     * The code table, in two halves.
+     * The code table, one half per screen group.
      *
      * Split by *screen group* rather than by kind: cluster 1 and the Mode-C wizard are C068/C069's,
      * the dashboard and the ride lifecycle are C070's, and each half is the set of codes its own
-     * contracts declare. One `when` over both would be a function nobody can read against a
+     * contracts declare. One `when` over all of them would be a function nobody can read against a
      * contract, which is the only way this table stays true.
+     *
+     * `null` means *no table claims this code*, which is the caller's cue to fall back to
+     * [byType] rather than to the generic message — see [messageFor].
      */
     @StringRes
-    private fun forCode(code: ErrorCode?): Int = onboardingCode(code)
+    private fun forCode(code: ErrorCode?): Int? = onboardingCode(code)
         ?: dashboardCode(code)
         ?: walletCode(code)
         ?: safetyCode(code)
-        ?: R.string.error_generic
+        ?: platformCode(code)
+
+    /**
+     * The kernel's cross-cutting codes (C002) — the half of the registry no screen group owns.
+     *
+     * These are the codes **every** call can answer, which is exactly why their absence showed:
+     * with no row here a `403 forbidden`, a `503 service-unavailable` and a `426 upgrade-required`
+     * all reached the driver as *"Something went wrong"*, which says nothing about whether to
+     * wait, to sign in again, or to call somebody.
+     */
+    @StringRes
+    private fun platformCode(code: ErrorCode?): Int? = when (code) {
+        // The session is gone and D-29's single refresh has already been spent. The shell routes
+        // to login off `SessionEvent`; this is the copy that explains why the screen went.
+        ErrorCode.UNAUTHORIZED -> R.string.session_expired
+
+        // AL-06 deny-by-default. On this app it is nearly always the `driver` role missing from
+        // an account that was created on the passenger side: every `/v1/vehicles` and
+        // `/v1/drivers` route demands that role, and nothing a driver can reach grants it.
+        ErrorCode.FORBIDDEN -> R.string.error_forbidden
+
+        ErrorCode.BAD_REQUEST -> R.string.error_validation_failed
+
+        // Ours, not the driver's — and unlike a 4xx, waiting is genuinely the right advice.
+        ErrorCode.INTERNAL_ERROR,
+        ErrorCode.SERVICE_UNAVAILABLE,
+        ErrorCode.DEPENDENCY_UNAVAILABLE,
+        ErrorCode.UPSTREAM_TIMEOUT,
+        -> R.string.error_service_down
+
+        // D-31's version gate. `MageRideApiSignals.upgradeRequired` is what puts the wall up;
+        // this is what the screen underneath says while it does.
+        ErrorCode.UPGRADE_REQUIRED -> R.string.error_upgrade_required
+
+        // D-30. Play Integrity was rejected at the edge, and no amount of retrying fixes a build
+        // that cannot attest — the copy has to say where a working copy comes from instead.
+        ErrorCode.ATTESTATION_FAILED -> R.string.error_attestation_failed
+
+        // The 429 arm of [messageFor] catches this by status; the code is here for a bucket that
+        // answered one without it.
+        ErrorCode.RATE_LIMITED -> R.string.error_otp_rate_limited
+
+        else -> null
+    }
+
+    /**
+     * The coarse fallback, on the error's own type.
+     *
+     * `MageRideError`'s KDoc asks for exactly this split — *"branching is meant to happen on the
+     * type for the coarse decision and on `code` for the fine one"*. It is what answers the two
+     * cases [forCode] cannot: a problem body whose `code` this build predates, which
+     * `ErrorCode.fromWire` resolves to `null` by design, and a 5xx from something between the app
+     * and the gateway, which carries no MageRide code at all and would otherwise be
+     * indistinguishable from a bug in this app.
+     */
+    @StringRes
+    private fun byType(cause: MageRideError): Int = when (cause) {
+        is MageRideError.AttestationFailed -> R.string.error_attestation_failed
+        is MageRideError.UpgradeRequired -> R.string.error_upgrade_required
+        is MageRideError.Unauthorized -> R.string.session_expired
+        is MageRideError.Forbidden -> R.string.error_forbidden
+        is MageRideError.BadRequest -> R.string.error_validation_failed
+        is MageRideError.Server -> R.string.error_service_down
+        else -> R.string.error_generic
+    }
 
     @StringRes
     @Suppress("ReturnCount")
