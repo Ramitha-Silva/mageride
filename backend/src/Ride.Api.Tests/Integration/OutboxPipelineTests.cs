@@ -92,9 +92,44 @@ public sealed class OutboxPipelineTests(PostgresFixture postgres, RedpandaFixtur
             "SELECT id FROM rides.outbox WHERE aggregate_id = @RideId ORDER BY id;", new { RideId = rideId })).ToArray();
 
         Assert.Equal(outboxIds, delivered.Select(m => m.OutboxId).ToArray());
-        Assert.Equal(0, await connection.ExecuteScalarAsync<int>(
-            "SELECT count(*) FROM rides.outbox WHERE aggregate_id = @RideId AND dispatched_at IS NULL;",
-            new { RideId = rideId }));
+
+        // POLLED, because arriving on the topic does not mean the row has been stamped yet.
+        // The dispatcher produces first and marks `dispatched_at` after the delivery report — it
+        // must, or a crash between the two would lose an event the broker never took — so between
+        // this test consuming the message and the UPDATE committing there is a window of
+        // milliseconds in which the column is legitimately still NULL. `TripState.Api.Tests`'
+        // twin was fixed for this on 2026-08-15; provisioning-svc's landed inside the same window on
+        // 2026-08-20 ("Assert.NotNull() Failure: Value of type 'Nullable<DateTimeOffset>' does
+        // not have a value"); this twin carries the same race and has simply not lost the window
+        // yet.
+        //
+        // Counted rather than read here, because this test consumes every row for the ride, so the
+        // window is open on whichever of them was produced last.
+        //
+        // The assertion is unchanged in substance: a dispatcher that never stamps a row still
+        // fails, five seconds later and with a message that says how many stayed NULL.
+        int? unstamped = null;
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+
+        while (DateTime.UtcNow < deadline)
+        {
+            unstamped = await connection.ExecuteScalarAsync<int>(
+                "SELECT count(*) FROM rides.outbox WHERE aggregate_id = @RideId AND dispatched_at IS NULL;",
+                new { RideId = rideId });
+
+            if (unstamped == 0)
+            {
+                break;
+            }
+
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True(
+            unstamped == 0,
+            $"{unstamped} rides.outbox row(s) for ride {rideId} reached Redpanda but were never "
+            + "marked dispatched. The drain produces and then stamps; a row that stays NULL is a "
+            + "drain that published and did not record it, which redelivers on the next sweep.");
     }
 
     /// <summary>
