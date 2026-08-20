@@ -4,6 +4,7 @@ import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.camera.core.ImageCapture
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -71,6 +72,11 @@ import org.koin.androidx.compose.koinViewModel
  * bar, the viewfinder with the crop quadrilateral, its four corner handles and a rule-of-thirds
  * grid, the hint *"Drag the corners so the whole document fills the frame"*, and the
  * `Retake · ◉ · Use photo ›` bar under it.
+ *
+ * **Two modes, decided by `DocumentCaptureTarget.isDocument`.** A document gets the rear lens, the
+ * crop box once the still is taken, and the gallery fallback if the camera is refused. A profile
+ * photo (SCR-DA-003a) gets the selfie lens, no crop box, and no gallery — the picture exists to
+ * show a passenger who is driving them, and a file already on the handset says nothing about that.
  *
  * **The frame is 4:3 and the viewfinder is letterboxed inside it on purpose.** The crop quad is
  * stored in normalised coordinates and applied to the *captured still*, so the preview and the
@@ -145,8 +151,17 @@ internal fun DocumentScannerScreen(onFinished: () -> Unit, modifier: Modifier = 
             } else {
                 CameraDenied(
                     onAllow = { requestCamera.launch(Manifest.permission.CAMERA) },
-                    onPickFromGallery = {
-                        pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    // A profile photo has no gallery way out on purpose (US-2.12): the point of
+                    // the picture is that this driver was in front of this camera, and a file
+                    // already on the handset proves the opposite of that.
+                    onPickFromGallery = if (state.isDocument) {
+                        {
+                            pickImage.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                            )
+                        }
+                    } else {
+                        null
                     },
                 )
             }
@@ -169,7 +184,7 @@ internal fun DocumentScannerScreen(onFinished: () -> Unit, modifier: Modifier = 
         }
 
         Text(
-            text = stringResource(R.string.capture_hint),
+            text = stringResource(hintFor(state)),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(MageRideTheme.spacing.sm),
@@ -259,10 +274,19 @@ private fun Viewfinder(
                 contentScale = ContentScale.Fit,
             )
         } else {
-            CameraPreview(torchOn = state.torchOn, imageCapture = imageCapture)
+            CameraPreview(
+                torchOn = state.torchOn,
+                imageCapture = imageCapture,
+                frontFacing = !state.isDocument,
+            )
         }
 
-        CropOverlay(quad = state.quad, onCornerDragged = onCornerDragged)
+        // The crop box is the document scanner's, and only once there is a still to crop. Over a
+        // live preview it invites a drag that the next frame throws away; over a face it asks for
+        // a rectangle that has no right answer.
+        if (state.isDocument && state.isReviewing) {
+            CropOverlay(quad = state.quad, onCornerDragged = onCornerDragged)
+        }
     }
 }
 
@@ -352,6 +376,22 @@ private fun DrawScope.drawThirds(quad: CropQuad) {
     }
 }
 
+/**
+ * The instruction under the viewfinder — **two beats, two instructions**.
+ *
+ * Telling a driver to drag corners while the viewfinder is still live asks them to adjust a box
+ * over a picture that has not been taken: the next frame throws the drag away, and the crop only
+ * becomes real once there is a still under it. So the hint says *take it* first and *trim it*
+ * after, and for a face it says neither — there is no box on that one.
+ */
+@StringRes
+private fun hintFor(state: DocumentScannerState): Int = when {
+    !state.isDocument && state.isReviewing -> R.string.capture_hint_face_review
+    !state.isDocument -> R.string.capture_hint_face
+    state.isReviewing -> R.string.capture_hint_crop
+    else -> R.string.capture_hint_shoot
+}
+
 /** The corner nearest [touch], or `null` when the touch landed on none of them. */
 private fun nearestCorner(quad: CropQuad, touch: Offset, frame: IntSize): CropCorner? {
     val reach = frame.width * HANDLE_REACH
@@ -413,7 +453,7 @@ private fun CaptureBar(
  * Offering it anyway is what keeps a handset with a broken camera onboardable at all.
  */
 @Composable
-private fun CameraDenied(onAllow: () -> Unit, onPickFromGallery: () -> Unit, modifier: Modifier = Modifier) {
+private fun CameraDenied(onAllow: () -> Unit, onPickFromGallery: (() -> Unit)?, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -434,18 +474,20 @@ private fun CameraDenied(onAllow: () -> Unit, onPickFromGallery: () -> Unit, mod
             textAlign = TextAlign.Center,
         )
         MageRideCta(label = stringResource(R.string.capture_permission_allow), onClick = onAllow)
-        TextButton(onClick = onPickFromGallery) {
-            Icon(
-                imageVector = Icons.Outlined.PhotoLibrary,
-                contentDescription = null,
-                modifier = Modifier.size(ControlTokens.ChipIcon),
-                tint = ScannerColors.accent,
-            )
-            Text(
-                text = stringResource(R.string.capture_from_gallery),
-                style = MaterialTheme.typography.labelLarge,
-                color = ScannerColors.accent,
-            )
+        if (onPickFromGallery != null) {
+            TextButton(onClick = onPickFromGallery) {
+                Icon(
+                    imageVector = Icons.Outlined.PhotoLibrary,
+                    contentDescription = null,
+                    modifier = Modifier.size(ControlTokens.ChipIcon),
+                    tint = ScannerColors.accent,
+                )
+                Text(
+                    text = stringResource(R.string.capture_from_gallery),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = ScannerColors.accent,
+                )
+            }
         }
     }
 }

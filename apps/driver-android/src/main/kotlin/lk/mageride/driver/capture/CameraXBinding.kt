@@ -54,9 +54,17 @@ internal val FOUR_BY_THREE: ResolutionSelector = ResolutionSelector.Builder()
  *
  * The provider is unbound in `onDispose`: leaving the camera bound is what makes the second visit
  * to the scanner in one session open on a black frame.
+ *
+ * @param frontFacing The selfie lens rather than the rear one — SCR-DA-003a's profile photo. A
+ *   handset with no front camera falls back to the rear one rather than showing a black frame.
  */
 @Composable
-internal fun CameraPreview(torchOn: Boolean, imageCapture: ImageCapture, modifier: Modifier = Modifier) {
+internal fun CameraPreview(
+    torchOn: Boolean,
+    imageCapture: ImageCapture,
+    modifier: Modifier = Modifier,
+    frontFacing: Boolean = false,
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewView = remember {
@@ -71,20 +79,21 @@ internal fun CameraPreview(torchOn: Boolean, imageCapture: ImageCapture, modifie
 
     AndroidView(factory = { previewView }, modifier = modifier.fillMaxSize())
 
-    LaunchedEffect(lifecycleOwner) {
+    // Keyed on the lens as well as the lifecycle: switching between the licence tiles and the
+    // profile photo in one session re-binds, and a bind that only ran once would leave the driver
+    // taking a selfie through the rear camera.
+    LaunchedEffect(lifecycleOwner, frontFacing) {
         val cameraProvider = context.cameraProvider()
         val preview = Preview.Builder()
             .setResolutionSelector(FOUR_BY_THREE)
             .build()
             .apply { setSurfaceProvider(previewView.surfaceProvider) }
 
+        val wanted = if (frontFacing) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
+        val selector = if (cameraProvider.hasCamera(wanted)) wanted else CameraSelector.DEFAULT_BACK_CAMERA
+
         cameraProvider.unbindAll()
-        camera = cameraProvider.bindToLifecycle(
-            lifecycleOwner,
-            CameraSelector.DEFAULT_BACK_CAMERA,
-            preview,
-            imageCapture,
-        )
+        camera = cameraProvider.bindToLifecycle(lifecycleOwner, selector, preview, imageCapture)
         provider = cameraProvider
     }
 

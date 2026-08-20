@@ -83,6 +83,28 @@ internal enum class DocumentCaptureTarget {
 
     /** SCR-DA-016c — proof that a parcel was delivered when the recipient was absent (P-10). */
     DELIVERY_PROOF,
+
+    /**
+     * SCR-DA-003a — the driver's own face, for the avatar passengers see (US-2.12).
+     *
+     * The second entry that is not a document, and the one that changes how the scanner behaves:
+     * see [isDocument]. It used to be a gallery pick, which meant a driver could put anybody's
+     * face on their profile without ever opening a camera — the opposite of what a photograph
+     * *"shown to passengers"* is for.
+     */
+    PROFILE_PHOTO,
+    ;
+
+    /**
+     * Whether SCR-DA-005 should behave as a **document scanner** for this target.
+     *
+     * `false` for [PROFILE_PHOTO] alone, and it decides four things at once: the rear lens or the
+     * selfie one, whether the crop box and the edge-detect proposal appear at all, whether the
+     * gallery fallback is offered, and which hint is under the viewfinder. A face is not a
+     * document — there is no rectangle to find in it, and a crop box over a portrait only asks the
+     * driver to do something that has no right answer.
+     */
+    val isDocument: Boolean get() = this != PROFILE_PHOTO
 }
 
 /** A finished capture, on its way back to the screen that asked for one. */

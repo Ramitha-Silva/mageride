@@ -39,6 +39,14 @@ internal data class DocumentScannerState(
 ) {
     /** Whether the shutter has fired and the driver is on `Retake / Use photo`. */
     val isReviewing: Boolean get() = captured != null
+
+    /**
+     * Whether this visit is scanning a document rather than photographing a face.
+     *
+     * `true` while nothing is pending, so a scanner opened with no target — which closes itself
+     * anyway — never briefly shows the selfie camera.
+     */
+    val isDocument: Boolean get() = target?.isDocument != false
 }
 
 /**
@@ -87,7 +95,13 @@ internal class DocumentScannerViewModel(private val captures: DocumentCaptureCoo
                 mutableState.update { it.copy(busy = false, error = R.string.capture_failed) }
                 return@launch
             }
-            val proposal = DocumentEdgeDetector.propose(DocumentImaging.luminanceGrid(bitmap)) ?: CropQuad.DEFAULT
+            // A face has no border to find and no crop to offer, so the whole frame is the quad
+            // and the de-skew on confirm becomes a straight re-encode.
+            val proposal = if (mutableState.value.isDocument) {
+                DocumentEdgeDetector.propose(DocumentImaging.luminanceGrid(bitmap)) ?: CropQuad.DEFAULT
+            } else {
+                CropQuad.FULL
+            }
             mutableState.update { current ->
                 current.captured?.recycle()
                 current.copy(captured = bitmap, quad = proposal, busy = false)
@@ -100,8 +114,15 @@ internal class DocumentScannerViewModel(private val captures: DocumentCaptureCoo
         mutableState.update { it.copy(busy = false, error = R.string.capture_failed) }
     }
 
-    /** A corner handle was dragged. [CropQuad] is what refuses a move that folds the quad. */
+    /**
+     * A corner handle was dragged.
+     *
+     * [CropQuad.moved] is what keeps the box a rectangle and refuses a move that would invert it
+     * or squeeze it below a document-shaped size. A face has no crop box at all, so a drag that
+     * reached here for one would be a gesture on a control that is not drawn.
+     */
     fun onCornerDragged(corner: CropCorner, to: QuadPoint) {
+        if (!mutableState.value.isDocument) return
         mutableState.update { it.copy(quad = it.quad.moved(corner, to)) }
     }
 
@@ -109,7 +130,8 @@ internal class DocumentScannerViewModel(private val captures: DocumentCaptureCoo
     fun retake() {
         mutableState.update { current ->
             current.captured?.recycle()
-            current.copy(captured = null, quad = CropQuad.DEFAULT, error = null)
+            val quad = if (current.isDocument) CropQuad.DEFAULT else CropQuad.FULL
+            current.copy(captured = null, quad = quad, error = null)
         }
     }
 
@@ -193,6 +215,7 @@ internal val DocumentCaptureTarget.fileName: String
         DocumentCaptureTarget.VEHICLE_FRONT -> "vehicle-front.jpg"
         DocumentCaptureTarget.VEHICLE_BACK -> "vehicle-back.jpg"
         DocumentCaptureTarget.DELIVERY_PROOF -> "delivery-proof.jpg"
+        DocumentCaptureTarget.PROFILE_PHOTO -> "profile-photo.jpg"
     }
 
 /** The trilingual name of what is being captured — the wireframe's `Capture: Licence front`. */
@@ -205,4 +228,5 @@ internal fun DocumentCaptureTarget.labelRes(): Int = when (this) {
     DocumentCaptureTarget.VEHICLE_FRONT -> R.string.capture_target_vehicle_front
     DocumentCaptureTarget.VEHICLE_BACK -> R.string.capture_target_vehicle_back
     DocumentCaptureTarget.DELIVERY_PROOF -> R.string.capture_target_delivery_proof
+    DocumentCaptureTarget.PROFILE_PHOTO -> R.string.capture_target_profile_photo
 }

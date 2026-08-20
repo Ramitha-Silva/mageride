@@ -7,7 +7,6 @@ import lk.mageride.shared.data.models.ExtractedField
 import lk.mageride.shared.data.models.FieldSource
 import lk.mageride.shared.data.models.VehicleType
 import lk.mageride.shared.data.models.VerifyStatus
-import lk.mageride.shared.data.models.registry.CaptureSource
 import lk.mageride.shared.data.models.registry.RegistrationStatus
 import lk.mageride.shared.data.models.registry.UpsertDriverProfileResponse
 import lk.mageride.shared.testing.fake.FakeApiBackend
@@ -54,7 +53,7 @@ class ProfileSetupViewModelTest {
         model.onNameChanged("K. Fernando")
         assertFalse(model.state.value.canSave, "no photo — US-2.12 makes it required")
 
-        model.onPhotoPicked(testImage("photo.jpg", CaptureSource.GALLERY))
+        capture(DocumentCaptureTarget.PROFILE_PHOTO, "photo.jpg")
         assertFalse(model.state.value.canSave, "no licence")
 
         captures.open(DocumentCaptureTarget.LICENCE_FRONT)
@@ -84,9 +83,13 @@ class ProfileSetupViewModelTest {
         assertTrue(body.contains("photo.jpg"), "the avatar")
         assertTrue(body.contains("front.jpg") && body.contains("back.jpg"), "both licence sides")
 
-        // AL-43: each image says how it was captured, and they did not all come the same way.
-        assertTrue(body.contains("gallery"), "the avatar came from the picker")
-        assertTrue(body.contains("camera_dragcrop"), "the licence came from the scanner")
+        // AL-43: each image says how it was captured, and all three now say the same thing. The
+        // avatar was a gallery pick and is a camera capture, so a profile setup that went through
+        // this app's own screens carries no `gallery` stamp at all — which is the point. A file
+        // already on the handset is how somebody else's face arrives, and that is precisely what
+        // the Verification-Officer queue sorts on.
+        assertTrue(body.contains("camera_dragcrop"), "the avatar and both licence sides came from the scanner")
+        assertFalse(body.contains("gallery"), "nothing on this form is a file picked off the handset")
     }
 
     @Test
@@ -201,7 +204,7 @@ class ProfileSetupViewModelTest {
 
     private fun fillForm(model: ProfileSetupViewModel) {
         model.onNameChanged("K. Fernando")
-        model.onPhotoPicked(testImage("photo.jpg", CaptureSource.GALLERY))
+        capture(DocumentCaptureTarget.PROFILE_PHOTO, "photo.jpg")
         captures.open(DocumentCaptureTarget.LICENCE_FRONT)
         captures.deliver(testImage("front.jpg"))
         captures.open(DocumentCaptureTarget.LICENCE_BACK)
@@ -214,6 +217,18 @@ class ProfileSetupViewModelTest {
             profiles = DriverProfileRepository(registry = api.registry, iam = api.iam),
             captures = captures,
         )
+    }
+
+    /**
+     * Fills one capture slot the way the app does — through SCR-DA-005.
+     *
+     * There is no other door. The avatar used to have one (`onPhotoPicked`, for the gallery), and
+     * removing it is the point of this change: a profile photo is a camera capture now, so a test
+     * that set one any other way would be testing a path the driver cannot take.
+     */
+    private fun capture(target: DocumentCaptureTarget, name: String) {
+        captures.open(target)
+        captures.deliver(testImage(name))
     }
 
     /** A `PUT /v1/drivers/profile` verdict with the licence number and expiry read cleanly. */

@@ -2,6 +2,11 @@ package lk.mageride.driver.capture
 
 import android.content.Context
 import android.net.Uri
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import lk.mageride.shared.data.models.registry.CaptureSource
@@ -47,3 +52,26 @@ internal suspend fun readImage(context: Context, uri: Uri, fileName: String): Ca
             null
         }
     }
+
+/**
+ * [image] decoded for display, or `null` while the decode is in flight or there is nothing to show.
+ *
+ * Off the main thread through [DocumentImaging.decode], which also samples the bitmap down — a
+ * profile photo is a multi-megapixel JPEG and the avatar it is drawn into is 96 dp, so decoding it
+ * at full size on the frame-producing thread would be a visible stall on exactly the handsets the
+ * URD NFR-22 floor is about.
+ *
+ * `rotationDegrees = 0`: an image that reached here came off SCR-DA-005, which has already applied
+ * `ImageInfo.rotationDegrees` to the still. Rotating again would lay the driver on their side.
+ *
+ * Keyed on the [CapturedImage] instance, which compares by identity — see its own KDoc on why it
+ * is deliberately not a `data class`. That is the right key here: a retake produces a new instance
+ * and re-decodes, and a recomposition with the same one does not.
+ */
+@Composable
+internal fun rememberCapturedBitmap(image: CapturedImage?): ImageBitmap? {
+    val decoded by produceState<ImageBitmap?>(initialValue = null, image) {
+        value = image?.let { DocumentImaging.decode(it.bytes, rotationDegrees = 0)?.asImageBitmap() }
+    }
+    return decoded
+}

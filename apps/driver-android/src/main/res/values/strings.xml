@@ -114,7 +114,7 @@
     <string name="profile_setup_title">Set up your profile</string>
     <string name="profile_setup_photo_caption">Profile photo — shown to passengers</string>
     <string name="profile_setup_photo_required">required</string>
-    <string name="profile_setup_photo_action">Choose a profile photo</string>
+    <string name="profile_setup_photo_action">Take a profile photo</string>
     <string name="profile_setup_name_label">Driver name</string>
     <string name="profile_setup_licence_label">Driving licence (front and back)</string>
     <string name="profile_setup_licence_front">Front</string>
@@ -187,7 +187,10 @@
     <string name="capture_title">Capture: %1$s</string>
     <string name="capture_title_generic">Capture document</string>
     <string name="capture_flash">Flash</string>
-    <string name="capture_hint">Drag the corners so the whole document fills the frame</string>
+    <string name="capture_hint_shoot">Take the photo first — you can trim the edges afterwards.</string>
+    <string name="capture_hint_crop">Drag a corner to fit the box to the document. It stays rectangular.</string>
+    <string name="capture_hint_face">Put your face in the frame and take the photo.</string>
+    <string name="capture_hint_face_review">Check the photo, then use it or take another.</string>
     <string name="capture_retake">Retake</string>
     <string name="capture_use_photo">Use photo</string>
     <string name="capture_failed">That photo could not be used. Take it again.</string>
@@ -202,6 +205,7 @@
     <string name="capture_target_vehicle_front">Vehicle front</string>
     <string name="capture_target_vehicle_back">Vehicle back</string>
     <string name="capture_target_delivery_proof">Delivery proof</string>
+    <string name="capture_target_profile_photo">Profile photo</string>
 
     <!-- SCR-DA-004 → 004c · the four wizard steps. -->
     <string name="vehicle_onboard_step_of">Step %1$d of %2$d · %3$s</string>
