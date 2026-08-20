@@ -83,7 +83,7 @@
     <string name="profile_setup_title">உங்கள் சுயவிவரத்தை அமைக்கவும்</string>
     <string name="profile_setup_photo_caption">சுயவிவரப் படம் — பயணிகளுக்குக் காட்டப்படும்</string>
     <string name="profile_setup_photo_required">தேவை</string>
-    <string name="profile_setup_photo_action">சுயவிவரப் படத்தைத் தேர்ந்தெடுக்கவும்</string>
+    <string name="profile_setup_photo_action">சுயவிவரப் படம் எடுக்கவும்</string>
     <string name="profile_setup_name_label">ஓட்டுநர் பெயர்</string>
     <string name="profile_setup_licence_label">ஓட்டுநர் உரிமம் (முன் மற்றும் பின்)</string>
     <string name="profile_setup_licence_front">முன்பக்கம்</string>
@@ -146,7 +146,10 @@
     <string name="capture_title">எடுக்கவும்: %1$s</string>
     <string name="capture_title_generic">ஆவணத்தைப் படமெடுக்கவும்</string>
     <string name="capture_flash">ஒளிரி</string>
-    <string name="capture_hint">ஆவணம் முழுவதும் சட்டத்தில் அடங்கும்படி மூலைகளை இழுக்கவும்</string>
+    <string name="capture_hint_shoot">முதலில் புகைப்படம் எடுக்கவும் — விளிம்புகளைப் பின்னர் சரிசெய்யலாம்.</string>
+    <string name="capture_hint_crop">ஆவணத்திற்கு ஏற்ப ஒரு மூலையை இழுக்கவும். பெட்டி செவ்வக வடிவில் இருக்கும்.</string>
+    <string name="capture_hint_face">உங்கள் முகத்தை சட்டகத்தில் வைத்துப் புகைப்படம் எடுக்கவும்.</string>
+    <string name="capture_hint_face_review">படத்தைச் சரிபார்த்து, அதைப் பயன்படுத்தவும் அல்லது மற்றொன்று எடுக்கவும்.</string>
     <string name="capture_retake">மீண்டும் எடுக்கவும்</string>
     <string name="capture_use_photo">இந்தப் படத்தைப் பயன்படுத்தவும்</string>
     <string name="capture_failed">அந்தப் படத்தைப் பயன்படுத்த முடியவில்லை. மீண்டும் எடுக்கவும்.</string>
@@ -161,6 +164,7 @@
     <string name="capture_target_vehicle_front">வாகனத்தின் முன்பக்கம்</string>
     <string name="capture_target_vehicle_back">வாகனத்தின் பின்பக்கம்</string>
     <string name="capture_target_delivery_proof">விநியோகச் சான்று</string>
+    <string name="capture_target_profile_photo">சுயவிவரப் படம்</string>
 
     <string name="vehicle_onboard_step_of">படி %1$d / %2$d · %3$s</string>
     <string name="vehicle_onboard_title">தயார்நிலை வாகனத்தைச் சேர்க்கவும்</string>

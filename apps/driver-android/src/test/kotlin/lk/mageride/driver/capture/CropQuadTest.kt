@@ -72,6 +72,42 @@ class CropQuadTest {
     }
 
     @Test
+    fun a_dragged_corner_carries_its_neighbours_so_the_box_stays_a_rectangle() {
+        // The defect this replaced: dragging one corner moved only that corner, so the box became
+        // a trapezium under the thumb and the driver was cropping a shape nothing else on this
+        // screen produces — `DocumentEdgeDetector` only ever proposes an axis-aligned box.
+        val moved = CropQuad.DEFAULT.moved(CropCorner.TOP_LEFT, QuadPoint(0.3f, 0.4f))
+
+        assertEquals(QuadPoint(0.3f, 0.4f), moved.topLeft)
+        assertEquals(0.4f, moved.topRight.y, "the top edge moved with the corner")
+        assertEquals(0.3f, moved.bottomLeft.x, "and so did the left edge")
+        assertEquals(CropQuad.DEFAULT.bottomRight, moved.bottomRight, "the opposite corner is the anchor")
+        assertTrue(moved.isRectangle())
+    }
+
+    @Test
+    fun every_corner_drags_to_a_rectangle_not_only_the_first_one() {
+        // One `when` arm with the wrong pair of edges in it would distort only on that handle,
+        // which is exactly the kind of thing that reaches a handset.
+        CropCorner.entries.forEach { corner ->
+            val moved = CropQuad.DEFAULT.moved(corner, QuadPoint(0.45f, 0.55f))
+
+            assertTrue(moved.isRectangle(), "$corner left the box skewed")
+            assertEquals(QuadPoint(0.45f, 0.55f), moved.corner(corner), "$corner did not reach the touch")
+        }
+    }
+
+    @Test
+    fun a_corner_dragged_past_the_opposite_edge_is_refused_rather_than_mirroring_the_box() {
+        // A mirrored rectangle is still four long sides wound the same way — convexity does not
+        // catch it, and `setPolyToPoly` would hand back a flipped document rather than refuse.
+        val quad = CropQuad.rectangle(left = 0.2f, top = 0.2f, right = 0.8f, bottom = 0.8f)
+
+        assertEquals(quad, quad.moved(CropCorner.TOP_LEFT, QuadPoint(0.9f, 0.5f)), "dragged past the right edge")
+        assertEquals(quad, quad.moved(CropCorner.BOTTOM_RIGHT, QuadPoint(0.5f, 0.1f)), "dragged above the top edge")
+    }
+
+    @Test
     fun the_output_takes_the_longer_of_each_pair_of_opposite_sides() {
         // A document photographed at an angle has a near edge longer than its far edge. Taking the
         // shorter one would resample the near half downwards and throw away detail that was
@@ -108,4 +144,10 @@ class CropQuadTest {
         assertTrue(CropQuad.DEFAULT.isUsable)
         assertTrue(CropQuad.DEFAULT.corners.all { it.x > 0f && it.y > 0f && it.x < 1f && it.y < 1f })
     }
+
+    /** Whether the four corners still make an axis-aligned box. */
+    private fun CropQuad.isRectangle(): Boolean = topLeft.y == topRight.y &&
+        bottomLeft.y == bottomRight.y &&
+        topLeft.x == bottomLeft.x &&
+        topRight.x == bottomRight.x
 }

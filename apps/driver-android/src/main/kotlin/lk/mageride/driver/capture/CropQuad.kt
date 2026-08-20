@@ -47,10 +47,15 @@ internal data class QuadPoint(val x: Float, val y: Float) {
  * > so the whole document fits the full frame (auto edge-detect proposes a quad; manual drag
  * > overrides). … the cropped, de-skewed image is what gets uploaded."*
  *
- * A quadrilateral and not a rectangle: a licence photographed at an angle is a **trapezium** in the
- * frame, and cropping it with a rectangle keeps the skew that costs Gemini Flash the confidence
- * AL-43 exists to buy back (BR-28.4). The de-skew is `Matrix.setPolyToPoly` over [corners] — see
- * `DocumentImaging`.
+ * **Four corners, but the drag keeps them a rectangle.** D2' calls this an *"adjustable crop
+ * quadrilateral"* and the four points are still what `Matrix.setPolyToPoly` maps, so a skewed quad
+ * de-skews correctly if one is ever handed in. What changed is [moved]: a corner drag now carries
+ * its two neighbours with it, so the box shrinks and grows as a rectangle instead of becoming a
+ * trapezium. Freehand corners read as a bug on a handset — the box visibly distorts under the
+ * thumb — and the proposal was never a trapezium anyway: `DocumentEdgeDetector` documents that it
+ * *"proposes an axis-aligned box; it does not find the four corners of a skewed document"*, so the
+ * free drag was the one thing on this screen that could produce a shape nothing else here makes.
+ * Recorded as a deviation from D2' §SCR-DA-005's wording in the handoff.
  *
  * Pure Kotlin, with no Android type in it, so every rule below is exercised on this build host
  * rather than discovered on a handset.
@@ -73,21 +78,38 @@ internal data class CropQuad(
         CropCorner.BOTTOM_LEFT -> bottomLeft
     }
 
+    /** The box's left edge, in normalised units. */
+    val left: Float get() = topLeft.x
+
+    /** The box's top edge. */
+    val top: Float get() = topLeft.y
+
+    /** The box's right edge. */
+    val right: Float get() = topRight.x
+
+    /** The box's bottom edge. */
+    val bottom: Float get() = bottomLeft.y
+
     /**
-     * The quad with [corner] dragged to [target].
+     * The box with [corner] dragged to [target] — **still a rectangle**.
      *
-     * The move is clamped into the frame and **refused outright** when it would leave the quad too
-     * thin to be a document — a corner dragged past its neighbour turns the quadrilateral inside
-     * out, and `setPolyToPoly` over a self-intersecting quad produces a folded image rather than an
-     * error. Refusing is what makes the handle stop at the fold instead of the picture doing
-     * something inexplicable.
+     * The dragged corner brings its two neighbours with it: dragging the top-left moves the left
+     * edge and the top edge, which is what the driver is actually aiming at when they pull a
+     * handle inwards to sit on the edge of a licence. The opposite corner is the anchor and does
+     * not move, so the gesture only ever *reduces or grows the box* — it cannot skew it.
+     *
+     * The move is clamped into the frame and **refused outright** when it would leave the box
+     * narrower or shorter than [MIN_SIDE], which is also what stops a corner being dragged past
+     * the opposite edge and turning the rectangle inside out. Refusing is what makes the handle
+     * stop at the limit instead of the picture doing something inexplicable.
      */
     fun moved(corner: CropCorner, target: QuadPoint): CropQuad {
+        val point = target.coerced()
         val moved = when (corner) {
-            CropCorner.TOP_LEFT -> copy(topLeft = target.coerced())
-            CropCorner.TOP_RIGHT -> copy(topRight = target.coerced())
-            CropCorner.BOTTOM_RIGHT -> copy(bottomRight = target.coerced())
-            CropCorner.BOTTOM_LEFT -> copy(bottomLeft = target.coerced())
+            CropCorner.TOP_LEFT -> rectangle(left = point.x, top = point.y, right = right, bottom = bottom)
+            CropCorner.TOP_RIGHT -> rectangle(left = left, top = point.y, right = point.x, bottom = bottom)
+            CropCorner.BOTTOM_RIGHT -> rectangle(left = left, top = top, right = point.x, bottom = point.y)
+            CropCorner.BOTTOM_LEFT -> rectangle(left = point.x, top = top, right = right, bottom = point.y)
         }
         return if (moved.isUsable) moved else this
     }
@@ -95,11 +117,22 @@ internal data class CropQuad(
     /**
      * Whether this quad can be de-skewed at all.
      *
-     * Both conditions matter and neither implies the other: a quad can have four long sides and
-     * still be a bow-tie (crossed sides), and a convex quad can still be a sliver too thin to
-     * carry a legible plate.
+     * Three conditions, and none implies the others: a box whose corner was dragged past the
+     * opposite edge still has four long sides ([hasExtent] is what catches the mirror), a quad can
+     * have four long sides and still be a bow-tie ([isConvex]), and a convex quad can still be a
+     * sliver too thin to carry a legible plate ([shortestSide]). The last two matter for a quad
+     * built directly rather than dragged — [moved] can only produce a rectangle.
      */
-    val isUsable: Boolean get() = shortestSide >= MIN_SIDE && isConvex
+    val isUsable: Boolean get() = hasExtent && shortestSide >= MIN_SIDE && isConvex
+
+    /**
+     * Whether the box still runs left-to-right and top-to-bottom by at least [MIN_SIDE].
+     *
+     * A negative extent is a corner dragged past the one opposite: the four points are still a
+     * perfectly good rectangle, but a mirrored one, and `setPolyToPoly` would happily hand back a
+     * flipped document rather than refuse.
+     */
+    private val hasExtent: Boolean get() = right - left >= MIN_SIDE && bottom - top >= MIN_SIDE
 
     /** The shortest of the four sides, in normalised units. */
     private val shortestSide: Float

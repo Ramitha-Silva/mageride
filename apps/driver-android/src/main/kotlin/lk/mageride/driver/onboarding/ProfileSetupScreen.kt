@@ -1,8 +1,6 @@
 package lk.mageride.driver.onboarding
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,17 +31,17 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.launch
 import lk.mageride.driver.R
+import lk.mageride.driver.capture.CapturedImage
 import lk.mageride.driver.capture.DocumentCaptureTarget
-import lk.mageride.driver.capture.readImage
+import lk.mageride.driver.capture.rememberCapturedBitmap
 import lk.mageride.driver.ui.component.AdminVerifyChip
 import lk.mageride.driver.ui.component.CaptureTile
 import lk.mageride.driver.ui.component.ExtractedFieldRow
@@ -71,8 +69,10 @@ import org.koin.androidx.compose.koinViewModel
  * * **No vehicle** (AL-27). Nothing here asks for one, and the next screen is SCR-DA-007, not the
  *   Mode-C wizard.
  * * **The scanner is SCR-DA-005's** (AL-43, C069). A capture tile opens it; it does not photograph
- *   anything itself. The profile photo is the exception the wireframe itself makes — an avatar is
- *   not a document, so it comes from the gallery picker.
+ *   anything itself. **The profile photo goes through it too**, on the selfie lens and with no crop
+ *   box — see `DocumentCaptureTarget.isDocument`. It used to be a gallery pick, which meant the
+ *   photograph *"shown to passengers"* (US-2.12) could be any file on the handset and never a
+ *   picture of the driver holding it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,16 +83,6 @@ internal fun ProfileSetupScreen(
 ) {
     val viewModel: ProfileSetupViewModel = koinViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-
-    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) {
-            scope.launch {
-                readImage(context, uri, "profile-photo.jpg")?.let(viewModel::onPhotoPicked)
-            }
-        }
-    }
 
     LaunchedEffect(state.done) {
         if (state.done) onComplete()
@@ -111,11 +101,10 @@ internal fun ProfileSetupScreen(
             verticalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.sm),
         ) {
             ProfilePhoto(
-                captured = state.draft.photo != null,
-                onPick = {
-                    pickPhoto.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                    )
+                photo = state.draft.photo,
+                onCapture = {
+                    viewModel.requestCapture(DocumentCaptureTarget.PROFILE_PHOTO)
+                    onCaptureRequested()
                 },
             )
 
@@ -204,7 +193,10 @@ internal fun ProfileSetupScreen(
  * CTA simply stays dead.
  */
 @Composable
-private fun ProfilePhoto(captured: Boolean, onPick: () -> Unit, modifier: Modifier = Modifier) {
+private fun ProfilePhoto(photo: CapturedImage?, onCapture: () -> Unit, modifier: Modifier = Modifier) {
+    val captured = photo != null
+    val face = rememberCapturedBitmap(photo)
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.xxs),
@@ -214,27 +206,42 @@ private fun ProfilePhoto(captured: Boolean, onPick: () -> Unit, modifier: Modifi
             Box(
                 modifier = Modifier
                     .size(ControlTokens.Avatar)
+                    .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
                     .border(
                         width = if (captured) ControlTokens.BorderSelected else ControlTokens.Border,
                         color = if (captured) MageRideTheme.status.success else MaterialTheme.colorScheme.outline,
                         shape = CircleShape,
                     )
-                    .clickable(onClick = onPick),
+                    .clickable(onClick = onCapture),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Person,
-                    contentDescription = null,
-                    modifier = Modifier.size(ControlTokens.IllustrationIcon),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                // The shot the driver has just taken, in the circle a passenger will see it in. A
+                // green ring around the same anonymous silhouette said the capture had been
+                // recorded without ever showing them what was recorded.
+                if (face != null) {
+                    Image(
+                        bitmap = face,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        // CROP, not FIT: the still is 4:3 and the avatar is a circle, so fitting it
+                        // would letterbox the driver's face into the middle third of the ring.
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.Person,
+                        contentDescription = null,
+                        modifier = Modifier.size(ControlTokens.IllustrationIcon),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             Box(
                 modifier = Modifier
                     .size(ControlTokens.AvatarBadge)
                     .background(MaterialTheme.colorScheme.primary, CircleShape)
-                    .clickable(onClick = onPick),
+                    .clickable(onClick = onCapture),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(

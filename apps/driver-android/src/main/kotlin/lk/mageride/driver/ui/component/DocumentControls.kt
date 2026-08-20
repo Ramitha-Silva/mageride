@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -125,12 +126,27 @@ internal fun AdminVerifyChip(label: String, modifier: Modifier = Modifier) {
             text = label,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurface,
+            // One line, always. A chip is a badge; a badge that wraps to two lines has stopped
+            // being one, which is what "⚑ Admin / verify" looked like on the extract card.
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }
 
 /**
- * The wireframe's `kv` row inside the AI-extract card.
+ * The wireframe's `kv` row inside the AI-extract card — **two lines, not one**.
+ *
+ * The wireframe draws label · value · ⚑ · ✎ across a single line, and in English at a wide width
+ * that fits. It does not fit otherwise: *"Allowed vehicle types"* with a value, a chip and an Edit
+ * beside it already overflows on a phone, and the Sinhala and Tamil labels
+ * (*"පරිපාලක සත්‍යාපනය"*, *"நிர்வாக சரிபார்ப்பு"*) are longer again — which is how a driver ended
+ * up looking at a button reading `Ed` above `it`.
+ *
+ * So: label and the ✎ action on the first line, value and the ⚑ chip on the second. **Each row
+ * has exactly one weighted child and one intrinsic one**, which is what makes the overflow
+ * impossible rather than merely unlikely — the flexible half gives way and the chip and the button
+ * keep the width they need, in any of the three languages.
  *
  * @param value What was read, or [emptyLabel] when extraction returned nothing.
  * @param flagLabel The ⚑ chip's copy; `null` hides the chip.
@@ -147,34 +163,58 @@ internal fun ExtractedFieldRow(
     editLabel: String? = null,
     onEdit: (() -> Unit)? = null,
 ) {
-    Row(
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = MageRideTheme.spacing.xxs),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.xs),
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Box(modifier = Modifier.weight(1f))
-        Text(
-            text = value?.takeIf(String::isNotBlank) ?: emptyLabel,
-            style = MaterialTheme.typography.titleMedium,
-            color = if (value.isNullOrBlank()) {
-                MaterialTheme.colorScheme.outlineVariant
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            },
-        )
-        if (flagLabel != null) {
-            AdminVerifyChip(label = flagLabel)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.xs),
+        ) {
+            Text(
+                text = label,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (onEdit != null && editLabel != null) {
+                // `TextButton` defaults to 24 dp of horizontal padding, which on this card is a
+                // quarter of the line spent on air beside a four-letter word.
+                TextButton(
+                    onClick = onEdit,
+                    contentPadding = PaddingValues(
+                        horizontal = MageRideTheme.spacing.xs,
+                        vertical = MageRideTheme.spacing.xxs,
+                    ),
+                ) {
+                    Text(
+                        text = editLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+            }
         }
-        if (onEdit != null && editLabel != null) {
-            TextButton(onClick = onEdit) {
-                Text(text = editLabel, style = MaterialTheme.typography.labelLarge)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.xs),
+        ) {
+            Text(
+                text = value?.takeIf(String::isNotBlank) ?: emptyLabel,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+                color = if (value.isNullOrBlank()) {
+                    MaterialTheme.colorScheme.outlineVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+            )
+            if (flagLabel != null) {
+                AdminVerifyChip(label = flagLabel)
             }
         }
     }
@@ -296,4 +336,5 @@ internal fun ModeCBadge(label: String, modifier: Modifier = Modifier) {
 
 /** How much of the accent colour a tinted card or chip keeps. Light enough to read text over. */
 private const val CARD_TINT = 0.12f
+
 private const val CHIP_TINT = 0.18f

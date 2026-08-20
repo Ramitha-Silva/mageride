@@ -80,12 +80,14 @@ internal class ProfileSetupViewModel(
         mutableState.update { it.copy(draft = it.draft.copy(name = name), error = null) }
     }
 
-    /** The avatar's camera badge, and the gallery pick the wireframe also allows. */
-    fun onPhotoPicked(image: CapturedImage) {
-        mutableState.update { it.copy(draft = it.draft.copy(photo = image), error = null) }
-    }
-
-    /** A licence tile was tapped. The scanner is SCR-DA-005's; this only says which slot. */
+    /**
+     * A capture slot was tapped. The scanner is SCR-DA-005's; this only says which slot.
+     *
+     * The avatar is one of them now (`DocumentCaptureTarget.PROFILE_PHOTO`). There is no longer a
+     * separate `onPhotoPicked` door: a photograph that arrived without going through the scanner
+     * was one nobody could say had been taken by this driver, and the scanner is what stamps the
+     * AL-43 provenance the Verification-Officer queue reads.
+     */
     fun requestCapture(target: DocumentCaptureTarget) {
         captures.open(target)
     }
@@ -176,6 +178,9 @@ internal class ProfileSetupViewModel(
                 DocumentCaptureTarget.LICENCE_FRONT -> current.draft.copy(licenceFront = image)
 
                 DocumentCaptureTarget.LICENCE_BACK -> current.draft.copy(licenceBack = image)
+
+                // US-2.12's avatar, taken on the selfie lens with no crop box.
+                DocumentCaptureTarget.PROFILE_PHOTO -> current.draft.copy(photo = image)
 
                 // The four vehicle-document slots belong to C069's wizard and never reach here.
                 else -> current.draft

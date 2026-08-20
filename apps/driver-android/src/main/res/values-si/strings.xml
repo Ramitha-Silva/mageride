@@ -84,7 +84,7 @@
     <string name="profile_setup_title">ඔබේ පැතිකඩ සකසන්න</string>
     <string name="profile_setup_photo_caption">පැතිකඩ ඡායාරූපය — මගීන්ට පෙන්වයි</string>
     <string name="profile_setup_photo_required">අවශ්‍යයි</string>
-    <string name="profile_setup_photo_action">පැතිකඩ ඡායාරූපයක් තෝරන්න</string>
+    <string name="profile_setup_photo_action">පැතිකඩ ඡායාරූපයක් ගන්න</string>
     <string name="profile_setup_name_label">රියදුරුගේ නම</string>
     <string name="profile_setup_licence_label">රියදුරු බලපත්‍රය (ඉදිරිපස සහ පිටුපස)</string>
     <string name="profile_setup_licence_front">ඉදිරිපස</string>
@@ -147,7 +147,10 @@
     <string name="capture_title">ගන්න: %1$s</string>
     <string name="capture_title_generic">ලේඛනය ගන්න</string>
     <string name="capture_flash">ෆ්ලෑෂ්</string>
-    <string name="capture_hint">මුළු ලේඛනයම රාමුවට පිරෙන ලෙස කොන් ඇදගෙන යන්න</string>
+    <string name="capture_hint_shoot">පළමුව ඡායාරූපය ගන්න — දාර පසුව සීරුමාරු කළ හැක.</string>
+    <string name="capture_hint_crop">ලේඛනයට ගැළපෙන ලෙස කොනක් අදින්න. කොටුව සෘජුකෝණාස්‍රාකාරව පවතී.</string>
+    <string name="capture_hint_face">ඔබේ මුහුණ රාමුව තුළට ගෙන ඡායාරූපය ගන්න.</string>
+    <string name="capture_hint_face_review">ඡායාරූපය පරීක්ෂා කර, එය භාවිත කරන්න හෝ තවත් එකක් ගන්න.</string>
     <string name="capture_retake">නැවත ගන්න</string>
     <string name="capture_use_photo">මෙම ඡායාරූපය භාවිතා කරන්න</string>
     <string name="capture_failed">එම ඡායාරූපය භාවිතා කළ නොහැකි විය. නැවත ගන්න.</string>
@@ -162,6 +165,7 @@
     <string name="capture_target_vehicle_front">වාහනයේ ඉදිරිපස</string>
     <string name="capture_target_vehicle_back">වාහනයේ පිටුපස</string>
     <string name="capture_target_delivery_proof">බෙදාහැරීමේ සාක්ෂිය</string>
+    <string name="capture_target_profile_photo">පැතිකඩ ඡායාරූපය</string>
 
     <string name="vehicle_onboard_step_of">පියවර %1$d න් %2$d · %3$s</string>
     <string name="vehicle_onboard_title">රියදුරු වාහනය එක් කරන්න</string>
