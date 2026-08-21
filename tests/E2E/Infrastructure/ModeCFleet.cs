@@ -101,6 +101,23 @@ internal sealed class ModeCFleet : IAsyncDisposable
     private static int _plateCounter = Random.Shared.Next(1_000, 9_000) * 1_000;
     private static int _pickupCounter;
 
+    /// <summary>
+    /// Counts the phone numbers this run has minted. Seeded at random, incremented never-repeating.
+    /// </summary>
+    /// <remarks>
+    /// <c>iam.users.phone</c> is <b>UNIQUE</b>, and <see cref="NextPhone"/> used to draw seven
+    /// random digits with nothing stopping two draws landing on the same one. That is the birthday
+    /// problem against a nine-million space: a few hundred passengers and package recipients across
+    /// one E2E matrix is already a percent or so per run, and what it produces is
+    /// <c>23505: duplicate key value violates unique constraint "users_phone_key"</c> thrown from
+    /// whichever scenario happened to draw second — a red build with a stack trace pointing at a
+    /// fixture rather than at anything under test. The random seed keeps two runs against one
+    /// database apart; the increment keeps one run apart from itself. Same shape as
+    /// <see cref="_plateCounter"/> beside it, which has always been collision-free for exactly this
+    /// reason.
+    /// </remarks>
+    private static int _phoneCounter = Random.Shared.Next(1_000_000, 8_000_000);
+
     private readonly WebApplication _ride;
     private readonly WebApplication _reputation;
     private readonly WebApplication _dispatch;
@@ -1253,5 +1270,5 @@ internal sealed class ModeCFleet : IAsyncDisposable
         "WP-E2-" + (Interlocked.Increment(ref _plateCounter) % 1_000_000).ToString("D6", CultureInfo.InvariantCulture);
 
     private static string NextPhone() =>
-        "+9477" + Random.Shared.NextInt64(1_000_000, 9_999_999).ToString(CultureInfo.InvariantCulture);
+        "+9477" + (Interlocked.Increment(ref _phoneCounter) % 10_000_000).ToString("D7", CultureInfo.InvariantCulture);
 }

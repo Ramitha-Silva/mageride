@@ -85,6 +85,7 @@ import lk.mageride.driver.wallet.WalletRepository
 import lk.mageride.driver.wallet.WalletViewModel
 import lk.mageride.shared.data.api.ApiConfig
 import lk.mageride.shared.data.api.AttestationProvider
+import lk.mageride.shared.data.api.query.AppLanguage
 import lk.mageride.shared.data.models.AppSurface
 import lk.mageride.shared.data.models.Ulid
 import lk.mageride.shared.db.DatabaseDriverFactory
@@ -170,6 +171,12 @@ internal fun driverAppModule(environment: DriverEnvironment = DriverEnvironment.
     // The first-run answers are given before there is a session, so they live on the device and
     // are pushed to `iam.users` on the first authenticated call (AL-26 language, AL-27 city).
     single<OnboardingPreferences> { AndroidOnboardingPreferences(androidContext()) }
+
+    // D-26 — the language every geocode is read in. A supplier rather than a value: the graph is a
+    // `single` and outlives the `recreate()` a language change performs, so a snapshot taken here
+    // would pin the language the app opened in. `:shared`'s `LocalisedQueryApi` picks this up,
+    // which is why SCR-DA-013 passes no `lang` and a later screen cannot forget to.
+    single<AppLanguage> { AppLanguage { get<OnboardingPreferences>().language } }
     single { DriverPermissions(androidContext()) }
 
     // The seam to SCR-DA-005 (C069). Process-wide because the scanner is a destination, not a

@@ -440,6 +440,13 @@ paths:
         Self-hosted Nominatim (D-14, D6' §7.6) — **no Google Places**. Destination search returns
         geocoded places plus the caller's saved and recent addresses; it never returns route rows,
         because a destination is a geo-location only (AL-17).
+
+        `lang` reaches Nominatim as `accept-language`, which answers from OSM's `name:si` /
+        `name:ta` tags. **Coverage is partial and that is the data, not the wiring**: towns,
+        districts, provinces and the country are translated across Sri Lanka; most roads,
+        neighbourhoods and shop names are not, and come back in the Latin `name` either way. A
+        result is therefore commonly mixed-script, which is the honest answer rather than a
+        failure.
       tags: [geo]
       security:
         - bearerAuth: []
@@ -469,6 +476,7 @@ paths:
             minimum: -180
             maximum: 180
         - $ref: './_shared.yaml#/components/parameters/Limit'
+        - $ref: './_shared.yaml#/components/parameters/Lang'
       responses:
         '200':
           description: Matching places.
@@ -495,7 +503,12 @@ paths:
     get:
       operationId: reverseGeocode
       summary: Reverse geocode a coordinate.
-      description: Self-hosted Nominatim. Used to label a dropped pin and a confirmed pickup point.
+      description: |
+        Self-hosted Nominatim. Used to label a dropped pin and a confirmed pickup point.
+
+        `lang` behaves exactly as it does on `/v1/geo/search` above, including the partial
+        coverage: the label for a pin in Ja-Ela comes back with the town, district, province and
+        country in the asked-for script and the road in Latin.
       tags: [geo]
       security:
         - bearerAuth: []
@@ -516,6 +529,7 @@ paths:
             format: double
             minimum: -180
             maximum: 180
+        - $ref: './_shared.yaml#/components/parameters/Lang'
       responses:
         '200':
           description: Nearest addressable place.

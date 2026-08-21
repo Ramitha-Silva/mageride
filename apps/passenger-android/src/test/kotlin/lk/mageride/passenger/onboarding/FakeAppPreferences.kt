@@ -17,4 +17,8 @@ internal class FakeAppPreferences(
     override var lastCallType: String? = null,
     override var callNumberNoticeShown: Boolean = false,
     override var defaultPaymentMethod: String? = null,
-) : AppPreferences
+) : AppPreferences {
+
+    /** Written by the recents language sweep, never seeded by a test. */
+    override var recentsLanguage: Language? = null
+}

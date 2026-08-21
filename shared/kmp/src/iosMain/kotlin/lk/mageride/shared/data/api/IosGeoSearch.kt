@@ -26,6 +26,16 @@ import lk.mageride.shared.data.models.query.GeocodedPlace
  * exists and that screen must never reach it — and a function that answers places is a function
  * nobody can quietly turn into one that answers routes.
  *
+ * ### Why there is no `lang` here yet
+ *
+ * `QueryApi.searchPlaces` gained one (D-26 — destination search answers in Sinhala and Tamil), and
+ * this helper deliberately did not follow. For the reason above: a fifth parameter changes the
+ * exported selector from `…around:limit:completionHandler:` to `…around:limit:lang:completionHandler:`
+ * and every Swift call site in `apps/driver-ios` and `apps/passenger-ios` stops compiling — on a
+ * host that cannot compile Swift to find out. Adding it is one line here and one line at each call
+ * site, and belongs in a session with a Mac. Until then both iOS apps get the untranslated answer,
+ * which is what they already had.
+ *
  * @param query query-svc's client, from `IosAppGraph.api`.
  * @param text What the passenger typed.
  * @param around Where to bias the results, or `null` before the first fix.
