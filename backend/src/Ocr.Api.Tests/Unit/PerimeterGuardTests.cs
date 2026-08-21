@@ -8,13 +8,23 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace MageRide.Ocr.Tests.Unit;
 
 /// <summary>
-/// The second D-36 fence: what is actually on the wire.
+/// The wire check: no image leaves except one the pipeline admitted for the job in hand.
 /// </summary>
 /// <remarks>
-/// The first fence is the type — <c>GeminiFieldExtractor</c> takes a <c>RedactedDocument</c>, which
-/// only the pre-pass can construct — and these are the cases that fence cannot see: a payload
-/// assembled by hand, a retry that re-serialises, an extractor written by somebody who has not read
-/// D-36.
+/// <para>
+/// Δ MCS-07 — <b>what this guard proves has narrowed, and these tests are unchanged because they
+/// never tested the wider claim.</b> The first fence used to be the type: <c>GeminiFieldExtractor</c>
+/// took a <c>RedactedDocument</c>, which only the pre-pass could construct, so "admitted" and
+/// "redacted" were the same fact. The extractor now takes an <c>OutboundDocument</c>, which may be
+/// raw, so admission means only that <c>ExtractionPipeline</c> resolved these bytes for this
+/// extraction.
+/// </para>
+/// <para>
+/// That is still the boundary these cases are about, and it still holds: a payload assembled by
+/// hand, a retry that re-serialises from a stale buffer, a second provider's field name, an
+/// extractor written by somebody who has not read any of this. What it no longer does is answer
+/// "was it masked?" — <c>docs.extractions.redaction_applied</c> is where that lives now.
+/// </para>
 /// </remarks>
 public sealed class PerimeterGuardTests
 {

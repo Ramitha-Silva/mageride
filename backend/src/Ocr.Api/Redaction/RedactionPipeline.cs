@@ -4,10 +4,17 @@ using MageRide.Ocr.Ocr;
 
 namespace MageRide.Ocr.Redaction;
 
-/// <summary>The D-36 pre-pass. Everything that leaves this perimeter has been through it.</summary>
+/// <summary>
+/// The D-36 pre-pass. Best-effort since MCS-07 — it used to be a precondition of anything leaving
+/// this perimeter, and <see cref="IsArmed"/> is now the difference between masked and unmasked
+/// rather than between sent and not sent.
+/// </summary>
 public interface IRedactionPipeline
 {
-    /// <summary>Whether the pass can run at all. False means nothing may be sent to Gemini.</summary>
+    /// <summary>
+    /// Whether the pass can run at all. False means documents leave UNMASKED (Δ MCS-07) — it used to
+    /// mean they did not leave.
+    /// </summary>
     bool IsArmed { get; }
 
     /// <summary>Why it cannot run, for the start-up log and the health probe. Null when armed.</summary>
@@ -32,9 +39,17 @@ public interface IRedactionPipeline
 /// <b>Every failure is a refusal, never a partial redaction.</b> There is no path through this class
 /// that returns an image with some of the pass applied: an unavailable editor, an unavailable
 /// detector, an unavailable OCR engine and bytes that are not an image all answer
-/// <see cref="RedactionOutcome.Failed"/>, and the caller then has nothing it is allowed to send.
-/// The alternative — "blur what we could find and go" — is a pipeline whose D-36 compliance depends
-/// on whether a library happened to load, which is not a property anybody can audit.
+/// <see cref="RedactionOutcome.Failed"/>. The alternative — "blur what we could find and go" — is a
+/// pipeline whose masking depends on whether a library happened to load, which is not a property
+/// anybody can audit.
+/// </para>
+/// <para>
+/// <b>That is still true, and it is worth being clear about what it now buys</b> (Δ MCS-07). The
+/// caller no longer treats a refusal as "nothing may be sent" — it sends the raw image instead. So
+/// this class's all-or-nothing rule is what keeps the <em>record</em> honest: a document is either
+/// masked under a stated policy version, or it is on the wire exactly as photographed and
+/// <c>docs.extractions.redaction_applied</c> says false. There is no third row shape and no
+/// partially-masked image anybody has to reason about after the fact.
 /// </para>
 /// <para>
 /// <b>An empty face list is not a failure.</b> An insurance certificate has no portrait on it. What

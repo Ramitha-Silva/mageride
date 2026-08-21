@@ -92,8 +92,9 @@ public sealed class TesseractCliOcrEngine : IOcrEngine, IDisposable
         {
             _logger.LogError(
                 exception,
-                "The redaction pre-pass could not stage a document under {WorkRoot}, so no bounding boxes were "
-                + "produced and nothing will be sent to Gemini (D-36).",
+                "The redaction pre-pass could not stage a document under {WorkRoot}, so no bounding boxes "
+                + "were produced: this document goes to Gemini UNREDACTED and has no on-prem fallback "
+                + "behind it (Δ MCS-07).",
                 workRoot);
 
             return OcrPage.Unavailable;

@@ -77,9 +77,10 @@ public sealed class OcrOptions
         /// <b>Not an S3 client.</b> D-36 puts raw documents on an SSE-KMS bucket with signed-URL
         /// access, and no service in this build talks to one (C125) — support-svc's screenshot store
         /// is the same seam and the same note. What this service holds is
-        /// <c>IRawDocumentStore</c>, one method, so the swap is one class. The deadline on
-        /// <c>docs.uploads.auto_delete_at</c> and the fact that the bytes never leave unredacted are
-        /// this service's regardless of where they sit.
+        /// <c>IRawDocumentStore</c>, one method, so the swap is one class. What stays this service's
+        /// regardless of where the bytes sit: the deadline on <c>docs.uploads.auto_delete_at</c>, and
+        /// that they are read <em>here</em> rather than handed about — since MCS-07 the pre-pass is
+        /// best-effort, so "they never leave unredacted" is no longer one of them.
         /// </remarks>
         public string? Root { get; set; }
 
@@ -115,8 +116,27 @@ public sealed class OcrOptions
         /// <summary>Unset ⇒ Gemini is never called, and the service says so at start-up.</summary>
         public string? ApiKey { get; set; }
 
-        /// <summary>D6' §7.5 and ADD §12.5 both name Flash 3.0 by version.</summary>
-        public string Model { get; set; } = "gemini-flash-3.0";
+        /// <summary>
+        /// The Generative Language API model id, as it appears in <c>models/{id}:generateContent</c>.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <b>Δ MCS-07 — this was <c>gemini-flash-3.0</c>, which is not a model id Google has.</b>
+        /// D6' §7.5 and ADD §12.5 name "Gemini Flash 3.0", but that is the product name; the API
+        /// takes ids of the form <c>gemini-&lt;version&gt;-flash[-lite]</c>, so every call answered
+        /// <c>404 NOT_FOUND</c> — with a valid key, with an invalid one, and regardless of the
+        /// image — and every document silently took the Tesseract path. The value here is
+        /// <c>gemini-3.1-flash-lite</c>, the stable id Google's own model page publishes for
+        /// Gemini 3.1 Flash-Lite, which accepts image input.
+        /// </para>
+        /// <para>
+        /// <b>The test suite cannot catch a wrong value here</b>, and that is worth knowing before
+        /// changing it: <c>GeminiRecorder</c> maps <c>/v1beta/models/{model}:generateContent</c> for
+        /// ANY model, so a fictional id passes every test in this repository and fails only against
+        /// Google. Verify a change against the live API, not against the suite.
+        /// </para>
+        /// </remarks>
+        public string Model { get; set; } = "gemini-3.1-flash-lite";
 
         /// <summary>
         /// D6' §8.3's OCR timeout, applied per attempt.
@@ -145,8 +165,11 @@ public sealed class OcrOptions
         /// The binary. Resolved on <c>PATH</c> when it is a bare name.
         /// </summary>
         /// <remarks>
-        /// <b>Absent ⇒ nothing is sent to Gemini at all.</b> The pre-pass gets its ID-number boxes
-        /// from this engine, so no engine means no redaction, and D-36 fails closed.
+        /// <b>Absent ⇒ documents reach Gemini UNREDACTED, and a model outage extracts nothing</b>
+        /// (Δ MCS-07). This engine is two things at once: the pre-pass gets its ID-number boxes from it,
+        /// so no engine means no masking; and it is D6' §8.3's fallback, so no engine also means no
+        /// second path. Before MCS-07 the first of those made D-36 fail closed — no boxes, no redaction,
+        /// no send. It now fails open, by decision.
         /// </remarks>
         [Required]
         public string ExecutablePath { get; set; } = "tesseract";
@@ -201,7 +224,11 @@ public sealed class OcrOptions
         /// <summary>
         /// The OpenCV Haar cascade. Unset probes the well-known <c>opencv-data</c> locations.
         /// </summary>
-        /// <remarks>Not found ⇒ no face blur ⇒ nothing is sent to Gemini.</remarks>
+        /// <remarks>
+        /// Not found ⇒ no face blur ⇒ every document is sent to Gemini with its portrait intact
+        /// (Δ MCS-07; this used to mean nothing was sent at all). ocr-svc logs it at ERROR on every
+        /// start-up and <c>/health/ready</c> reports degraded for as long as it is true.
+        /// </remarks>
         public string? FaceCascadePath { get; set; }
 
         /// <summary>Width the image is scaled to for detection. Bounds the work on a large scan.</summary>

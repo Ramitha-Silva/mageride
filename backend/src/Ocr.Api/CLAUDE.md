@@ -1,7 +1,7 @@
 # ocr-svc (C054) — document extraction, and the PII redaction pass in front of it
 
 Stack: .NET 10 Minimal API + Dapper over Npgsql + OpenCV (OpenCvSharp) + the `tesseract` CLI +
-Gemini Flash 3.0 over HTTP. References `MageRide.Shared` (C002).
+Gemini Flash over HTTP (`gemini-3.1-flash-lite`, Δ MCS-07). References `MageRide.Shared` (C002).
 **No Redis, no Kafka, no outbox, no command log, no bearer** — see `OcrApplication` for why each
 is off.
 
@@ -18,11 +18,13 @@ code. The whole file is a Δ C054 micro-change-set: **no specification gives ocr
 | OpenCV native (`libOpenCvSharpExtern.so`) | `libgtk-3-0t64`, `libatomic1` | the face blur and every raster operation in the pre-pass |
 | a Haar face cascade | `opencv-data` | the model D-36's face blur runs |
 
-**Missing any of them is not a crash — it is a posture.** The service starts, says so at `ERROR`,
-reports `/health/ready` **degraded**, and extracts every document on the on-prem path with every
-field flagged for review. What it will *not* do is send anything to Gemini. That is D-36 failing
-closed, and it is deliberate: `docs.uploads` keeps flowing, drivers keep onboarding, and AL-27's
-auto-approval is simply unreachable until the dependency is installed.
+**Missing any of them is not a crash — it is a posture, and Δ MCS-07 REVERSED WHICH ONE.** The
+service starts, says so at `ERROR`, and reports `/health/ready` **degraded**. What it does then used
+to be: extract everything on the on-prem path, flag every field for review, and send nothing to
+Gemini — D-36 failing closed. It now sends the document to Gemini **unredacted**: faces unblurred,
+NIC and licence numbers unmasked. The pre-pass is best-effort, `docs.extractions.redaction_applied`
+is false on every such row, and `ix_extractions_unredacted` (migration 1315) is how you count them.
+Tesseract missing additionally means a model outage has no fallback behind it at all.
 
 The suite and CI's backend leg install all three. `infra/docker/Dockerfile.ocr` is this service's
 image, because the shared `Dockerfile.service` publishes onto Alpine and the OpenCV native build is
@@ -42,13 +44,21 @@ glibc — ocr-svc's image needs `apt-get install` regardless, for Tesseract.
 
 ## The three fences, and how each is held structurally
 
-- **The D-36 pre-pass runs before Gemini. No exceptions.** Held twice over. First by the *type*:
-  `GeminiFieldExtractor.ExtractAsync` takes a `RedactedDocument`, a type whose constructor only
-  `RedactionPipeline` can reach, so there is no overload that accepts the bytes off object storage
-  and no way to write one by accident. Second on the *wire*: `PerimeterGuardHandler` sits outermost
-  on that client and refuses any request carrying an image whose sha256 the redactor did not
-  register — which catches the payload the type cannot see (a hand-assembled body, a future
-  extractor, another provider's field name).
+- **~~The D-36 pre-pass runs before Gemini. No exceptions.~~ WITHDRAWN by Δ MCS-07.** It was held
+  twice over — by the *type* (`ExtractAsync` took a `RedactedDocument`, which only `RedactionPipeline`
+  can construct) and on the *wire* (`PerimeterGuardHandler`). The type fence is gone: the extractor
+  takes an `OutboundDocument`, which may be raw, and `OutboundDocument.FromRaw` is the one factory
+  that makes one — search for it to find every place this happens.
+  The **wire fence is still there and still runs**, but it now proves something narrower: every
+  outbound image hashes to one `ExtractionPipeline` admitted *for that job*. That still catches a
+  hand-assembled body, a retry off a stale buffer and another provider's field name; it no longer
+  answers "was it masked?", because that is now a per-row fact and not an invariant.
+  **Why:** the old chain was `no Tesseract ⇒ no boxes ⇒ no redaction ⇒ no Gemini`, so a box missing
+  either native dependency extracted nothing at all, by any path, while looking from the outside
+  exactly like one that worked. That is what shipped to the replica.
+  **What still holds the honesty together:** `redaction_applied` per row, `raw_sha256` on *every*
+  extraction (not just redacted ones), an `ERROR` on every start-up, `/health/ready` degraded, and
+  `DISARMED-SENDING-UNREDACTED` in the boot line when Gemini is configured and the pass is not.
 - **Tesseract is a required fallback, not an extra.** Gemini down, refusing, unconfigured, and
   OpenCV missing all land on the on-prem path, which still returns fields. They are capped at
   `Ocr:TesseractConfidenceCeiling`, below the auto-verify threshold, and the option validator
@@ -78,9 +88,10 @@ have the same default and the same argument at both declarations. Raised in the 
 ## Rules that are load-bearing
 
 - **The on-prem read happens on every document, before the redaction, whether or not Gemini will
-  be called.** ADD §12.5 gets its mask boxes from Tesseract, so `no Tesseract ⇒ no boxes ⇒ no
-  redaction ⇒ no Gemini` — one chain with no branch that skips a link. The same `OcrPage` is then
-  the fallback extractor's input, so the slowest step in the pipeline runs once.
+  be called.** ADD §12.5 gets its mask boxes from Tesseract, and the same `OcrPage` is then the
+  fallback extractor's input, so the slowest step in the pipeline runs once. Δ MCS-07: the chain
+  that used to hang off it — `no Tesseract ⇒ no boxes ⇒ no redaction ⇒ no Gemini` — now stops one
+  link early. No Tesseract still means no boxes and no redaction; it no longer means no Gemini.
 - **Every redaction failure is a refusal, never a partial pass.** There is no path that returns an
   image with *some* of the pass applied. "Blur what we found and go" is a pipeline whose D-36
   compliance depends on whether a library loaded, which is not a property anybody can audit.
@@ -95,9 +106,12 @@ have the same default and the same argument at both declarations. Raised in the 
 - **The redacted copy is re-encoded as PNG even when the original was a JPEG.** A second JPEG
   generation over a freshly blacked-out rectangle leaves ringing along its edges — faint, and a
   partial reconstruction of the glyphs that were under it.
-- **The prompt tells the model the image was redacted.** Without it, a black rectangle reads as a
-  printing artefact and the model invents a plausible NIC for the space — which is exactly what
-  I-25.1's "the value is captured from the structured response" has to be protected from.
+- **The prompt tells the model what was actually done to the image, and there are two of them**
+  (Δ MCS-07). On a redacted document it says so: without that, a black rectangle reads as a printing
+  artefact and the model invents a plausible NIC for the space — exactly what I-25.1's "the value is
+  captured from the structured response" has to be protected from. On a raw one it must NOT say so,
+  or the model returns null for fields it can read perfectly well. `GeminiPrompts.For` takes the
+  fact, not a setting, and `OutboundDocument.IsRedacted` is where it comes from.
 - **Confidence is asked for per field, with a rubric.** AL-29, BR-25.2 and D6' §7.5 hang the whole
   verdict on "below threshold", and a model asked for a number with no rubric returns 0.95 for
   everything. The rubric is the legibility of *that field's own characters*, not the model's belief
@@ -213,13 +227,13 @@ Every knob is documented at its declaration in `OcrOptions` and in `infra/env/.e
 | `Storage:MaxBytes` | 16 MiB | **no spec** — the same bound as `Support:ScreenshotMaxBytes`; refused before decoding |
 | `Storage:AllowHttpSources` | off | on ⇒ this service will fetch a URL another service wrote into a row |
 | `Gemini:Enabled` · `BaseUrl` · `ApiKey` | on · Google · unset | **unset ⇒ every document takes the on-prem path** and AL-27 is unreachable |
-| `Gemini:Model` | `gemini-flash-3.0` | D6' §7.5 and ADD §12.5 name the version |
+| `Gemini:Model` | `gemini-3.1-flash-lite` | **Δ MCS-07.** Was `gemini-flash-3.0` — the product name from D6' §7.5 / ADD §12.5, and not a model id Google has, so every call 404'd whatever the key was. `GeminiRecorder` answers for ANY model name, so the suite cannot catch a wrong value here: verify against the live API |
 | `Gemini:Timeout` · `Attempts` | 20 s · 3 | D6' §8.3 ("OCR 30 s" is the whole job's; the model gets the larger part) |
-| `Tesseract:ExecutablePath` | `tesseract` | **absent ⇒ nothing is sent to Gemini either** — see the chain above |
+| `Tesseract:ExecutablePath` | `tesseract` | **Δ MCS-07: absent ⇒ documents go to Gemini UNREDACTED and a model outage extracts nothing** — it used to mean nothing was sent |
 | `Tesseract:Language` | `eng` | the machine-readable fields on these documents are Latin script; D-26 is about strings MageRide authors |
 | `Tesseract:PageSegmentationMode` · `Fallback…` | 3 · 11 | **no spec** — 11 returns nothing for a number plate; see the rule above |
 | `Tesseract:WorkRoot` | *(temp dir)* | where a raw document is staged for the child process. A mount, not `TMPDIR` |
-| `Redaction:FaceCascadePath` | *(probed)* | `opencv-data`'s location. Not found ⇒ no face blur ⇒ no Gemini |
+| `Redaction:FaceCascadePath` | *(probed)* | `opencv-data`'s location. **Δ MCS-07: not found ⇒ no face blur ⇒ every portrait reaches Gemini** — it used to mean no Gemini at all |
 | `Redaction:DetectionWidth` · `MinimumFaceFraction` | 1024 · 0.08 | **no spec** — bounds the detector's work, and stops a 20 px false positive blurring a number plate |
 | `Redaction:BlurDivisor` · `MinimumBlurKernel` | 6 · 21 | **no spec** — the kernel is derived from the region so one setting redacts a 480 px photo and a 4 000 px scan alike |
 | `Redaction:PreserveJpeg` | off | see the re-encode rule above |

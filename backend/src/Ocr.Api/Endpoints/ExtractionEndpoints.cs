@@ -134,12 +134,19 @@ public static class ExtractionEndpoints
 /// The D-36 posture, as a readiness signal.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Reported as <b>degraded, not unhealthy</b>. A disarmed redactor is a service that still extracts
-/// — on-prem, into the officer queue — and taking the pod out of rotation for it would turn "no
-/// auto-approval today" into "no onboarding today", which is the opposite of what D6' §8.3's
-/// fallback is for. What it must not do is be silent: the whole difference between the primary and
-/// the fallback path is invisible from the outside.
-/// </remarks>
+/// — and taking the pod out of rotation for it would turn "documents leave unmasked today" into
+/// "no onboarding today". What it must not do is be silent.
+/// </para>
+/// <para>
+/// <b>Δ MCS-07 — what "degraded" now means here has changed, and it changed direction.</b> It used
+/// to say <em>no document is reaching Gemini</em>; every extraction was on-prem, everything was
+/// reviewed by an officer, and nothing left the perimeter. It now says the opposite: documents ARE
+/// reaching Gemini and are doing so <em>unredacted</em>, with faces and identity numbers intact.
+/// Same probe, same colour, inverted consequence — so the reasons below say which, rather than
+/// leaving an operator to read a stale meaning into a familiar word.
+/// </para>
 public sealed class RedactionHealthCheck(IRedactionPipeline redaction, Ocr.IOcrEngine engine)
     : Microsoft.Extensions.Diagnostics.HealthChecks.IHealthCheck
 {
@@ -151,8 +158,8 @@ public sealed class RedactionHealthCheck(IRedactionPipeline redaction, Ocr.IOcrE
 
         if (!engine.IsAvailable)
         {
-            reasons.Add("the on-prem OCR engine (Tesseract) is not available, so there is no fallback path "
-                + "and no source of D-36 mask boxes");
+            reasons.Add("the on-prem OCR engine (Tesseract) is not available, so there is no fallback for a "
+                + "model outage and no source of D-36 mask boxes");
         }
 
         if (redaction.DisarmedReason is { } disarmed)
@@ -164,7 +171,8 @@ public sealed class RedactionHealthCheck(IRedactionPipeline redaction, Ocr.IOcrE
             ? Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(
                 "Gemini is reachable through the D-36 redaction pre-pass.")
             : Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Degraded(
-                "Documents cannot be sent to Gemini: " + string.Join("; ", reasons)
-                + ". Extraction falls back to on-prem Tesseract and the Verification-Officer queue."));
+                "The D-36 pre-pass cannot run: " + string.Join("; ", reasons)
+                + ". Documents are still sent to Gemini, UNREDACTED — faces and identity numbers leave the "
+                + "perimeter as photographed (Δ MCS-07). Fix the dependency or turn Ocr:Gemini:Enabled off."));
     }
 }

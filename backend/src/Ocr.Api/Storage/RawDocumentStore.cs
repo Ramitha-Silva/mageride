@@ -165,6 +165,35 @@ public sealed class FileSystemRawDocumentStore : IRawDocumentStore
 /// </remarks>
 internal static class ContentTypes
 {
+    /// <summary>
+    /// The media type these bytes actually are, if it is one the external model takes inline —
+    /// otherwise <see langword="null"/> (Δ MCS-07).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Decided from the magic number, never from the stored type or the file name.</b>
+    /// <see cref="FromBytes"/> deliberately falls back to <c>image/jpeg</c> for anything it does not
+    /// recognise, which is right for choosing Tesseract's temporary-file suffix and wrong for
+    /// deciding what to put on the wire — a text file would go out labelled as a photograph.
+    /// </para>
+    /// <para>
+    /// <b>Why the pipeline needs this at all.</b> Before MCS-07 a document that would not decode
+    /// failed the redaction pass, and failing the pass meant nothing was sent. The pass no longer
+    /// gates the send, so this is what stops the unredacted path posting bytes that are not an
+    /// image to a third party — pointless, billable, and a document nobody could have read anyway.
+    /// TIFF and PDF are recognised by <see cref="FromBytes"/> and are deliberately NOT here:
+    /// nothing in this service rasterises them (the C054 handoff says so) and the model does not
+    /// take TIFF inline.
+    /// </para>
+    /// </remarks>
+    public static string? InlineImageType(ReadOnlySpan<byte> bytes) => FromBytes(bytes, string.Empty) switch
+    {
+        "image/jpeg" when bytes.Length >= 12 && bytes[0] == 0xFF && bytes[1] == 0xD8 => "image/jpeg",
+        "image/png" => "image/png",
+        "image/webp" => "image/webp",
+        _ => null,
+    };
+
     public static string FromBytes(ReadOnlySpan<byte> bytes, string hint)
     {
         if (bytes.Length >= 12)
