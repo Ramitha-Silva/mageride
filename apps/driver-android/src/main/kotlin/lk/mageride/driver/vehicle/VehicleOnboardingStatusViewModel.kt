@@ -91,6 +91,18 @@ internal class VehicleOnboardingStatusViewModel(
         refresh()
     }
 
+    /**
+     * *"Continue"* — names this vehicle for the wizard before the screen navigates to it.
+     *
+     * Without it the wizard would fall back to searching for something `INCOMPLETE`, and this
+     * screen already knows which vehicle it is about: a driver with two unfinished vehicles would
+     * be sent to whichever `GET /v1/vehicles/mine` returned first, not the one whose verdicts they
+     * are reading. Nothing happens when the vehicle is unknown — that state has no CTA.
+     */
+    fun continueOnboarding() {
+        session.vehicleId.value?.let(session::resumeVehicle)
+    }
+
     /** Re-reads the verdicts. The screen's own action, and what a US-2.14 push brings a driver to. */
     @Suppress("TooGenericExceptionCaught")
     fun refresh() {

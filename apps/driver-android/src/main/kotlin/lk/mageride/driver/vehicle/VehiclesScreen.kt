@@ -59,9 +59,10 @@ import org.koin.androidx.compose.koinViewModel
  * and either a radio or a `Resume ›` link per row, then the separate **Temporarily assigned to
  * me** `FLEET` group.
  *
- * @param onAddVehicle The ＋, and 026a's *"Yes, onboard ›"*. Both open the wizard, and
- *   [VehicleOnboardingRepository.resume] decides whether that is a resume or a **new** vehicle at
- *   Step 1/4 (US-2.27).
+ * @param onAddVehicle Navigates to the wizard. **Which vehicle it opens on is decided before the
+ *   navigation, not after it** — ＋ and 026a's *"Yes, onboard ›"* call `startNewVehicle` for a
+ *   Step 1/4 (US-2.27 as amended), a row's *Resume ›* calls `resumeOnboarding` for that row. The
+ *   route carries no arguments, so `VehicleOnboardingSession` carries the intent instead.
  * @param onOpenStatus Opens SCR-DA-006 for a vehicle whose documents are being verified.
  * @param onBack Leaves for the Menu tab.
  */
@@ -90,7 +91,12 @@ internal fun VehiclesScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onAddVehicle) {
+                    IconButton(
+                        onClick = {
+                            viewModel.startNewVehicle()
+                            onAddVehicle()
+                        },
+                    ) {
                         Icon(
                             imageVector = Icons.Outlined.Add,
                             contentDescription = stringResource(R.string.vehicles_add),
@@ -141,7 +147,7 @@ internal fun VehiclesScreen(
                             active = row.vehicleId == state.activeVehicleId,
                             onSelect = { viewModel.select(row) },
                             onResume = {
-                                viewModel.open(row)
+                                viewModel.resumeOnboarding(row)
                                 onAddVehicle()
                             },
                             onOpenStatus = {
@@ -188,6 +194,7 @@ internal fun VehiclesScreen(
         OnboardModeCDialog(
             onConfirm = {
                 viewModel.dismissOnboardPrompt()
+                viewModel.startNewVehicle()
                 onAddVehicle()
             },
             onDismiss = viewModel::dismissOnboardPrompt,

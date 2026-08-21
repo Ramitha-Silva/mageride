@@ -146,6 +146,15 @@ internal class VehicleOnboardingViewModel(
 
     private val mutableState = MutableStateFlow(VehicleOnboardingState())
 
+    /**
+     * Why this wizard was opened, read **once** and held for the view model's life.
+     *
+     * Held rather than re-read because [load] runs again on a retry, and an intent consumed on the
+     * first attempt would leave the retry searching — a ＋ that failed on a bad connection would
+     * come back as a resume of somebody else's half-finished vehicle.
+     */
+    private val intent: WizardIntent? = session.consumeIntent()
+
     val state: StateFlow<VehicleOnboardingState> = mutableState.asStateFlow()
 
     init {
@@ -158,13 +167,24 @@ internal class VehicleOnboardingViewModel(
         load()
     }
 
-    /** Reads AL-30's resume point. Called on open and again after a failure the driver retries. */
+    /**
+     * Works out which step opens. Called on open and again after a failure the driver retries.
+     *
+     * Three entry points, three answers — and the wizard is told which, rather than deducing it:
+     *
+     * * **＋ / *"Yes, onboard ›"*** → Step 1/4, with no read at all. ＋ means add a vehicle
+     *   (US-2.27 as amended); it used to resume whatever was unfinished, which put a driver adding
+     *   their second vehicle on *"Step 2 of 4 · Insurance"* for their first.
+     * * ***Resume ›* / SCR-DA-006's *Continue*** → that named vehicle, at its own next step.
+     * * **The Menu tab's row, or a cold start** → AL-30's search, which is the only case left
+     *   where nobody has said which vehicle they mean.
+     */
     @Suppress("TooGenericExceptionCaught")
     fun load() {
         mutableState.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
             try {
-                when (val point = vehicles.resume()) {
+                when (val point = resumePoint()) {
                     ResumePoint.Fresh -> mutableState.update { it.copy(loading = false) }
 
                     is ResumePoint.Resume -> mutableState.update {
@@ -184,6 +204,12 @@ internal class VehicleOnboardingViewModel(
                 mutableState.update { it.copy(loading = false, error = OnboardingErrors.messageFor(cause)) }
             }
         }
+    }
+
+    private suspend fun resumePoint(): ResumePoint = when (intent) {
+        WizardIntent.NewVehicle -> ResumePoint.Fresh
+        is WizardIntent.Continue -> vehicles.resume(intent.vehicleId)
+        null -> vehicles.resume()
     }
 
     fun onRegistrationChanged(value: String) {

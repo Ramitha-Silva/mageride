@@ -280,7 +280,8 @@ CREATE TABLE registry.onboarding_steps (
 --   (doubtful/manual) or — for step='photos' — plate OCR ≠ registration_number. Re-opening the wizard resumes at the first step with
 --   status <> 'verified'. registry.vehicles.onboarding_status is DERIVED: 'approved' when all four steps are verified/confirmed (and
 --   registry.vehicles.status→APPROVED), else 'incomplete'. A vehicle with ≥1 saved step shows Incomplete in My Vehicles (SCR-DA/DI-026);
---   all four verified ⇒ Approved (only these go live). When a vehicle is Approved, the wizard entry point creates a NEW vehicle at Step 1/4 (US-2.27).
+--   all four verified ⇒ Approved (only these go live). ＋ in My Vehicles always creates a NEW vehicle at
+--   Step 1/4; a nav-drawer entry does so once every vehicle is Approved (US-2.27, MCS-06).
 
 -- registry.fleets — Fleet Owner organisation (AL-03; Epic 13 Phase 1). Verification-Officer-gated.
 CREATE TABLE registry.fleets (                               -- [NEW] AL-03

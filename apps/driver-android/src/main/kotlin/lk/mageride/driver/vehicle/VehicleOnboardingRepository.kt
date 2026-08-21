@@ -138,20 +138,35 @@ internal class VehicleOnboardingRepository(private val registry: RegistryApi) {
      *
      * The vehicle it resumes is the driver's **own Mode C** one that is still `incomplete`. A
      * temporarily-assigned Mode A/B vehicle is never onboarded here (AL-27) and an approved one is
-     * finished, so both fall through to [ResumePoint.Fresh] — which is exactly US-2.27's "the ＋
-     * button starts a NEW vehicle when the current one is approved".
+     * finished, so both fall through to [ResumePoint.Fresh].
+     *
+     * **[vehicleId] is the difference between the three doors into the wizard.** Passing one —
+     * *Resume ›* on a My Vehicles row, SCR-DA-006's *Continue* — opens **that** vehicle, which
+     * matters the moment a driver has two unfinished ones: searching takes whatever
+     * `GET /v1/vehicles/mine` returns first, so resuming the second row used to open the first.
+     * Omitting it searches, and only the Menu tab's *Vehicle Onboarding* row and a cold start
+     * restored onto the route do, because they name no vehicle. ＋ calls neither form — it is
+     * [ResumePoint.Fresh] outright, with no read at all. `VehicleOnboardingSession` carries which
+     * of the three it is, because the route carries no arguments.
      */
-    suspend fun resume(): ResumePoint {
-        val incomplete = myVehicles().firstOrNull {
-            it.isOnboardable && it.onboardingStatus == OnboardingStatus.INCOMPLETE
+    suspend fun resume(vehicleId: Ulid? = null): ResumePoint {
+        val vehicles = myVehicles()
+
+        val summary = if (vehicleId == null) {
+            vehicles.firstOrNull { it.isOnboardable && it.onboardingStatus == OnboardingStatus.INCOMPLETE }
+        } else {
+            // A vehicle no longer in the list — deactivated on another handset between the read
+            // that drew the row and the tap on it — falls through to Fresh rather than throwing:
+            // the wizard is a place to add a vehicle, so an empty one is still a usable screen.
+            vehicles.firstOrNull { it.vehicleId == vehicleId }
         } ?: return ResumePoint.Fresh
 
-        val status = registry.getVehicleOnboardingStatus(incomplete.vehicleId)
+        val status = registry.getVehicleOnboardingStatus(summary.vehicleId)
 
         return ResumePoint.Resume(
-            vehicleId = incomplete.vehicleId,
-            registrationNumber = incomplete.registrationNumber,
-            vehicleType = RideVehicleType.from(incomplete.vehicleType),
+            vehicleId = summary.vehicleId,
+            registrationNumber = summary.registrationNumber,
+            vehicleType = RideVehicleType.from(summary.vehicleType),
             // `nextStep` is the server's own resume pointer. Falling back to the first
             // non-verified verdict rather than to Step 1 keeps AL-30 true even if it is absent.
             step = status.nextStep ?: status.steps.firstUnverified() ?: OnboardingStep.PHOTOS,

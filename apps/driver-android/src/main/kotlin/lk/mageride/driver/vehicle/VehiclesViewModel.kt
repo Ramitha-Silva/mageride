@@ -151,9 +151,32 @@ internal class VehiclesViewModel(
         mutableState.update { it.copy(activeVehicleId = row.vehicleId) }
     }
 
-    /** Names the vehicle whose status or remaining steps the next screen is about. */
+    /** Names the vehicle whose status the next screen is about — a row tapped through to SCR-DA-006. */
     fun open(row: VehicleRow) {
         session.open(row.vehicleId)
+    }
+
+    /**
+     * ***Resume ›*** — the wizard reopens **this** row, at its own next incomplete step.
+     *
+     * Distinct from [startNewVehicle] below, and that distinction is the point: both used to
+     * navigate to the same argument-less route and let the wizard search for something unfinished,
+     * so ＋ and *Resume ›* were one action wearing two labels.
+     */
+    fun resumeOnboarding(row: VehicleRow) {
+        session.resumeVehicle(row.vehicleId)
+    }
+
+    /**
+     * **＋, and SCR-DA-026a's *"Yes, onboard ›"*** — the wizard opens at Step 1/4.
+     *
+     * US-2.27 as amended: ＋ adds a vehicle and never continues one. Before this it resumed
+     * whatever was `INCOMPLETE`, which meant a driver adding their second vehicle landed on Step 2
+     * of 4 for their first — and, since `POST /v1/vehicles` **is** step 1, that is where every
+     * vehicle abandoned after the first screen leaves the wizard pointing.
+     */
+    fun startNewVehicle() {
+        session.startNewVehicle()
     }
 
     /** SCR-DA-026a's *"Not now"* — the empty list, with no dialog over it. */

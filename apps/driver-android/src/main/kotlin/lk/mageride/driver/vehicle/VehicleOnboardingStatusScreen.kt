@@ -57,7 +57,8 @@ import org.koin.androidx.compose.koinViewModel
  * all four Verified auto-approves the vehicle with no manual step.
  *
  * @param onDone Leaves for My Vehicles — where an approved vehicle now appears (SCR-DA-026).
- * @param onResume Opens the wizard again at whatever step is still outstanding (AL-30).
+ * @param onResume Opens the wizard again at whatever step is still outstanding (AL-30) — on THIS
+ *   vehicle, which `continueOnboarding` names before the navigation because the route cannot.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -166,7 +167,13 @@ internal fun VehicleOnboardingStatusScreen(onDone: () -> Unit, onResume: () -> U
             // A step that is not yet *saved* is the driver's to finish; one that is saved and
             // pending is an officer's. Only the first gets a Resume (AL-30, US-2.10).
             if (state.rows.any { (_, verdict) -> verdict == StepVerdict.PENDING_INPUT }) {
-                MageRideCta(label = stringResource(R.string.vehicle_status_resume), onClick = onResume)
+                MageRideCta(
+                    label = stringResource(R.string.vehicle_status_resume),
+                    onClick = {
+                        viewModel.continueOnboarding()
+                        onResume()
+                    },
+                )
             }
             MageRideCtaTonal(label = stringResource(R.string.vehicle_status_my_vehicles), onClick = onDone)
         }

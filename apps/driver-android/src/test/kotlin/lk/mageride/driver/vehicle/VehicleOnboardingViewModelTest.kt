@@ -130,6 +130,100 @@ class VehicleOnboardingViewModelTest {
     }
 
     @Test
+    fun the_plus_button_starts_a_new_vehicle_even_when_one_is_half_finished() = runBlocking {
+        // The defect this replaced, reported from a handset: a driver whose only vehicle stalled
+        // after the first screen taps ＋ to add a second and lands on "Step 2 of 4 · Insurance" for
+        // the first one. `POST /v1/vehicles` IS step 1 (Δ C029), so `nextStep` on every abandoned
+        // vehicle is `insurance` — which made this the DEFAULT experience of ＋, not an edge case.
+        backend.returns("listMyVehicles", VehicleListResponse(listOf(summary(registrationNumber = "QP-7788"))))
+        backend.returns(
+            "getVehicleOnboardingStatus",
+            onboardingStatus(steps = verdicts(details = StepVerdict.VERIFIED), nextStep = OnboardingStep.INSURANCE),
+        )
+
+        session.startNewVehicle()
+        val model = viewModel()
+        model.state.await { !it.loading }
+
+        assertEquals(OnboardingStep.DETAILS, model.state.value.step, "＋ means add, so step 1 of 4")
+        assertEquals(null, model.state.value.vehicleId, "a NEW vehicle, so no id until it is created")
+        assertEquals("", model.state.value.registrationNumber, "not the half-finished vehicle's plate")
+    }
+
+    @Test
+    fun a_plus_that_failed_and_is_retried_is_still_a_new_vehicle() = runBlocking {
+        // `load()` runs again when the driver retries a failed read, and the intent is consumed
+        // once at construction precisely so the second attempt is not a resume of somebody's
+        // half-finished vehicle. A ＋ that met a bad connection must stay a ＋.
+        backend.fails("listMyVehicles", HttpStatusCode.ServiceUnavailable, "dependency-unavailable")
+
+        session.startNewVehicle()
+        val model = viewModel()
+        model.state.await { !it.loading }
+
+        backend.returns("listMyVehicles", VehicleListResponse(listOf(summary())))
+        backend.returns(
+            "getVehicleOnboardingStatus",
+            onboardingStatus(steps = verdicts(details = StepVerdict.VERIFIED), nextStep = OnboardingStep.INSURANCE),
+        )
+
+        model.load()
+        model.state.await { !it.loading }
+
+        assertEquals(OnboardingStep.DETAILS, model.state.value.step, "still a new vehicle on the retry")
+        assertEquals(null, model.state.value.vehicleId)
+    }
+
+    @Test
+    fun resume_opens_the_row_that_was_tapped_and_not_whichever_comes_back_first() = runBlocking {
+        // Two unfinished vehicles. `resume()` takes the first INCOMPLETE row the list returns, so
+        // tapping Resume on the second one used to open the first — with the wrong plate in the
+        // header and the wrong documents behind the CTA.
+        backend.returns(
+            "listMyVehicles",
+            VehicleListResponse(
+                listOf(
+                    summary(registrationNumber = "AAA-1111"),
+                    summary(vehicleId = OTHER_VEHICLE_ID, registrationNumber = "ZZZ-9999"),
+                ),
+            ),
+        )
+        backend.returns(
+            "getVehicleOnboardingStatus",
+            onboardingStatus(steps = verdicts(details = StepVerdict.VERIFIED), nextStep = OnboardingStep.REVENUE),
+        )
+
+        session.resumeVehicle(OTHER_VEHICLE_ID)
+        val model = viewModel()
+        model.state.await { !it.loading }
+
+        assertEquals(OTHER_VEHICLE_ID, model.state.value.vehicleId, "the row that was tapped")
+        assertEquals("ZZZ-9999", model.state.value.registrationNumber)
+        assertEquals(OnboardingStep.REVENUE, model.state.value.step)
+    }
+
+    @Test
+    fun an_entry_that_names_nothing_still_searches_for_something_unfinished() = runBlocking {
+        // The Menu tab's "Vehicle Onboarding" row, and a cold start restored onto the route. AL-30
+        // is unchanged for those: nobody has said which vehicle they mean, so the first
+        // non-verified step of the first incomplete vehicle is still the best answer available.
+        backend.returns("listMyVehicles", VehicleListResponse(listOf(summary(registrationNumber = "QP-7788"))))
+        backend.returns(
+            "getVehicleOnboardingStatus",
+            onboardingStatus(
+                steps = verdicts(details = StepVerdict.VERIFIED, insurance = StepVerdict.VERIFIED),
+                nextStep = OnboardingStep.REVENUE,
+            ),
+        )
+
+        val model = viewModel()
+        model.state.await { !it.loading }
+
+        assertEquals(OnboardingStep.REVENUE, model.state.value.step)
+        assertEquals("QP-7788", model.state.value.registrationNumber)
+    }
+
+    @Test
     fun a_captured_document_goes_up_with_its_step_in_one_request_and_says_how_it_was_captured() = runBlocking {
         val model = resumedAt(OnboardingStep.INSURANCE)
         backend.returns("saveVehicleOnboardingStep", stepSaved(nextStep = OnboardingStep.REVENUE))
