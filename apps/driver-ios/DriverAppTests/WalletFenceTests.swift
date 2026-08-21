@@ -29,6 +29,7 @@ import XCTest
 /// **Comments are stripped before the source is searched**, for the reason the Android twin gives:
 /// half of this cluster's job is to *document* why bank transfer is absent, and a check that fired on
 /// the explanation would push the explanation out of the code.
+@MainActor
 final class WalletFenceTests: XCTestCase {
 
     // MARK: - AL-05 · three rails and no fourth

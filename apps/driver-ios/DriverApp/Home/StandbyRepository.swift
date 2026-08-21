@@ -177,7 +177,11 @@ final class ApiStandbyRepository: StandbyRepository {
             query: text,
             lat: near.map { KotlinDouble(value: $0.lat) },
             lng: near.map { KotlinDouble(value: $0.lng) },
-            limit: KotlinInt(value: Int32(Self.searchLimit))
+            limit: KotlinInt(value: Int32(Self.searchLimit)),
+            // `nil` asks Nominatim for no language at all, which QueryApi's own remark calls out
+            // as deliberately not the same as asking for English. Wiring D-26's chosen language
+            // through is a change of behaviour, not of compilation.
+            lang: nil
         ).places
     }
 

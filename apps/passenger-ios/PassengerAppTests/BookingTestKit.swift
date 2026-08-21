@@ -145,7 +145,7 @@ final class FakeBookingRepository: BookingRepository, @unchecked Sendable {
 ///
 /// R-18's rule is about **reuse**, so a fake that counted up would make the interesting assertion
 /// impossible to write: a retry has to carry the id the first attempt did.
-final class FakeIdempotencyKeys: IdempotencyKeys, @unchecked Sendable {
+final class FakePinnedIdempotencyKeys: IdempotencyKeys, @unchecked Sendable {
 
     var value = "01JKEY0000000000000000001"
     private(set) var issued = 0

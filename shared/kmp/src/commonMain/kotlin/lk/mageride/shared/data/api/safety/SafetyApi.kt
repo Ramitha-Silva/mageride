@@ -1,9 +1,11 @@
 package lk.mageride.shared.data.api.safety
 
 import io.ktor.http.encodeURLPathPart
+import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.Credential
+import lk.mageride.shared.data.api.MageRideError
 import lk.mageride.shared.data.api.apiDelete
 import lk.mageride.shared.data.api.apiGet
 import lk.mageride.shared.data.api.apiPost
@@ -37,9 +39,11 @@ import lk.mageride.shared.data.models.safety.VehicleReport
 public interface SafetyApi {
 
     /** `POST /v1/sos` — raise an SOS from a ride or from standing still. Attested (D-30). */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun triggerSos(request: TriggerSosRequest, idempotencyKey: String? = null): SosDispatched
 
     /** `GET /v1/sos/{userId}/history` — past SOS events for this user. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listSosHistory(userId: Ulid, page: PageRequest = PageRequest.FIRST): Page<SosEvent>
 
     /**
@@ -47,9 +51,11 @@ public interface SafetyApi {
      *
      * `409 ride-terminal` once the trip has ended: there is nothing left to follow.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun createTripShare(tripId: Ulid, idempotencyKey: String? = null): TripShareLink
 
     /** `DELETE /v1/trip-share/{tripId}` — revoke the link; the token becomes `410 Gone`. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun revokeTripShare(tripId: Ulid)
 
     /**
@@ -58,9 +64,11 @@ public interface SafetyApi {
      * **Unauthenticated by contract.** `404 token-unknown`, `410 token-expired-or-revoked` and
      * `429 rate-limited` are the whole error surface — no PII beyond what the shared view carries.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getSharedTrip(token: String): SharedTripView
 
     /** `POST /v1/reports/vehicle` — report a vehicle or its driver. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun reportVehicle(request: ReportVehicleRequest, idempotencyKey: String? = null): VehicleReport
 
     /**
@@ -69,14 +77,17 @@ public interface SafetyApi {
      * Feeds reputation-svc's `block_status` (D-04, E-07), which dispatch consults before it
      * offers.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun blockDriver(driverId: Ulid, request: BlockDriverRequest, idempotencyKey: String? = null)
 
     /** `DELETE /v1/drivers/{driverId}/block` — lift the block. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun unblockDriver(driverId: Ulid)
 }
 
 internal class KtorSafetyApi(private val transport: ApiTransport) : SafetyApi {
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun triggerSos(request: TriggerSosRequest, idempotencyKey: String?): SosDispatched =
         transport.apiPost(
             service = SERVICE,
@@ -86,16 +97,20 @@ internal class KtorSafetyApi(private val transport: ApiTransport) : SafetyApi {
             attested = true,
         ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listSosHistory(userId: Ulid, page: PageRequest): Page<SosEvent> =
         transport.apiGet(SERVICE, "listSosHistory", "/v1/sos/$userId/history") { pageParameters(page) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun createTripShare(tripId: Ulid, idempotencyKey: String?): TripShareLink =
         transport.apiPost(SERVICE, "createTripShare", "$TRIP_SHARE_PATH/$tripId", idempotencyKey).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun revokeTripShare(tripId: Ulid) {
         transport.apiDelete(SERVICE, "revokeTripShare", "$TRIP_SHARE_PATH/$tripId")
     }
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getSharedTrip(token: String): SharedTripView = transport.apiGet(
         service = SERVICE,
         operationId = "getSharedTrip",
@@ -103,15 +118,18 @@ internal class KtorSafetyApi(private val transport: ApiTransport) : SafetyApi {
         credential = Credential.NONE,
     ).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun reportVehicle(request: ReportVehicleRequest, idempotencyKey: String?): VehicleReport =
         transport.apiPost(SERVICE, "reportVehicle", "/v1/reports/vehicle", idempotencyKey) {
             jsonBody(request)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun blockDriver(driverId: Ulid, request: BlockDriverRequest, idempotencyKey: String?) {
         transport.apiPost(SERVICE, "blockDriver", blockPath(driverId), idempotencyKey) { jsonBody(request) }
     }
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun unblockDriver(driverId: Ulid) {
         transport.apiDelete(SERVICE, "unblockDriver", blockPath(driverId))
     }

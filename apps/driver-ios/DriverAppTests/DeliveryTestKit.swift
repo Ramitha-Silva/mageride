@@ -74,7 +74,7 @@ func lockedFailure() -> NSError {
         latestVersion: nil,
         isMandatory: nil
     )
-    return NSError(domain: "KotlinException", code: 0, userInfo: ["KotlinException": MageRideErrorLocked(problem: problem)])
+    return NSError(domain: "KotlinException", code: 0, userInfo: ["KotlinException": MageRideError.Locked(problem: problem)])
 }
 
 /// `400 invalid-otp` — a rejected code, which spends one of the five.
@@ -94,7 +94,7 @@ func invalidOtpFailure() -> NSError {
     return NSError(
         domain: "KotlinException",
         code: 0,
-        userInfo: ["KotlinException": MageRideErrorBadRequest(problem: problem)]
+        userInfo: ["KotlinException": MageRideError.BadRequest(problem: problem)]
     )
 }
 
@@ -133,7 +133,7 @@ final class FakeDeliveryRepository: DeliveryRepository {
     func verifyPickup(rideId: String, otp: String) async throws -> RideStateSnapshot {
         pickupOtps.append(otp)
         try throwIfProgrammed()
-        return nextMove ?? moved(RideState.inProgress, 4)
+        return nextMove ?? moved(RideState.inprogress, 4)
     }
 
     func verifyDelivery(rideId: String, otp: String) async throws -> RideStateSnapshot {

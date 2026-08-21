@@ -5,9 +5,11 @@ import io.ktor.client.request.parameter
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.encodeURLPathPart
+import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.FileUpload
+import lk.mageride.shared.data.api.MageRideError
 import lk.mageride.shared.data.api.apiGet
 import lk.mageride.shared.data.api.apiPost
 import lk.mageride.shared.data.api.decode
@@ -43,6 +45,7 @@ import lk.mageride.shared.data.models.transit.TransitRoute
 public interface TransitApi {
 
     /** `GET /v1/transit/options` — bus and train itineraries between two points. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getTransitOptions(
         fromLat: Double,
         fromLng: Double,
@@ -56,9 +59,11 @@ public interface TransitApi {
      * @param routeId GTFS `route_id` from the active feed.
      * @param lat Optional caller position, so the response can name the nearest stops.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getTransitRoute(routeId: String, lat: Double? = null, lng: Double? = null): TransitRoute
 
     /** `GET /v1/geo/parse-maps-link` — resolve a pasted Google Maps link to a point (AL-20). */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun parseMapsLink(url: String): ParsedMapsLink
 
     /**
@@ -67,15 +72,19 @@ public interface TransitApi {
      * Deduped on sha256: re-uploading a byte-identical feed is `409 feed-duplicate`, not a second
      * version. `202`; poll [getGtfsUpload].
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun uploadGtfsFeed(file: FileUpload, idempotencyKey: String? = null): GtfsUploadAccepted
 
     /** `GET /v1/admin/transit/gtfs/uploads/{feedVersionId}` — validation progress and counts. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getGtfsUpload(feedVersionId: Ulid): FeedUploadStatus
 
     /** `GET /v1/admin/transit/gtfs/uploads/{feedVersionId}/report` — errors and warnings, as JSON. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getGtfsValidationReport(feedVersionId: Ulid): GtfsValidationReport
 
     /** The same report as CSV, for an operator who wants it in a spreadsheet. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getGtfsValidationReportCsv(feedVersionId: Ulid): String
 
     /**
@@ -83,9 +92,11 @@ public interface TransitApi {
      *
      * `409 feed-not-validated` before validation finishes; `409 feed-already-active` if it is.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun activateGtfsFeed(feedVersionId: Ulid, idempotencyKey: String? = null): FeedVersion
 
     /** `GET /v1/admin/transit/gtfs/versions` — every feed version, newest first. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listGtfsVersions(page: PageRequest = PageRequest.FIRST): Page<FeedVersion>
 
     /**
@@ -97,6 +108,7 @@ public interface TransitApi {
      *
      * @return The signed URL from the `Location` header.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun downloadGtfsFeedUrl(feedVersionId: Ulid): String
 
     /**
@@ -105,6 +117,7 @@ public interface TransitApi {
      * Superseded as an operator action by upload + activate (AL-54); the contract keeps it, so
      * this client does too.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun importGtfsFeed(
         request: ImportGtfsFeedRequest,
         idempotencyKey: String? = null,
@@ -114,6 +127,7 @@ public interface TransitApi {
 @Suppress("TooManyFunctions")
 internal class KtorTransitApi(private val transport: ApiTransport) : TransitApi {
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getTransitOptions(
         fromLat: Double,
         fromLng: Double,
@@ -126,36 +140,43 @@ internal class KtorTransitApi(private val transport: ApiTransport) : TransitApi 
         parameter("toLng", toLng)
     }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getTransitRoute(routeId: String, lat: Double?, lng: Double?): TransitRoute =
         transport.apiGet(SERVICE, "getTransitRoute", "/v1/transit/routes/${routeId.encodeURLPathPart()}") {
             parameter("lat", lat)
             parameter("lng", lng)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun parseMapsLink(url: String): ParsedMapsLink =
         transport.apiGet(SERVICE, "parseMapsLink", "/v1/geo/parse-maps-link") {
             parameter("url", url)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun uploadGtfsFeed(file: FileUpload, idempotencyKey: String?): GtfsUploadAccepted =
         transport.apiPost(SERVICE, "uploadGtfsFeed", UPLOADS_PATH, idempotencyKey) {
             multipartBody { filePart("file", file) }
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getGtfsUpload(feedVersionId: Ulid): FeedUploadStatus =
         transport.apiGet(SERVICE, "getGtfsUpload", "$UPLOADS_PATH/$feedVersionId").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getGtfsValidationReport(feedVersionId: Ulid): GtfsValidationReport =
         transport.apiGet(SERVICE, "getGtfsValidationReport", "$UPLOADS_PATH/$feedVersionId/report") {
             parameter("format", REPORT_FORMAT_JSON)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getGtfsValidationReportCsv(feedVersionId: Ulid): String =
         transport.apiGet(SERVICE, "getGtfsValidationReport", "$UPLOADS_PATH/$feedVersionId/report") {
             parameter("format", REPORT_FORMAT_CSV)
             accept(ContentType.Text.CSV)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun activateGtfsFeed(feedVersionId: Ulid, idempotencyKey: String?): FeedVersion =
         transport.apiPost(
             service = SERVICE,
@@ -164,14 +185,17 @@ internal class KtorTransitApi(private val transport: ApiTransport) : TransitApi 
             idempotencyKey = idempotencyKey,
         ).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listGtfsVersions(page: PageRequest): Page<FeedVersion> =
         transport.apiGet(SERVICE, "listGtfsVersions", VERSIONS_PATH) { pageParameters(page) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun downloadGtfsFeedUrl(feedVersionId: Ulid): String =
         transport.apiGet(SERVICE, "downloadGtfsFeed", "$VERSIONS_PATH/$feedVersionId/download")
             .headers[HttpHeaders.Location]
             .orEmpty()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun importGtfsFeed(
         request: ImportGtfsFeedRequest,
         idempotencyKey: String?,

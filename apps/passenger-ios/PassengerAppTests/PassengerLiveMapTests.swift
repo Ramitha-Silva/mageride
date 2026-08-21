@@ -170,7 +170,7 @@ final class PassengerLiveMapTests: XCTestCase {
         XCTAssertNotNil(snapshot, "the recovery snapshots")
         XCTAssertLessThan(firstJoin ?? .max, snapshot ?? .min, "JoinGeocells must precede GET /v1/nearby")
         XCTAssertEqual(snapshots.calls.first?.radiusMetres, LiveHubInbox.snapshotRadiusMetres)
-        XCTAssertEqual(snapshots.calls.first?.point.lat, LiveFixtures.colombo.lat, accuracy: 0.0001)
+        XCTAssertEqual(snapshots.calls.first?.point.lat ?? .nan, LiveFixtures.colombo.lat, accuracy: 0.0001)
     }
 
     /// The `GET /v1/nearby` radius is the R-06 view's own ~3 km, inside the contract's 100–20 000 m
@@ -198,7 +198,8 @@ final class PassengerLiveMapTests: XCTestCase {
         await eventually("rejoined") { await self.transport.methods.contains(self.joinMethod) }
 
         let methods = await transport.methods
-        XCTAssertEqual(await transport.cells(of: joinMethod)?.count, 19)
+        let joinedCells = await transport.cells(of: joinMethod)
+        XCTAssertEqual(joinedCells?.count, 19)
         XCTAssertTrue(methods.contains(subscribeRideMethod), "the ride group is rejoined")
         XCTAssertTrue(methods.contains(subscribeLocRequestMethod), "the location request is rejoined")
     }

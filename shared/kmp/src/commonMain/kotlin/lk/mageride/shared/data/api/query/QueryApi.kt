@@ -2,8 +2,10 @@ package lk.mageride.shared.data.api.query
 
 import io.ktor.client.request.parameter
 import io.ktor.http.encodeURLPathPart
+import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
+import lk.mageride.shared.data.api.MageRideError
 import lk.mageride.shared.data.api.apiGet
 import lk.mageride.shared.data.api.decode
 import lk.mageride.shared.data.api.pageParameters
@@ -44,6 +46,7 @@ public interface QueryApi {
      * @param types Filter by vehicle type (US-7.7); sent comma-joined, as `explode: false` asks.
      * @param modes Filter by operating mode.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getNearbyVehicles(
         lat: Double,
         lng: Double,
@@ -53,6 +56,7 @@ public interface QueryApi {
     ): NearbyVehiclesResponse
 
     /** `GET /v1/transport-options` — every way of making this journey, ranked. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getTransportOptions(
         toLat: Double,
         toLng: Double,
@@ -61,18 +65,23 @@ public interface QueryApi {
     ): TransportOptionsResponse
 
     /** `GET /v1/routes/{routeNumber}/buses` — live buses on a numbered route. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getBusesOnRoute(routeNumber: String): NearbyVehiclesResponse
 
     /** `GET /v1/trips/{userId}` — every trip this user took, across all three modes. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listTrips(userId: Ulid, page: PageRequest = PageRequest.FIRST): Page<TripSummary>
 
     /** `GET /v1/trips/{userId}/{tripId}` — one trip with its polyline and rating. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getTrip(userId: Ulid, tripId: Ulid): TripDetail
 
     /** `GET /v1/earnings/{driverId}` — gross, fees, penalties and net for a period. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getDriverEarnings(driverId: Ulid, period: EarningsPeriod? = null): EarningsSummary
 
     /** `GET /v1/earnings/{driverId}/sessions` — per-trip earnings inside a date range. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listEarningSessions(
         driverId: Ulid,
         from: BusinessDate? = null,
@@ -90,6 +99,7 @@ public interface QueryApi {
      *   is what a caller that has not been updated still gets — deliberately not the same as
      *   asking for English.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun searchPlaces(
         query: String,
         lat: Double? = null,
@@ -104,11 +114,13 @@ public interface QueryApi {
      * @param lang As [searchPlaces], including the partial coverage: a dropped pin comes back with
      *   its town and district in the asked-for script and its road in Latin.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun reverseGeocode(lat: Double, lng: Double, lang: Language? = null): GeocodedPlace
 }
 
 internal class KtorQueryApi(private val transport: ApiTransport) : QueryApi {
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getNearbyVehicles(
         lat: Double,
         lng: Double,
@@ -123,6 +135,7 @@ internal class KtorQueryApi(private val transport: ApiTransport) : QueryApi {
         parameter("modes", modes?.joinToString(",") { it.name })
     }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getTransportOptions(
         toLat: Double,
         toLng: Double,
@@ -135,20 +148,25 @@ internal class KtorQueryApi(private val transport: ApiTransport) : QueryApi {
         parameter("fromLng", fromLng)
     }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getBusesOnRoute(routeNumber: String): NearbyVehiclesResponse =
         transport.apiGet(SERVICE, "getBusesOnRoute", "/v1/routes/${routeNumber.encodeURLPathPart()}/buses").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listTrips(userId: Ulid, page: PageRequest): Page<TripSummary> =
         transport.apiGet(SERVICE, "listTrips", "$TRIPS_PATH/$userId") { pageParameters(page) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getTrip(userId: Ulid, tripId: Ulid): TripDetail =
         transport.apiGet(SERVICE, "getTrip", "$TRIPS_PATH/$userId/$tripId").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getDriverEarnings(driverId: Ulid, period: EarningsPeriod?): EarningsSummary =
         transport.apiGet(SERVICE, "getDriverEarnings", "$EARNINGS_PATH/$driverId") {
             parameter("period", period?.wire)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listEarningSessions(
         driverId: Ulid,
         from: BusinessDate?,
@@ -160,6 +178,7 @@ internal class KtorQueryApi(private val transport: ApiTransport) : QueryApi {
         pageParameters(page)
     }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun searchPlaces(
         query: String,
         lat: Double?,
@@ -174,6 +193,7 @@ internal class KtorQueryApi(private val transport: ApiTransport) : QueryApi {
         parameter("lang", lang?.wire)
     }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun reverseGeocode(lat: Double, lng: Double, lang: Language?): GeocodedPlace =
         transport.apiGet(SERVICE, "reverseGeocode", "/v1/geo/reverse") {
             parameter("lat", lat)

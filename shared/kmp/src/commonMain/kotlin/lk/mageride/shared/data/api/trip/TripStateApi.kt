@@ -1,7 +1,9 @@
 package lk.mageride.shared.data.api.trip
 
+import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
+import lk.mageride.shared.data.api.MageRideError
 import lk.mageride.shared.data.api.apiGet
 import lk.mageride.shared.data.api.apiPost
 import lk.mageride.shared.data.api.decode
@@ -33,9 +35,11 @@ public interface TripStateApi {
      * `409 driver-already-live` when this driver already has a session running; a vehicle that
      * has not cleared onboarding is `403 vehicle-not-approved`.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun startSession(request: StartSessionRequest, idempotencyKey: String? = null): Session
 
     /** `POST /v1/sessions/{sessionId}/end` — stop tracking. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun endSession(sessionId: Ulid, idempotencyKey: String? = null): Session
 
     /**
@@ -44,6 +48,7 @@ public interface TripStateApi {
      * Only inside the window the session reports as `restartableUntil`; after that it is
      * `410 Gone`.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun restartSession(sessionId: Ulid, idempotencyKey: String? = null): Session
 
     /**
@@ -52,9 +57,11 @@ public interface TripStateApi {
      * `null` is the ordinary answer for a parked vehicle: the contract's response is
      * `oneOf(Session, null)`, not a `404`.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getActiveSession(vehicleId: Ulid): Session?
 
     /** `POST /v1/sessions/{sessionId}/rating` — a passenger rates the journey. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun ratePassengerJourney(
         sessionId: Ulid,
         request: RatingInput,
@@ -62,6 +69,7 @@ public interface TripStateApi {
     ): Rating
 
     /** `POST /v1/sessions/{sessionId}/driver-rating` — the driver rates a named passenger. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun rateSessionPassenger(
         sessionId: Ulid,
         request: DriverRatingInput,
@@ -73,6 +81,7 @@ public interface TripStateApi {
      *
      * **Service-to-service (mTLS).** Present for contract coverage; not reachable from an app.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun autoEndSession(
         sessionId: Ulid,
         request: AutoEndSessionRequest,
@@ -82,21 +91,26 @@ public interface TripStateApi {
 
 internal class KtorTripStateApi(private val transport: ApiTransport) : TripStateApi {
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun startSession(request: StartSessionRequest, idempotencyKey: String?): Session =
         transport.apiPost(SERVICE, "startSession", "$SESSIONS_PATH/start", idempotencyKey) {
             jsonBody(request)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun endSession(sessionId: Ulid, idempotencyKey: String?): Session =
         transport.apiPost(SERVICE, "endSession", "$SESSIONS_PATH/$sessionId/end", idempotencyKey).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun restartSession(sessionId: Ulid, idempotencyKey: String?): Session =
         transport.apiPost(SERVICE, "restartSession", "$SESSIONS_PATH/$sessionId/restart", idempotencyKey).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getActiveSession(vehicleId: Ulid): Session? =
         transport.apiGet(SERVICE, "getActiveSession", "$SESSIONS_PATH/$vehicleId/active")
             .decodeOrNull(transport.json)
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun ratePassengerJourney(sessionId: Ulid, request: RatingInput, idempotencyKey: String?): Rating =
         transport.apiPost(
             service = SERVICE,
@@ -105,6 +119,7 @@ internal class KtorTripStateApi(private val transport: ApiTransport) : TripState
             idempotencyKey = idempotencyKey,
         ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun rateSessionPassenger(
         sessionId: Ulid,
         request: DriverRatingInput,
@@ -116,6 +131,7 @@ internal class KtorTripStateApi(private val transport: ApiTransport) : TripState
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun autoEndSession(
         sessionId: Ulid,
         request: AutoEndSessionRequest,

@@ -8,6 +8,7 @@ import XCTest
 /// components later — a drawer reintroduced by a screen group that wanted one, a route renamed on
 /// one platform only. Asserting the tables is what makes either a build failure rather than a bug
 /// report.
+@MainActor
 final class NavigationShellTests: XCTestCase {
 
     func testTheTabBarIsTheFourTabsAndMenuIsOneOfThem() {

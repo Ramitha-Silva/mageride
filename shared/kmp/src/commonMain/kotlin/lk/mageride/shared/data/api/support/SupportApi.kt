@@ -2,9 +2,11 @@ package lk.mageride.shared.data.api.support
 
 import io.ktor.client.call.body
 import io.ktor.client.request.parameter
+import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.FileUpload
+import lk.mageride.shared.data.api.MageRideError
 import lk.mageride.shared.data.api.apiGet
 import lk.mageride.shared.data.api.apiPost
 import lk.mageride.shared.data.api.decode
@@ -33,18 +35,23 @@ import lk.mageride.shared.data.models.support.UploadedScreenshot
 public interface SupportApi {
 
     /** `GET /v1/support/faq` — article summaries, optionally narrowed to one category. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listFaqArticles(lang: Language? = null, category: String? = null): FaqListResponse
 
     /** `GET /v1/support/faq/{articleId}` — one article's body. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getFaqArticle(articleId: Ulid, lang: Language? = null): FaqArticle
 
     /** `POST /v1/support/tickets` — raise a ticket, optionally against a trip. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun createSupportTicket(request: CreateSupportTicketRequest, idempotencyKey: String? = null): Ticket
 
     /** `GET /v1/support/tickets/{userId}` — this user's tickets, newest first. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listSupportTickets(userId: Ulid, page: PageRequest = PageRequest.FIRST): Page<Ticket>
 
     /** `GET /v1/support/tickets/{userId}/{ticketId}` — one ticket, with the admin's reply. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getSupportTicket(userId: Ulid, ticketId: Ulid): TicketDetail
 
     /**
@@ -55,6 +62,7 @@ public interface SupportApi {
      * id the ticket links. **No public URL is minted** — the user reads it back through the
      * short-lived signed link on the ticket detail.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun uploadSupportScreenshot(file: FileUpload, idempotencyKey: String? = null): UploadedScreenshot
 
     /**
@@ -65,11 +73,13 @@ public interface SupportApi {
      * in every proxy log on the way. A bad signature, an expired one and an unknown id all answer
      * `403`, so a forged link tells its author nothing.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getSupportScreenshot(uploadId: Ulid, expires: Long, signature: String): ByteArray
 }
 
 internal class KtorSupportApi(private val transport: ApiTransport) : SupportApi {
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun uploadSupportScreenshot(file: FileUpload, idempotencyKey: String?): UploadedScreenshot =
         transport.apiPost(
             service = ApiService.SUPPORT,
@@ -78,31 +88,37 @@ internal class KtorSupportApi(private val transport: ApiTransport) : SupportApi 
             idempotencyKey = idempotencyKey,
         ) { multipartBody { filePart("file", file) } }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getSupportScreenshot(uploadId: Ulid, expires: Long, signature: String): ByteArray =
         transport.apiGet(ApiService.SUPPORT, "getSupportScreenshot", "/v1/support/screenshots/$uploadId") {
             parameter("expires", expires)
             parameter("signature", signature)
         }.body()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listFaqArticles(lang: Language?, category: String?): FaqListResponse =
         transport.apiGet(SERVICE, "listFaqArticles", FAQ_PATH) {
             parameter("lang", lang?.wire)
             parameter("category", category)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getFaqArticle(articleId: Ulid, lang: Language?): FaqArticle =
         transport.apiGet(SERVICE, "getFaqArticle", "$FAQ_PATH/$articleId") {
             parameter("lang", lang?.wire)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun createSupportTicket(request: CreateSupportTicketRequest, idempotencyKey: String?): Ticket =
         transport.apiPost(SERVICE, "createSupportTicket", TICKETS_PATH, idempotencyKey) {
             jsonBody(request)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listSupportTickets(userId: Ulid, page: PageRequest): Page<Ticket> =
         transport.apiGet(SERVICE, "listSupportTickets", "$TICKETS_PATH/$userId") { pageParameters(page) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getSupportTicket(userId: Ulid, ticketId: Ulid): TicketDetail =
         transport.apiGet(SERVICE, "getSupportTicket", "$TICKETS_PATH/$userId/$ticketId").decode()
 

@@ -35,16 +35,16 @@ final class ActiveRideModelTests: XCTestCase {
         XCTAssertEqual(model.state.forwardActionKey, "ride_arrived")
         XCTAssertEqual(model.state.navigationHintKey, "ride_navigate_pickup")
 
-        rides.detailToReturn = rideDetail(state: RideState.driverArrived)
+        rides.detailToReturn = rideDetail(state: RideState.driverarrived)
         await model.refresh()
         XCTAssertEqual(model.state.forwardActionKey, "ride_start")
 
-        rides.detailToReturn = rideDetail(state: RideState.inProgress)
+        rides.detailToReturn = rideDetail(state: RideState.inprogress)
         await model.refresh()
         XCTAssertEqual(model.state.forwardActionKey, "ride_complete")
         XCTAssertEqual(model.state.navigationHintKey, "ride_navigate_drop")
 
-        rides.detailToReturn = rideDetail(state: RideState.cashSettled)
+        rides.detailToReturn = rideDetail(state: RideState.cashsettled)
         await model.refresh()
         XCTAssertNil(model.state.forwardActionKey)
     }
@@ -60,12 +60,12 @@ final class ActiveRideModelTests: XCTestCase {
 
         XCTAssertEqual(rides.arrived, [3])
         XCTAssertEqual(model.state.version, 4, "the response IS the new version; no second read")
-        XCTAssertEqual(model.state.rideState, RideState.driverArrived)
+        XCTAssertEqual(model.state.rideState, RideState.driverarrived)
     }
 
     /// **Start raises the OTP entry rather than sending anything.**
     func testStartOpensTheOtpSheetAndTheVerifySendsIt() async {
-        rides.detailToReturn = rideDetail(state: RideState.driverArrived, version: 5)
+        rides.detailToReturn = rideDetail(state: RideState.driverarrived, version: 5)
         let model = makeModel()
         await model.refresh()
 
@@ -85,7 +85,7 @@ final class ActiveRideModelTests: XCTestCase {
     /// **P-07** — a package has no rider to hold a start OTP, so the sender's pickup OTP goes to the
     /// other endpoint. The repository picks; the screen does not have to know.
     func testAPackageStartsThroughThePickupOtpCommand() async {
-        rides.detailToReturn = rideDetail(state: RideState.driverArrived, kind: RideKind.package)
+        rides.detailToReturn = rideDetail(state: RideState.driverarrived, kind: RideKind.package)
         let model = makeModel()
         await model.refresh()
 
@@ -111,13 +111,13 @@ final class ActiveRideModelTests: XCTestCase {
 
     /// A driver-QR ride is **not over** at `PaymentPending`: the confirm sheet is what settles it.
     func testACompletedDriverQrRideRaisesTheConfirmSheetInsteadOfFinishing() async {
-        rides.detailToReturn = rideDetail(state: RideState.inProgress, paymentMethod: RidePaymentMethod.lankaqr)
+        rides.detailToReturn = rideDetail(state: RideState.inprogress, paymentMethod: RidePaymentMethod.lankaqr)
         let model = makeModel()
         await model.refresh()
 
         await model.advance()
 
-        XCTAssertEqual(model.state.rideState, RideState.paymentPending)
+        XCTAssertEqual(model.state.rideState, RideState.paymentpending)
         XCTAssertTrue(model.state.awaitingQrConfirm)
         XCTAssertEqual(model.state.sheet, .qrConfirm)
         XCTAssertFalse(model.state.isFinished, "the ride is not over until the driver answers")
@@ -125,7 +125,7 @@ final class ActiveRideModelTests: XCTestCase {
 
     /// A **cash** ride at `PaymentPending` has nothing to attest and simply ends.
     func testACashRideNeverRaisesTheConfirmSheet() async {
-        rides.detailToReturn = rideDetail(state: RideState.inProgress, paymentMethod: RidePaymentMethod.cash)
+        rides.detailToReturn = rideDetail(state: RideState.inprogress, paymentMethod: RidePaymentMethod.cash)
         let model = makeModel()
         await model.refresh()
 
@@ -136,7 +136,7 @@ final class ActiveRideModelTests: XCTestCase {
     }
 
     func testConfirmingTheQrPaymentSettlesTheRideAndAsksOnlyOnce() async {
-        rides.detailToReturn = rideDetail(state: RideState.paymentPending, paymentMethod: RidePaymentMethod.lankaqr)
+        rides.detailToReturn = rideDetail(state: RideState.paymentpending, paymentMethod: RidePaymentMethod.lankaqr)
         let model = makeModel()
         await model.refresh()
         XCTAssertTrue(model.state.awaitingQrConfirm)
@@ -214,7 +214,7 @@ final class ActiveRideModelTests: XCTestCase {
 
     /// US-12.8's alarm is a screen with a confirmation, not a button that fires.
     func testSosNavigatesRatherThanRaisingTheAlarmHere() async {
-        rides.detailToReturn = rideDetail(state: RideState.inProgress)
+        rides.detailToReturn = rideDetail(state: RideState.inprogress)
         let model = makeModel()
         await model.refresh()
 
@@ -234,11 +234,11 @@ final class ActiveRideModelTests: XCTestCase {
         await model.refresh()
         XCTAssertEqual(model.state.geofence?.lat, testHere.lat)
 
-        rides.detailToReturn = rideDetail(state: RideState.inProgress)
+        rides.detailToReturn = rideDetail(state: RideState.inprogress)
         await model.refresh()
         XCTAssertEqual(model.state.geofence?.lat, testThere.lat)
 
-        rides.detailToReturn = rideDetail(state: RideState.cashSettled)
+        rides.detailToReturn = rideDetail(state: RideState.cashsettled)
         await model.refresh()
         XCTAssertNil(model.state.geofence)
     }
@@ -249,18 +249,18 @@ final class ActiveRideModelTests: XCTestCase {
     /// Asserted on the state directly rather than through the model, because reproducing it through the
     /// model would mean waiting five seconds for a poll — and the rule is the state's, not the loop's.
     func testTerminalIsSticky() {
-        var state = ActiveRideState(ride: rideDetail(state: RideState.inProgress))
-        state.advance(to: RideStateSnapshot(state: RideState.cashSettled, version: 8, offerExpiresAt: nil))
+        var state = ActiveRideState(ride: rideDetail(state: RideState.inprogress))
+        state.advance(to: RideStateSnapshot(state: RideState.cashsettled, version: 8, offerExpiresAt: nil))
         XCTAssertTrue(state.isFinished)
 
-        state.advance(to: RideStateSnapshot(state: RideState.inProgress, version: 9, offerExpiresAt: nil))
+        state.advance(to: RideStateSnapshot(state: RideState.inprogress, version: 9, offerExpiresAt: nil))
         XCTAssertTrue(state.isFinished, "a late poll must not resurrect a ride the driver has left")
     }
 
     /// A **package** belongs to SCR-DI-016, which polls it itself; two loops folding server states onto
     /// one ride would race each other.
     func testAPackageRideIsNotPolledHere() async {
-        rides.detailToReturn = rideDetail(state: RideState.inProgress, kind: RideKind.package)
+        rides.detailToReturn = rideDetail(state: RideState.inprogress, kind: RideKind.package)
         let model = makeModel()
         await model.refresh()
 
@@ -269,12 +269,12 @@ final class ActiveRideModelTests: XCTestCase {
     }
 
     func testAFinishedOrBusyRideIsNotPolled() async {
-        rides.detailToReturn = rideDetail(state: RideState.inProgress)
+        rides.detailToReturn = rideDetail(state: RideState.inprogress)
         let model = makeModel()
         await model.refresh()
         XCTAssertTrue(model.state.isPollable)
 
-        rides.detailToReturn = rideDetail(state: RideState.cashSettled)
+        rides.detailToReturn = rideDetail(state: RideState.cashsettled)
         await model.refresh()
         XCTAssertFalse(model.state.isPollable)
     }

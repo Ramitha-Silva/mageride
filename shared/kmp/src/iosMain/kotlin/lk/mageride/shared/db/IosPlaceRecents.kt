@@ -80,7 +80,9 @@ public fun rememberRecentPlace(database: PassengerDb, place: GeocodedPlace, nowM
     database.transaction {
         val known = queries.selectRecent(Long.MAX_VALUE).executeAsList().any { it.id == id }
         if (known) {
-            queries.touch(last_used_at = now, id = id)
+            // `touch` rewrites the label too (PlaceRecents.sq): a place chosen again is a fresh
+            // geocode of the same coordinate, so it carries the current language (D-26).
+            queries.touch(last_used_at = now, label = place.displayName, line1 = place.line1, id = id)
         } else {
             queries.insert(
                 id = id,

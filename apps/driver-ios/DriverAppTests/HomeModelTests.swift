@@ -16,7 +16,7 @@ final class HomeModelTests: XCTestCase {
     private var journeys: FakeJourneyRepository!
     private var rides: FakeActiveRideRepository!
     private var location: FakeDriverLocationSource!
-    private var publisher: FakePositionPublisher!
+    private var publisher: FakeOrderedPositionPublisher!
 
     override func setUp() {
         super.setUp()
@@ -25,7 +25,7 @@ final class HomeModelTests: XCTestCase {
         journeys = FakeJourneyRepository()
         rides = FakeActiveRideRepository()
         location = FakeDriverLocationSource()
-        publisher = FakePositionPublisher()
+        publisher = FakeOrderedPositionPublisher()
     }
 
     private func makeModel() -> HomeModel {
@@ -238,7 +238,7 @@ final class HomeModelTests: XCTestCase {
 
     func testARideAlreadyInHandIsRestoredOnTheFirstRead() async {
         identity.live = LiveVehicle(vehicles: [approvedTuk()], live: approvedTuk())
-        rides.activeRide = rideDetail(state: RideState.inProgress)
+        rides.activeRide = rideDetail(state: RideState.inprogress)
 
         let model = makeModel()
         await model.refresh()
@@ -271,6 +271,7 @@ final class HomeModelTests: XCTestCase {
 
 /// The derived answers on ``DashboardStanding`` — US-9.1's gate and US-9.9's nudge, which two banners and
 /// one offer note are all drawn from.
+@MainActor
 final class DashboardStandingTests: XCTestCase {
 
     /// The first trip of the day is free, so the gate bites on the *next* one.

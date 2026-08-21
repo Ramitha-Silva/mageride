@@ -1,8 +1,10 @@
 package lk.mageride.shared.data.api.ride
 
+import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.FileUpload
+import lk.mageride.shared.data.api.MageRideError
 import lk.mageride.shared.data.api.apiGet
 import lk.mageride.shared.data.api.apiPost
 import lk.mageride.shared.data.api.decode
@@ -73,18 +75,23 @@ public interface RideApi {
      * `202`: the ride exists and dispatch has started. `409 active-ride-exists` when the
      * passenger already has one in flight; `400 invalid-fare-token` when the estimate has aged out.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun requestRide(request: RideRequest, idempotencyKey: String? = null): RequestRideResponse
 
     /** `GET /v1/rides/history` — completed rides, newest first. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listRideHistory(page: PageRequest = PageRequest.FIRST): Page<RideHistoryRow>
 
     /** `GET /v1/rides/passenger/{passengerId}/active` — the live ride, or `null`. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getActivePassengerRide(passengerId: Ulid): RideDetail?
 
     /** `GET /v1/rides/driver/{driverId}/active` — the live ride, or `null`. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getActiveDriverRide(driverId: Ulid): RideDetail?
 
     /** `GET /v1/rides/{rideId}` — the full ride. `403 not-ride-participant` for anyone else. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getRide(rideId: Ulid): RideDetail
 
     /**
@@ -93,6 +100,7 @@ public interface RideApi {
      * The cheap poll for a screen that is waiting on a transition; the live path is the SignalR
      * hub (D3' §3.1), and this is its fallback when the backplane is down (D6' §8.3).
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getRideState(rideId: Ulid): RideStateSnapshot
 
     /**
@@ -101,6 +109,7 @@ public interface RideApi {
      * The atomic accept: exactly one driver wins. See the interface KDoc for the two ways of
      * losing. `402 insufficient-wallet` is the D-08 daily-fee gate, not a dispatch failure.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun acceptRideOffer(
         rideId: Ulid,
         driverId: Ulid,
@@ -109,6 +118,7 @@ public interface RideApi {
     ): AcceptRideOfferResponse
 
     /** `POST /v1/rides/{rideId}/offer/{driverId}/decline` — pass on the offer. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun declineRideOffer(
         rideId: Ulid,
         driverId: Ulid,
@@ -117,6 +127,7 @@ public interface RideApi {
     ): RideStateChange
 
     /** `POST /v1/rides/{rideId}/arrive` — the driver is at the pickup. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun markDriverArrived(
         rideId: Ulid,
         request: VersionedCommand,
@@ -128,6 +139,7 @@ public interface RideApi {
      *
      * `423 otp-locked` once the attempt budget is spent.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun startRide(
         rideId: Ulid,
         request: StartRideRequest,
@@ -135,6 +147,7 @@ public interface RideApi {
     ): RideStateChange
 
     /** `POST /v1/rides/{rideId}/complete` — end the ride; the response carries the final fare. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun completeRide(
         rideId: Ulid,
         request: VersionedCommand,
@@ -147,6 +160,7 @@ public interface RideApi {
      * The response's `penalty` is the D-05 cross-trip settlement: a cancellation fee can be
      * carried to the passenger's next trip rather than charged now.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun cancelRide(
         rideId: Ulid,
         request: CancelRideRequest,
@@ -154,6 +168,7 @@ public interface RideApi {
     ): CancelRideResponse
 
     /** `POST /v1/rides/{rideId}/dispute` — raise a support ticket against a completed ride. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun disputeRide(
         rideId: Ulid,
         request: DisputeRideRequest,
@@ -161,6 +176,7 @@ public interface RideApi {
     ): TicketRef
 
     /** `POST /v1/rides/{rideId}/package/pickup-otp` — the sender's OTP releases the package. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun verifyPackagePickupOtp(
         rideId: Ulid,
         request: OtpAttempt,
@@ -168,6 +184,7 @@ public interface RideApi {
     ): RideStateChange
 
     /** `POST /v1/rides/{rideId}/package/delivery-otp` — the recipient's OTP accepts it (AL-21). */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun verifyPackageDeliveryOtp(
         rideId: Ulid,
         request: OtpAttempt,
@@ -187,6 +204,7 @@ public interface RideApi {
      * @param lng The other half of that coordinate.
      */
     @Suppress("LongParameterList") // Five multipart parts, and each is one the contract declares.
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun uploadPackageProofPhoto(
         rideId: Ulid,
         file: FileUpload,
@@ -201,6 +219,7 @@ public interface RideApi {
      *
      * `409 payment-already-settled` if this ride has already been paid another way.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun confirmCashOnDelivery(
         rideId: Ulid,
         request: ConfirmCashOnDeliveryRequest,
@@ -212,15 +231,18 @@ public interface RideApi {
      *
      * Attested, and rate limited: `429 loc-request-rate-limited`.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun createLocationRequest(
         request: CreateLocationRequestRequest,
         idempotencyKey: String? = null,
     ): CreateLocationRequestResponse
 
     /** `GET /v1/location-requests/{requestId}` — poll the request's state. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getLocationRequest(requestId: Ulid): LocationRequest
 
     /** `POST /v1/location-requests/{requestId}/confirm` — the rider shares their position. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun confirmLocationRequest(
         requestId: Ulid,
         request: GeoPointWithAccuracy,
@@ -228,6 +250,7 @@ public interface RideApi {
     ): LocationRequest
 
     /** `POST /v1/location-requests/{requestId}/decline` — the rider refuses. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun declineLocationRequest(requestId: Ulid, idempotencyKey: String? = null): LocationRequest
 
     /**
@@ -237,6 +260,7 @@ public interface RideApi {
      * an app. `Requested → Matching`, driven by dispatch because ride-svc is the sole writer of
      * `rides.state` (ADD §11.12).
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun markRideMatching(
         rideId: Ulid,
         request: MarkRideMatchingRequest,
@@ -249,6 +273,7 @@ public interface RideApi {
      * **Service-to-service (`internalKey`).** Present for contract coverage; not reachable from
      * an app. The deadline in [OfferPlaced] is ride-svc's, not the caller's.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun placeRideOffer(
         rideId: Ulid,
         request: PlaceRideOfferRequest,
@@ -262,6 +287,7 @@ public interface RideApi {
      * an app. `Offered → Matching`, bound to `offer_expires_at <= now()` evaluated by Postgres so
      * a sweeper whose clock ran ahead cannot take a driver's window away.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun expireRideOffer(
         rideId: Ulid,
         request: ExpireRideOfferRequest,
@@ -273,6 +299,7 @@ public interface RideApi {
      *
      * **Service-to-service (mTLS).** Present for contract coverage; not reachable from an app.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun systemCancelRide(
         rideId: Ulid,
         request: SystemCancelRideRequest,
@@ -284,6 +311,7 @@ public interface RideApi {
      *
      * **Service-to-service (mTLS).** Present for contract coverage; not reachable from an app.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun notifyPaymentSettled(
         rideId: Ulid,
         request: NotifyPaymentSettledRequest,
@@ -295,12 +323,14 @@ public interface RideApi {
      *
      * **Service-to-service (mTLS).** Present for contract coverage; not reachable from an app.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getRideSagaState(rideId: Ulid): RideSagaState
 }
 
 @Suppress("TooManyFunctions")
 internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun requestRide(request: RideRequest, idempotencyKey: String?): RequestRideResponse =
         transport.apiPost(
             service = SERVICE,
@@ -310,23 +340,29 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
             attested = true,
         ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listRideHistory(page: PageRequest): Page<RideHistoryRow> =
         transport.apiGet(SERVICE, "listRideHistory", "$RIDES_PATH/history") { pageParameters(page) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getActivePassengerRide(passengerId: Ulid): RideDetail? =
         transport.apiGet(SERVICE, "getActivePassengerRide", "$RIDES_PATH/passenger/$passengerId/active")
             .decodeOrNull(transport.json)
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getActiveDriverRide(driverId: Ulid): RideDetail? =
         transport.apiGet(SERVICE, "getActiveDriverRide", "$RIDES_PATH/driver/$driverId/active")
             .decodeOrNull(transport.json)
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getRide(rideId: Ulid): RideDetail =
         transport.apiGet(SERVICE, "getRide", "$RIDES_PATH/$rideId").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getRideState(rideId: Ulid): RideStateSnapshot =
         transport.apiGet(SERVICE, "getRideState", "$RIDES_PATH/$rideId/state").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun acceptRideOffer(
         rideId: Ulid,
         driverId: Ulid,
@@ -340,6 +376,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
         attested = true,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun declineRideOffer(
         rideId: Ulid,
         driverId: Ulid,
@@ -352,6 +389,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun markDriverArrived(
         rideId: Ulid,
         request: VersionedCommand,
@@ -363,6 +401,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun startRide(rideId: Ulid, request: StartRideRequest, idempotencyKey: String?): RideStateChange =
         transport.apiPost(
             service = SERVICE,
@@ -371,6 +410,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
             idempotencyKey = idempotencyKey,
         ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun completeRide(
         rideId: Ulid,
         request: VersionedCommand,
@@ -382,6 +422,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun cancelRide(
         rideId: Ulid,
         request: CancelRideRequest,
@@ -393,6 +434,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun disputeRide(rideId: Ulid, request: DisputeRideRequest, idempotencyKey: String?): TicketRef =
         transport.apiPost(
             service = SERVICE,
@@ -401,6 +443,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
             idempotencyKey = idempotencyKey,
         ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun verifyPackagePickupOtp(
         rideId: Ulid,
         request: OtpAttempt,
@@ -412,6 +455,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun verifyPackageDeliveryOtp(
         rideId: Ulid,
         request: OtpAttempt,
@@ -424,6 +468,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
     ) { jsonBody(request) }.decode()
 
     @Suppress("LongParameterList") // The interface's; see its KDoc.
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun uploadPackageProofPhoto(
         rideId: Ulid,
         file: FileUpload,
@@ -445,6 +490,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
         }
     }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun confirmCashOnDelivery(
         rideId: Ulid,
         request: ConfirmCashOnDeliveryRequest,
@@ -457,6 +503,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
         attested = true,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun createLocationRequest(
         request: CreateLocationRequestRequest,
         idempotencyKey: String?,
@@ -468,9 +515,11 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
         attested = true,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getLocationRequest(requestId: Ulid): LocationRequest =
         transport.apiGet(SERVICE, "getLocationRequest", "$LOCATION_REQUESTS_PATH/$requestId").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun confirmLocationRequest(
         requestId: Ulid,
         request: GeoPointWithAccuracy,
@@ -482,6 +531,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun declineLocationRequest(requestId: Ulid, idempotencyKey: String?): LocationRequest =
         transport.apiPost(
             service = SERVICE,
@@ -490,6 +540,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
             idempotencyKey = idempotencyKey,
         ).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun markRideMatching(
         rideId: Ulid,
         request: MarkRideMatchingRequest,
@@ -501,6 +552,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun placeRideOffer(
         rideId: Ulid,
         request: PlaceRideOfferRequest,
@@ -512,6 +564,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun expireRideOffer(
         rideId: Ulid,
         request: ExpireRideOfferRequest,
@@ -523,6 +576,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun systemCancelRide(
         rideId: Ulid,
         request: SystemCancelRideRequest,
@@ -534,6 +588,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun notifyPaymentSettled(
         rideId: Ulid,
         request: NotifyPaymentSettledRequest,
@@ -545,6 +600,7 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getRideSagaState(rideId: Ulid): RideSagaState =
         transport.apiGet(SERVICE, "getRideSagaState", "$INTERNAL_RIDES_PATH/$rideId/saga-state").decode()
 

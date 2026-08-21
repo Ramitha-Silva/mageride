@@ -42,11 +42,11 @@ final class FakeRideRepository: RideRepository, @unchecked Sendable {
     var initiation = RideFixtures.initiation(method: PaymentMethod.scanDriverQr)
 
     /// What the next status read answers. Wound by a test to make the driver confirm.
-    var status = RideFixtures.status(state: PaymentState.qrClaimedByPassenger)
+    var status = RideFixtures.status(state: PaymentState.qrclaimedbypassenger)
 
-    var claimResponse = RideFixtures.status(state: PaymentState.qrClaimedByPassenger)
-    var scanResponse = RideFixtures.status(state: PaymentState.qrClaimedByPassenger)
-    var fallbackResponse = RideFixtures.status(state: PaymentState.fellBackToCash, method: PaymentMethod.cash)
+    var claimResponse = RideFixtures.status(state: PaymentState.qrclaimedbypassenger)
+    var scanResponse = RideFixtures.status(state: PaymentState.qrclaimedbypassenger)
+    var fallbackResponse = RideFixtures.status(state: PaymentState.fellbacktocash, method: PaymentMethod.cash)
     var callResponse = StartCallResponse(
         callId: RideFixtures.callId,
         callType: CallType.freeVoip,

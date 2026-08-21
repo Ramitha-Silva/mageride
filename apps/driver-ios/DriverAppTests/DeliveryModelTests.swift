@@ -59,14 +59,14 @@ final class DeliveryModelTests: XCTestCase {
         XCTAssertEqual(deliveries.pickupOtps, ["4821"])
         XCTAssertTrue(deliveries.deliveryOtps.isEmpty)
         XCTAssertEqual(model.state.sheet, .complete)
-        XCTAssertEqual(model.state.rideState, RideState.inProgress)
+        XCTAssertEqual(model.state.rideState, RideState.inprogress)
         XCTAssertEqual(model.state.otp, "", "the boxes are cleared for the recipient's code")
     }
 
     /// A driver whose app was killed between the two doors comes back to the sheet the **ride** is on:
     /// `package.picked_up` is the `→ InProgress` move, so nothing local is remembered.
     func testResumingADeliveryAlreadyInTransitOpensTheLastSheet() async {
-        deliveries.detailToReturn = packageRide(state: RideState.inProgress, version: 6)
+        deliveries.detailToReturn = packageRide(state: RideState.inprogress, version: 6)
         let model = makeModel()
         await model.refresh()
 
@@ -78,7 +78,7 @@ final class DeliveryModelTests: XCTestCase {
     /// (COD)"*, and an uncollected COD is a 24-hour timer's problem (P-14) rather than this button's —
     /// so the delivery ends at `Completed` with nothing on these sheets settling money.
     func testTheDeliveryOtpHandsTheParcelOverAndReturnsTheDriverToStandby() async {
-        deliveries.detailToReturn = packageRide(state: RideState.inProgress, version: 2)
+        deliveries.detailToReturn = packageRide(state: RideState.inprogress, version: 2)
         let model = makeModel()
         await model.refresh()
         XCTAssertEqual(model.state.sheet, .complete)
@@ -94,7 +94,7 @@ final class DeliveryModelTests: XCTestCase {
     /// A COD delivery sitting at `PaymentPending` is **off this driver's hands**: waiting for a terminal
     /// ride state would hold a courier on a doorstep for a reconciliation that happens elsewhere.
     func testAPaymentPendingDeliveryIsFinishedForTheDriver() async {
-        deliveries.detailToReturn = packageRide(state: RideState.paymentPending, version: 6)
+        deliveries.detailToReturn = packageRide(state: RideState.paymentpending, version: 6)
         let model = makeModel()
         await model.refresh()
 
@@ -108,7 +108,7 @@ final class DeliveryModelTests: XCTestCase {
     /// and `PackageHandoff` locks on the same count. So there is no sixth request to make: the sheet is
     /// already showing the admin-queue message and the entry is disabled behind it.
     func testTheFifthWrongCodeLocksTheGateAndNamesTheAdminQueue() async {
-        deliveries.detailToReturn = packageRide(state: RideState.driverArrived)
+        deliveries.detailToReturn = packageRide(state: RideState.driverarrived)
         let model = makeModel()
         await model.refresh()
         XCTAssertEqual(model.state.sheet, .pickup)
@@ -134,7 +134,7 @@ final class DeliveryModelTests: XCTestCase {
     /// The server's count is authoritative because it survives what this one does not: a reinstall, or
     /// a driver resuming the same handoff on a second handset.
     func testAServerLockoutLocksTheGateEvenWithAttemptsLeftOnThisDevice() async {
-        deliveries.detailToReturn = packageRide(state: RideState.driverArrived)
+        deliveries.detailToReturn = packageRide(state: RideState.driverarrived)
         let model = makeModel()
         await model.refresh()
 
@@ -150,7 +150,7 @@ final class DeliveryModelTests: XCTestCase {
     /// `canSubmit` refuses a malformed entry **without spending an attempt** — the budget exists to stop
     /// guessing, and a typo the client can see is not a guess.
     func testAMalformedCodeIsRefusedWithoutSpendingAnAttempt() async {
-        deliveries.detailToReturn = packageRide(state: RideState.driverArrived)
+        deliveries.detailToReturn = packageRide(state: RideState.driverarrived)
         let model = makeModel()
         await model.refresh()
 
@@ -170,10 +170,10 @@ final class DeliveryModelTests: XCTestCase {
     /// Asserted on the state directly rather than through the model, because reproducing it through the
     /// model would mean waiting five seconds for a poll — and the rule is the state's, not the loop's.
     func testOnlyATransitionClearsTheTypedCode() {
-        var state = DeliveryState(ride: packageRide(state: RideState.inProgress, version: 4))
+        var state = DeliveryState(ride: packageRide(state: RideState.inprogress, version: 4))
         state.otp = "482"
 
-        state.advance(to: snapshot(RideState.inProgress, 4), gates: nil)
+        state.advance(to: snapshot(RideState.inprogress, 4), gates: nil)
         XCTAssertEqual(state.otp, "482", "a poll that moved nothing must not empty the boxes")
 
         state.advance(to: snapshot(RideState.completed, 5), gates: nil)
@@ -183,11 +183,11 @@ final class DeliveryModelTests: XCTestCase {
     /// A delivery that has been handed over never un-hands-over: a late poll landing after the driver has
     /// been sent back to standby must not undo it.
     func testHandedOverIsSticky() {
-        var state = DeliveryState(ride: packageRide(state: RideState.inProgress, version: 4))
+        var state = DeliveryState(ride: packageRide(state: RideState.inprogress, version: 4))
         state.advance(to: snapshot(RideState.completed, 5), gates: nil)
         XCTAssertTrue(state.isFinished)
 
-        state.advance(to: snapshot(RideState.inProgress, 6), gates: nil)
+        state.advance(to: snapshot(RideState.inprogress, 6), gates: nil)
         XCTAssertTrue(state.isFinished, "a late poll must not resurrect a delivery the driver has left")
     }
 
@@ -196,7 +196,7 @@ final class DeliveryModelTests: XCTestCase {
     /// A photograph completes the delivery on its own when nobody is there to read the code out
     /// (Δ C037), and **no delivery OTP is typed at all**.
     func testAPhotoCompletesTheDeliveryWhenTheRecipientIsAbsent() async {
-        deliveries.detailToReturn = packageRide(state: RideState.inProgress, version: 4)
+        deliveries.detailToReturn = packageRide(state: RideState.inprogress, version: 4)
         let model = makeModel()
         await model.refresh()
 
@@ -221,7 +221,7 @@ final class DeliveryModelTests: XCTestCase {
     /// The upload fails on a bad signal and the driver retries **without re-photographing** — which is
     /// the whole reason the queue exists. Losing the picture would mean going back to the door.
     func testAFailedUploadKeepsThePhotographSoARetryNeedsNoCamera() async {
-        deliveries.detailToReturn = packageRide(state: RideState.inProgress, version: 4)
+        deliveries.detailToReturn = packageRide(state: RideState.inprogress, version: 4)
         let model = makeModel()
         await model.refresh()
 
@@ -240,7 +240,7 @@ final class DeliveryModelTests: XCTestCase {
     /// screen that did — the rule `VehicleOnboardingModel.apply(_:)` states, applied to the one target
     /// that is not a document.
     func testACaptureForAnotherSlotIsNotTakenAsProof() async {
-        deliveries.detailToReturn = packageRide(state: RideState.inProgress)
+        deliveries.detailToReturn = packageRide(state: RideState.inprogress)
         let model = makeModel()
         await model.refresh()
 
@@ -326,7 +326,7 @@ final class DeliveryModelTests: XCTestCase {
 
     /// US-12.8's alarm is a screen with a confirmation, not a button that fires.
     func testSosNavigatesRatherThanRaisingTheAlarmHere() async {
-        deliveries.detailToReturn = packageRide(state: RideState.driverArrived)
+        deliveries.detailToReturn = packageRide(state: RideState.driverarrived)
         let model = makeModel()
         await model.refresh()
 
@@ -348,7 +348,7 @@ final class DeliveryModelTests: XCTestCase {
         await model.refresh()
         XCTAssertEqual(model.state.geofence?.lat, testHere.lat)
 
-        deliveries.detailToReturn = packageRide(state: RideState.inProgress)
+        deliveries.detailToReturn = packageRide(state: RideState.inprogress)
         await model.refresh()
         XCTAssertEqual(model.state.geofence?.lat, testThere.lat)
     }

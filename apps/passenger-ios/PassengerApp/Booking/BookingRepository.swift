@@ -124,7 +124,7 @@ final class ApiBookingRepository: BookingRepository {
     }
 
     func reverseGeocode(_ point: GeoPoint) async throws -> GeocodedPlace {
-        try await query.reverseGeocode(lat: point.lat, lng: point.lng)
+        try await query.reverseGeocode(lat: point.lat, lng: point.lng, lang: nil)
     }
 
     func isRegistered(phone: String) async throws -> Bool {

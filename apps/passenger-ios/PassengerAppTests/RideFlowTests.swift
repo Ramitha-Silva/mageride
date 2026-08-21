@@ -558,7 +558,7 @@ final class PayFareModelTests: XCTestCase {
         await eventually("claimed") { await MainActor.run { model.state.isClaimed } }
         XCTAssertFalse(model.state.isConfirmed)
 
-        rides.status = RideFixtures.status(state: PaymentState.driverConfirmedQR)
+        rides.status = RideFixtures.status(state: PaymentState.driverconfirmedqr)
         await eventually("confirmed") { await MainActor.run { model.state.isConfirmed } }
         XCTAssertFalse(rides.statusReads.isEmpty)
     }
@@ -659,7 +659,7 @@ final class PayFareModelTests: XCTestCase {
         await eventually("fell back") { await MainActor.run { model.state.isConfirmed } }
 
         XCTAssertEqual(rides.fallbacks, [RideFixtures.paymentId])
-        XCTAssertEqual(model.state.paymentState, PaymentState.fellBackToCash)
+        XCTAssertEqual(model.state.paymentState, PaymentState.fellbacktocash)
     }
 
     /// **Retry does not post a second payment.** One fare is one `ride_payments` row; re-running an
