@@ -78,10 +78,10 @@ final class PositionService: NSObject, ObservableObject {
         manager.activityType = .automotiveNavigation
 
         transport.onConnected = { [weak self] in
-            Task { @MainActor in self?.onBrokerConnected() }
+            Task { @MainActor [weak self] in self?.onBrokerConnected() }
         }
         transport.onCommand = { [weak self] payload in
-            Task { @MainActor in self?.onCommand(payload) }
+            Task { @MainActor [weak self] in self?.onCommand(payload) }
         }
     }
 
@@ -178,7 +178,7 @@ final class PositionService: NSObject, ObservableObject {
     private func watchSessionToken() {
         tokens?.cancel()
         tokens = graph.mqttTokens.watch { [weak self] token in
-            Task { @MainActor in self?.connect(with: token) }
+            Task { @MainActor [weak self] in self?.connect(with: token) }
         }
     }
 

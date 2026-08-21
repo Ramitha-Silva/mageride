@@ -33,7 +33,9 @@ final class ConnectivityMonitor: ObservableObject {
     init() {
         monitor.pathUpdateHandler = { [weak self] path in
             let satisfied = path.status == .satisfied
-            Task { @MainActor in self?.isOnline = satisfied }
+            // `[weak self]` again here, not the handler's: reading the outer binding from inside a
+            // nested `Task` is an error on Swift 5, which is what ci.yml's Xcode builds with.
+            Task { @MainActor [weak self] in self?.isOnline = satisfied }
         }
         monitor.start(queue: queue)
     }

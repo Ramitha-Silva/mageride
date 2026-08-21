@@ -93,10 +93,10 @@ final class PassengerLiveMap: ObservableObject {
             snapshots: snapshots,
             grid: grid,
             onVehicles: { [weak self] frames in
-                Task { @MainActor in self?.vehicles = frames }
+                Task { @MainActor [weak self] in self?.vehicles = frames }
             },
             onEvent: { [weak self] event in
-                Task { @MainActor in self?.events.send(event) }
+                Task { @MainActor [weak self] in self?.events.send(event) }
             }
         )
     }
