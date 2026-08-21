@@ -208,6 +208,54 @@ class VehiclesViewModelTest {
         assertNull(activeVehicle.activeVehicleId)
     }
 
+    @Test
+    fun the_plus_and_resume_are_two_different_instructions_to_the_wizard() = runBlocking {
+        // They used to be one: both navigated to the same argument-less route and let the wizard
+        // search for something INCOMPLETE, so ＋ was Resume wearing a different icon. The route
+        // still carries no arguments — the intent goes through the session instead.
+        backend.returns(
+            "listMyVehicles",
+            VehicleListResponse(listOf(summary(vehicleId = OTHER_VEHICLE_ID, registrationNumber = "ZZZ-9999"))),
+        )
+
+        val model = viewModel()
+        model.state.await { !it.loading }
+        val row = model.state.value.owned.single()
+
+        model.startNewVehicle()
+        assertEquals(WizardIntent.NewVehicle, session.consumeIntent(), "＋ adds")
+
+        model.resumeOnboarding(row)
+        assertEquals(WizardIntent.Continue(OTHER_VEHICLE_ID), session.consumeIntent(), "Resume continues that row")
+    }
+
+    @Test
+    fun an_intent_belongs_to_one_visit_and_is_not_inherited_by_the_next() = runBlocking {
+        // The session is process-wide. A ＋ that was never followed through must not turn the Menu
+        // tab's "Vehicle Onboarding" row into a fresh start half an hour later.
+        val model = viewModel()
+
+        model.startNewVehicle()
+
+        assertEquals(WizardIntent.NewVehicle, session.consumeIntent())
+        assertNull(session.consumeIntent(), "read once, by the wizard that was opened")
+    }
+
+    @Test
+    fun opening_a_row_for_its_verdicts_is_not_an_instruction_to_the_wizard() = runBlocking {
+        // SCR-DA-006 needs the vehicle named; that is a different question from why the wizard was
+        // opened, and answering both with one field is what made ＋ ambiguous in the first place.
+        backend.returns("listMyVehicles", VehicleListResponse(listOf(summary())))
+
+        val model = viewModel()
+        model.state.await { !it.loading }
+
+        model.open(model.state.value.owned.single())
+
+        assertEquals(VEHICLE_ID, session.vehicleId.value, "named for the status screen")
+        assertNull(session.consumeIntent(), "but the wizard was not told to do anything")
+    }
+
     private fun viewModel(): VehiclesViewModel = VehiclesViewModel(
         vehicles = VehicleOnboardingRepository(backend.mageRideApi().registry),
         session = session,
