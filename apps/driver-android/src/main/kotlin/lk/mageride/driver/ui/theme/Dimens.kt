@@ -145,6 +145,16 @@ internal object ControlTokens {
     /** SCR-DA-010's `.bigtoggle` — the ONLINE / OFFLINE bar, taller than a CTA on purpose. */
     val BigToggle: Dp = 64.dp
 
+    /**
+     * The floor under SCR-DA-010's map, which sizes itself from what the viewport has left.
+     *
+     * Not a wireframe measurement — the wireframe's map is `flex:1` and has no floor because CSS
+     * flex cannot go negative. Compose can: a short handset carrying a five-row banner stack and a
+     * Mode A/B journey sheet leaves a remainder that is zero or less, and a map measured to that is
+     * a map the driver cannot see at all. This is the smallest rectangle still worth calling a map.
+     */
+    val HomeMapMinimum: Dp = 160.dp
+
     /** SCR-DA-014's 15-second countdown ring (`.ring`, `90px`) and its stroke. */
     val CountdownRing: Dp = 96.dp
     val CountdownStroke: Dp = 8.dp

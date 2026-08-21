@@ -18,6 +18,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -49,6 +51,11 @@ import org.maplibre.android.maps.Style
  * @param camera Where to start. A screen that tracks the driver moves the camera itself afterwards.
  * @param onRecentre The §0.3 recentre FAB ("both apps"). `null` hides it — a static map that
  *   cannot be panned has nothing to recentre.
+ * @param controlsBottomInset Lifts the recentre FAB off the map's bottom edge. A map TALLER than
+ *   the screen it sits on parks its only control below the fold, which is a control the driver
+ *   cannot reach without first scrolling past the thing it acts on; SCR-DA-010's dashboard passes
+ *   its own overflow here so the FAB stays on the first screenful. `0.dp` — a map that fits —
+ *   leaves it where §0.3 draws it.
  */
 @Composable
 internal fun MageRideMap(
@@ -56,6 +63,7 @@ internal fun MageRideMap(
     camera: MapCamera = MapCamera.Default,
     darkTheme: Boolean = isSystemInDarkTheme(),
     onRecentre: (() -> Unit)? = null,
+    controlsBottomInset: Dp = 0.dp,
     onMapReady: (MapLibreMap, Style) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
@@ -98,7 +106,7 @@ internal fun MageRideMap(
                 onClick = onRecentre,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(MageRideTheme.spacing.sm),
+                    .padding(end = MageRideTheme.spacing.sm, bottom = MageRideTheme.spacing.sm + controlsBottomInset),
                 containerColor = MaterialTheme.colorScheme.surface,
                 contentColor = MaterialTheme.colorScheme.onSurface,
             ) {

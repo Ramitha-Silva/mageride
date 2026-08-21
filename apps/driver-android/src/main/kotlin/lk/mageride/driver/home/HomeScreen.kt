@@ -4,10 +4,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.EvStation
 import androidx.compose.material.icons.outlined.Payments
@@ -20,15 +24,23 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lk.mageride.driver.R
 import lk.mageride.driver.ui.MoneyFormat
 import lk.mageride.driver.ui.component.DashboardBanner
 import lk.mageride.driver.ui.component.SolidBadge
+import lk.mageride.driver.ui.theme.ControlTokens
 import lk.mageride.driver.ui.theme.MageRideTheme
 import lk.mageride.shared.data.models.ServiceMode
 import lk.mageride.shared.data.models.Ulid
@@ -76,39 +88,69 @@ internal fun HomeScreen(
         modifier = modifier.fillMaxSize(),
         topBar = { HomeTopBar(state = state, onOpenLevel = onOpenLevel) },
     ) { insets ->
-        Column(modifier = Modifier.padding(insets).fillMaxSize()) {
-            HomeBanners(state = state)
+        BoxWithConstraints(modifier = Modifier.padding(insets).fillMaxSize()) {
+            val density = LocalDensity.current
+            var bannersHeight by remember { mutableStateOf(0.dp) }
+            var sheetHeight by remember { mutableStateOf(0.dp) }
 
-            Box(modifier = Modifier.weight(1f)) {
-                DriverHomeMap(
-                    position = state.position,
-                    vehicleType = state.vehicles.live?.vehicleType,
-                    modifier = Modifier.fillMaxSize(),
+            // The two heights the rest of this layout is built out of — see [homeMapNaturalHeight].
+            val naturalMapHeight = homeMapNaturalHeight(maxHeight, bannersHeight, sheetHeight)
+            val mapHeight = naturalMapHeight * MAP_HEIGHT_MULTIPLIER
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                HomeBanners(
+                    state = state,
+                    modifier = Modifier.onSizeChanged { bannersHeight = with(density) { it.height.toDp() } },
                 )
 
-                // D2' §SCR-DA-010: "Offline → grey overlay + 'Go online to receive rides'". Only
-                // on the Mode C standby map — a Mode A/B dashboard has no standby to be off.
-                if (!state.online && !state.isScheduledMode && !state.loading) {
-                    OfflineScrim()
+                Box(modifier = Modifier.fillMaxWidth().height(mapHeight)) {
+                    DriverHomeMap(
+                        position = state.position,
+                        vehicleType = state.vehicles.live?.vehicleType,
+                        // Everything past the first screenful, so §0.3's recentre FAB stays on it
+                        // rather than at the bottom edge of a map that is off the bottom of the
+                        // screen — a control the driver would have to scroll past to reach.
+                        controlsBottomInset = mapHeight - naturalMapHeight,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+
+                    // D2' §SCR-DA-010: "Offline → grey overlay + 'Go online to receive rides'". Only
+                    // on the Mode C standby map — a Mode A/B dashboard has no standby to be off.
+                    //
+                    // The label centres in the whole map, which puts it at `viewport - sheet` on
+                    // screen: exactly where the map's bottom edge is today, and on the first
+                    // screenful whatever the handset. Arithmetic rather than luck — the map is
+                    // twice a height that was itself `viewport - banners - sheet`.
+                    if (!state.online && !state.isScheduledMode && !state.loading) {
+                        OfflineScrim()
+                    }
                 }
-            }
 
-            if (state.isScheduledMode) {
-                JourneySheet(
-                    state = state,
-                    onStart = viewModel::startJourney,
-                    onEndOrRestart = viewModel::endOrRestartJourney,
-                    onChooseRoute = viewModel::chooseRoute,
-                    onAutoEndChanged = viewModel::setAutoEndAtDestination,
-                )
-            } else {
-                StandbySheet(
-                    state = state,
-                    onToggleOnline = viewModel::toggleOnline,
-                    onOpenDirectional = onOpenDirectional,
-                    onOpenVehicles = onOpenVehicles,
-                    onOpenEarnings = onOpenEarnings,
-                )
+                val sheet = Modifier.onSizeChanged { sheetHeight = with(density) { it.height.toDp() } }
+
+                if (state.isScheduledMode) {
+                    JourneySheet(
+                        state = state,
+                        onStart = viewModel::startJourney,
+                        onEndOrRestart = viewModel::endOrRestartJourney,
+                        onChooseRoute = viewModel::chooseRoute,
+                        onAutoEndChanged = viewModel::setAutoEndAtDestination,
+                        modifier = sheet,
+                    )
+                } else {
+                    StandbySheet(
+                        state = state,
+                        onToggleOnline = viewModel::toggleOnline,
+                        onOpenDirectional = onOpenDirectional,
+                        onOpenVehicles = onOpenVehicles,
+                        onOpenEarnings = onOpenEarnings,
+                        modifier = sheet,
+                    )
+                }
             }
         }
     }
@@ -283,3 +325,39 @@ internal object DashboardLabels {
 
 /** D2' §0.2's scrim opacity for a disabled surface behind a message. */
 private const val SCRIM_ALPHA = 0.45f
+
+/**
+ * The height SCR-DA-010's map would take at the wireframe's `flex:1`, before
+ * [MAP_HEIGHT_MULTIPLIER] doubles it: whatever [viewport] has left once [banners] and [sheet] have
+ * had theirs.
+ *
+ * Measured rather than taken as a fraction of the viewport, because both things it is measured
+ * against move. The banner stack is between zero and five rows deep (daily fee, ignition,
+ * auto-ended, low balance, 2nd-trip fee, error) and a Mode C standby sheet is a different height
+ * from a Mode A/B journey sheet, so a fraction tuned on one handset in one of those states is
+ * wrong in all the others.
+ *
+ * Pure, and outside the composable, because this module has no instrumentation source set: a
+ * layout rule that is only ever checked by eye is a layout rule that regresses. `HomeMapHeightTest`
+ * is where the three cases below are pinned.
+ *
+ * @param sheet Zero means *"not measured yet"*, not *"an empty sheet"* — `DashboardSheet` always
+ *   draws a grab handle and its own padding, so a real one is never zero. Until the first layout
+ *   pass reports one the map takes the whole viewport, which is where it sat before it was doubled
+ *   and is a frame MapLibre has no GL surface to draw on anyway.
+ */
+internal fun homeMapNaturalHeight(viewport: Dp, banners: Dp, sheet: Dp): Dp = when {
+    sheet <= 0.dp -> viewport
+    else -> (viewport - banners - sheet).coerceAtLeast(ControlTokens.HomeMapMinimum)
+}
+
+/**
+ * How much taller than the wireframe's `flex:1` the dashboard map is drawn.
+ *
+ * A deliberate deviation from `specs/wireframes/driver_android.html`, asked for from a handset: at
+ * `flex:1` on a real screen the map is a band roughly a quarter of the viewport, which is too
+ * little of it to read as a map. Doubling it costs the sheet its place on the first screenful,
+ * which is what the surrounding scroll is for — and is why this belongs in a micro-change-set
+ * against §SCR-DA-010 rather than being a number quietly different from the spec.
+ */
+private const val MAP_HEIGHT_MULTIPLIER = 2f

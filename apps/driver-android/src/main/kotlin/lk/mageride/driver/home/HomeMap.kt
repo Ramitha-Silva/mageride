@@ -10,6 +10,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import lk.mageride.driver.R
@@ -54,6 +56,8 @@ import org.maplibre.geojson.Point
  *   *"➤ heading marker"* the wireframe draws on the filter's map preview.
  * @param geofence MAP-10's 100 m circle, at the point the driver is being sent to. SCR-DA-015's
  *   pickup pin; `null` everywhere else.
+ * @param controlsBottomInset Straight through to [MageRideMap] — how far to lift the recentre FAB
+ *   off a map that is taller than the screen showing it. SCR-DA-010 is the only caller that is.
  */
 @Composable
 internal fun DriverHomeMap(
@@ -62,6 +66,7 @@ internal fun DriverHomeMap(
     modifier: Modifier = Modifier,
     heading: Double? = null,
     geofence: GeoPoint? = null,
+    controlsBottomInset: Dp = 0.dp,
     onRecentre: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -79,6 +84,7 @@ internal fun DriverHomeMap(
     MageRideMap(
         modifier = modifier,
         camera = position?.let { MapCamera(lat = it.lat, lng = it.lng) } ?: MapCamera.Default,
+        controlsBottomInset = controlsBottomInset,
         onRecentre = onRecentre ?: {
             val fix = position
             if (fix != null) map?.centreOn(LatLng(fix.lat, fix.lng))

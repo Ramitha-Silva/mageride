@@ -1,6 +1,7 @@
 package lk.mageride.driver.shell
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -29,12 +30,14 @@ import lk.mageride.shared.domain.auth.SessionEvent
 import org.koin.compose.koinInject
 
 /**
- * The application shell: one Scaffold, one NavHost, and the three things that sit above every
+ * The application shell: one Scaffold, one NavHost, and the four things that sit above every
  * screen regardless of which group owns it.
  *
  * 1. **The bottom navigation** (AL-31), on the four tab routes and nowhere else.
  * 2. **The offline banner** (US-15.6), which preserves the screen underneath.
  * 3. **The app-update gate** (D-31), which is the only thing here allowed to block.
+ * 4. **The system-bar insets**, applied once and then consumed — see the comment on the content
+ *    lambda for what happens to a screen that is handed insets someone else has already paid for.
  *
  * It also owns the two cross-cutting navigations no screen can be responsible for: a push that
  * names a destination, and a session that ended. Both are subscribed exactly once, here — a
@@ -117,7 +120,22 @@ internal fun DriverShell(
             }
         },
     ) { insets ->
-        Column(modifier = Modifier.padding(insets)) {
+        // `consumeWindowInsets` is what keeps the system bars from being paid for twice.
+        //
+        // `enableEdgeToEdge()` puts the window behind the status and navigation bars, and this
+        // Scaffold's `insets` are the shell's share of them. Applying that padding does NOT tell
+        // anything downstream that it has been applied: a screen's own `Scaffold` still resolves
+        // `contentWindowInsets` to the full system bars, and its `TopAppBar` still resolves
+        // `TopAppBarDefaults.windowInsets` to the full status bar, so both reserve the space a
+        // second time. What that looked like on a handset was a status-bar-tall empty strip
+        // between the clock and SCR-DA-010's `L3` badge, and a navigation-bar-tall gap between
+        // the standby sheet and the bottom navigation. Consuming the padding here resolves both
+        // to zero for every one of the 24 screens with a top bar, without any of them opting in.
+        Column(
+            modifier = Modifier
+                .padding(insets)
+                .consumeWindowInsets(insets),
+        ) {
             OfflineBanner(visible = !online)
             DriverNavHost(controller = controller, modifier = Modifier.fillMaxSize())
         }
