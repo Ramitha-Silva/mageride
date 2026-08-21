@@ -158,6 +158,153 @@ public sealed class PlaceSearchTests(PostgresFixture postgres, RedisFixture redi
         Assert.Single(nominatim.Requests);
     }
 
+    /// <summary>
+    /// D-26 makes every user-facing string trilingual, and a place name a passenger reads on
+    /// SCR-PA-008 is one — so <c>?lang=</c> has to reach Nominatim as <c>accept-language</c> rather
+    /// than stopping at this service's edge.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asserted on the outgoing query string rather than on a translated body, because
+    /// <see cref="FakeNominatim"/> serves one fixture whatever it is asked for: what query-svc is
+    /// responsible for is <i>asking</i>. That the real geocoder answers was checked against the
+    /// deployed instance: a Ja-Ela pin comes back with its town, district, province and country
+    /// in Sinhala and the road still in Latin.
+    /// </para>
+    /// <para>
+    /// <b>Every search in this class uses a query string no other test uses</b>, and every reverse
+    /// lookup a coordinate no other test uses. The Redis container is a collection fixture and is
+    /// never flushed between tests, so a shared probe would be answered from the previous test's
+    /// cache entry and the request count asserted here would be zero.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("si")]
+    [InlineData("ta")]
+    [InlineData("en")]
+    public async Task A_requested_language_reaches_the_geocoder(string language)
+    {
+        await using var nominatim = await FakeNominatim.StartAsync();
+        await using var harness = await StartAsync(nominatim);
+
+        var passenger = await harness.CreateUserAsync();
+        var bearer = harness.Tokens.Passenger(passenger);
+
+        await harness.GetJsonAsync($"/v1/geo/search?q=lang-probe-{language}", bearer);
+        await harness.GetJsonAsync($"/v1/geo/reverse?lat=7.2906&lng=80.6337&lang={language}", bearer);
+
+        // The reverse leg carried the language; the search leg above deliberately did not, so the
+        // two assertions below are about different requests.
+        Assert.Equal(2, nominatim.Requests.Count);
+        Assert.DoesNotContain("accept-language", nominatim.Requests[0], StringComparison.Ordinal);
+        Assert.Contains($"accept-language={language}", nominatim.Requests[1], StringComparison.Ordinal);
+
+        await harness.GetJsonAsync($"/v1/geo/search?q=lang-probe-{language}&lang={language}", bearer);
+
+        Assert.Equal(3, nominatim.Requests.Count);
+        Assert.Contains($"accept-language={language}", nominatim.Requests[2], StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A language nobody asked for must not quietly become English on the way out.
+    /// </summary>
+    /// <remarks>
+    /// Absent means "answer in OSM's own <c>name</c>", which is what every client did before this
+    /// parameter existed and is still what both iOS apps do. Resolving absent to <c>en</c> would
+    /// change the answer they already get without anyone editing them. An unrecognised value is
+    /// treated the same way rather than refused: a <c>400</c> on <c>?lang=fr</c> would break a
+    /// destination search over a preference.
+    /// </remarks>
+    [Theory]
+    [InlineData("absent", "")]
+    [InlineData("empty", "&lang=")]
+    [InlineData("french", "&lang=fr")]
+    [InlineData("nonsense", "&lang=zz-ZZ")]
+    public async Task An_absent_or_unknown_language_asks_for_none(string probe, string suffix)
+    {
+        await using var nominatim = await FakeNominatim.StartAsync();
+        await using var harness = await StartAsync(nominatim);
+
+        var passenger = await harness.CreateUserAsync();
+
+        await harness.GetJsonAsync(
+            $"/v1/geo/search?q=unknown-lang-{probe}{suffix}", harness.Tokens.Passenger(passenger));
+
+        var request = Assert.Single(nominatim.Requests);
+        Assert.DoesNotContain("accept-language", request, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The BCP 47 forms a handset hands an app without being asked resolve to the same three.
+    /// </summary>
+    /// <remarks>
+    /// A client that sends its device locale verbatim gets its language rather than silence, which
+    /// is the difference between a working picker and one that appears to do nothing. Same rule as
+    /// <c>Content.Api</c>'s <c>Languages.TryNormalise</c>, so both services read a locale alike.
+    /// </remarks>
+    [Theory]
+    [InlineData("si-LK", "si")]
+    [InlineData("ta_IN", "ta")]
+    [InlineData("EN-us", "en")]
+    public async Task A_device_locale_resolves_to_its_primary_subtag(string sent, string expected)
+    {
+        await using var nominatim = await FakeNominatim.StartAsync();
+        await using var harness = await StartAsync(nominatim);
+
+        var passenger = await harness.CreateUserAsync();
+
+        await harness.GetJsonAsync(
+            $"/v1/geo/search?q=device-locale&lang={sent}", harness.Tokens.Passenger(passenger));
+
+        var request = Assert.Single(nominatim.Requests);
+        Assert.Contains($"accept-language={expected}", request, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>The language is part of the cache key.</b> Without it the first caller's script is served
+    /// to everyone behind them until the entry expires, and no request leaves the service to explain
+    /// why a Sinhala passenger is reading English.
+    /// </summary>
+    [Fact]
+    public async Task The_same_search_in_three_languages_is_three_cache_entries()
+    {
+        await using var nominatim = await FakeNominatim.StartAsync();
+        await using var harness = await StartAsync(nominatim);
+
+        var passenger = await harness.CreateUserAsync();
+        var bearer = harness.Tokens.Passenger(passenger);
+
+        await harness.GetJsonAsync("/v1/geo/search?q=two-scripts&lang=si", bearer);
+        await harness.GetJsonAsync("/v1/geo/search?q=two-scripts&lang=ta", bearer);
+        // "No language asked" is a fourth answer and gets a key of its own rather than borrowing one.
+        await harness.GetJsonAsync("/v1/geo/search?q=two-scripts", bearer);
+
+        Assert.Equal(3, nominatim.Requests.Count);
+
+        // ...and each is still cached in its own right, so the split has not cost the cache its job.
+        await harness.GetJsonAsync("/v1/geo/search?q=two-scripts&lang=si", bearer);
+        await harness.GetJsonAsync("/v1/geo/search?q=two-scripts", bearer);
+
+        Assert.Equal(3, nominatim.Requests.Count);
+    }
+
+    /// <summary>The same, for the reverse lookup that labels a dropped pin.</summary>
+    [Fact]
+    public async Task The_same_coordinate_in_two_languages_is_two_cache_entries()
+    {
+        await using var nominatim = await FakeNominatim.StartAsync();
+        await using var harness = await StartAsync(nominatim);
+
+        var passenger = await harness.CreateUserAsync();
+        var bearer = harness.Tokens.Passenger(passenger);
+
+        await harness.GetJsonAsync("/v1/geo/reverse?lat=6.0535&lng=80.2210&lang=si", bearer);
+        await harness.GetJsonAsync("/v1/geo/reverse?lat=6.0535&lng=80.2210&lang=en", bearer);
+        await harness.GetJsonAsync("/v1/geo/reverse?lat=6.0535&lng=80.2210&lang=si", bearer);
+
+        Assert.Equal(2, nominatim.Requests.Count);
+    }
+
     [Fact]
     public async Task A_reverse_lookup_labels_a_dropped_pin()
     {

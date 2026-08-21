@@ -8,6 +8,7 @@ import lk.mageride.shared.data.api.apiGet
 import lk.mageride.shared.data.api.decode
 import lk.mageride.shared.data.api.pageParameters
 import lk.mageride.shared.data.models.BusinessDate
+import lk.mageride.shared.data.models.Language
 import lk.mageride.shared.data.models.Page
 import lk.mageride.shared.data.models.PageRequest
 import lk.mageride.shared.data.models.ServiceMode
@@ -79,16 +80,31 @@ public interface QueryApi {
         page: PageRequest = PageRequest.FIRST,
     ): Page<SessionEarning>
 
-    /** `GET /v1/geo/search` — forward geocoding, optionally biased toward a point. */
+    /**
+     * `GET /v1/geo/search` — forward geocoding, optionally biased toward a point.
+     *
+     * @param lang The language to read the answer in (D-26). Reaches the self-hosted Nominatim as
+     *   `accept-language`, so what comes back is **partly** translated: OSM carries `name:si` and
+     *   `name:ta` for Sri Lanka's towns, districts and provinces and for very little else, and a
+     *   road or a shop returns in Latin whatever is asked. `null` asks for no language at all and
+     *   is what a caller that has not been updated still gets — deliberately not the same as
+     *   asking for English.
+     */
     public suspend fun searchPlaces(
         query: String,
         lat: Double? = null,
         lng: Double? = null,
         limit: Int? = null,
+        lang: Language? = null,
     ): PlaceSearchResponse
 
-    /** `GET /v1/geo/reverse` — the address at a coordinate. */
-    public suspend fun reverseGeocode(lat: Double, lng: Double): GeocodedPlace
+    /**
+     * `GET /v1/geo/reverse` — the address at a coordinate.
+     *
+     * @param lang As [searchPlaces], including the partial coverage: a dropped pin comes back with
+     *   its town and district in the asked-for script and its road in Latin.
+     */
+    public suspend fun reverseGeocode(lat: Double, lng: Double, lang: Language? = null): GeocodedPlace
 }
 
 internal class KtorQueryApi(private val transport: ApiTransport) : QueryApi {
@@ -144,18 +160,25 @@ internal class KtorQueryApi(private val transport: ApiTransport) : QueryApi {
         pageParameters(page)
     }.decode()
 
-    override suspend fun searchPlaces(query: String, lat: Double?, lng: Double?, limit: Int?): PlaceSearchResponse =
-        transport.apiGet(SERVICE, "searchPlaces", "/v1/geo/search") {
-            parameter("q", query)
-            parameter("lat", lat)
-            parameter("lng", lng)
-            parameter("limit", limit)
-        }.decode()
+    override suspend fun searchPlaces(
+        query: String,
+        lat: Double?,
+        lng: Double?,
+        limit: Int?,
+        lang: Language?,
+    ): PlaceSearchResponse = transport.apiGet(SERVICE, "searchPlaces", "/v1/geo/search") {
+        parameter("q", query)
+        parameter("lat", lat)
+        parameter("lng", lng)
+        parameter("limit", limit)
+        parameter("lang", lang?.wire)
+    }.decode()
 
-    override suspend fun reverseGeocode(lat: Double, lng: Double): GeocodedPlace =
+    override suspend fun reverseGeocode(lat: Double, lng: Double, lang: Language?): GeocodedPlace =
         transport.apiGet(SERVICE, "reverseGeocode", "/v1/geo/reverse") {
             parameter("lat", lat)
             parameter("lng", lng)
+            parameter("lang", lang?.wire)
         }.decode()
 
     private companion object {

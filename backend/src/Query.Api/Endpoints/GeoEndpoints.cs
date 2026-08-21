@@ -58,6 +58,7 @@ public static class GeoEndpoints
         double? lat,
         double? lng,
         int? limit,
+        string? lang,
         HttpContext context,
         IGeocoder geocoder,
         IPlaceRepository places,
@@ -86,7 +87,13 @@ public static class GeoEndpoints
 
         var saved = await places.SavedAsync(userId, q, settings.SavedPlaceLimit, cancellationToken);
         var recent = await places.RecentAsync(userId, settings.RecentPlaceLimit, cancellationToken);
-        var geocoded = await geocoder.SearchAsync(q, bias, page.Limit, cancellationToken);
+
+        // Only the geocoded half of the answer has a language. The caller's saved and recent rows
+        // carry labels the passenger typed or chose — "Home", "Amma's place" — and re-rendering
+        // those in a script the platform picked would be translating someone's own words back at
+        // them. They are returned as stored, which is also why they sort first.
+        var geocoded = await geocoder.SearchAsync(
+            q, bias, page.Limit, GeoLanguages.TryNormalise(lang), cancellationToken);
 
         // Deduplicated against the caller's own places by coordinate: a geocoded hit on the same
         // building as a saved "Home" is one place, and the saved one carries the label the passenger
@@ -110,6 +117,7 @@ public static class GeoEndpoints
     private static async Task<Ok<GeocodedPlaceResponse>> ReverseAsync(
         double? lat,
         double? lng,
+        string? lang,
         IGeocoder geocoder,
         CancellationToken cancellationToken)
     {
@@ -139,7 +147,10 @@ public static class GeoEndpoints
                 "Reverse geocoding is unavailable: no Nominatim endpoint is configured.");
         }
 
-        var place = await geocoder.ReverseAsync(new GeoPoint(lat!.Value, lng!.Value), cancellationToken)
+        var place = await geocoder.ReverseAsync(
+                        new GeoPoint(lat!.Value, lng!.Value),
+                        GeoLanguages.TryNormalise(lang),
+                        cancellationToken)
                     ?? throw new MageRideException(
                         MageRideErrors.NotFound, "No addressable place was found at that coordinate.");
 

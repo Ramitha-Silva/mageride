@@ -24,8 +24,19 @@ insert:
 INSERT OR REPLACE INTO place_recents (id, label, line1, lat, lng, use_count, last_used_at)
 VALUES (?, ?, ?, ?, ?, ?, ?);
 
+-- The label is rewritten, not only the counters. A place chosen again is a fresh geocode of the
+-- same coordinate, so it carries the CURRENT language (D-26) and any name OSM has corrected since;
+-- keeping the stored one would pin whichever language the passenger first found it in.
 touch:
-UPDATE place_recents SET use_count = use_count + 1, last_used_at = ? WHERE id = ?;
+UPDATE place_recents
+SET use_count = use_count + 1, last_used_at = ?, label = ?, line1 = ?
+WHERE id = ?;
+
+-- Re-label in place, for the sweep that follows a language change. Deliberately touches neither
+-- `use_count` nor `last_used_at`: translating a row is not the passenger using it, and reordering
+-- their list because they changed language would be a strange thing to do to them.
+relabel:
+UPDATE place_recents SET label = ?, line1 = ? WHERE id = ?;
 
 deleteBeyondCap:
 DELETE FROM place_recents

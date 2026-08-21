@@ -9,6 +9,8 @@ import lk.mageride.shared.data.api.content.ContentApi
 import lk.mageride.shared.data.api.dispatch.DispatchApi
 import lk.mageride.shared.data.api.fare.FareApi
 import lk.mageride.shared.data.api.iam.IamApi
+import lk.mageride.shared.data.api.query.AppLanguage
+import lk.mageride.shared.data.api.query.LocalisedQueryApi
 import lk.mageride.shared.data.api.query.QueryApi
 import lk.mageride.shared.data.api.registry.RegistryApi
 import lk.mageride.shared.data.api.ride.RideApi
@@ -73,7 +75,9 @@ public val apiModule: Module = module {
     single<FareApi> { get<MageRideApi>().fare }
     single<SubscriptionApi> { get<MageRideApi>().subscription }
     single<WalletApi> { get<MageRideApi>().wallet }
-    single<QueryApi> { get<MageRideApi>().query }
+    // The one client with a language on it (D-26). `getOrNull` rather than `get`, so an app that
+    // has not bound an `AppLanguage` — both iOS apps today — is answered exactly as before.
+    single<QueryApi> { LocalisedQueryApi(get<MageRideApi>().query, getOrNull<AppLanguage>()) }
     single<TransitApi> { get<MageRideApi>().transit }
     single<SafetyApi> { get<MageRideApi>().safety }
     single<SupportApi> { get<MageRideApi>().support }

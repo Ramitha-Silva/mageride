@@ -26,11 +26,19 @@ public interface IGeocoder
     bool IsConfigured { get; }
 
     /// <summary>Places matching a search string, biased toward a point when one is given.</summary>
+    /// <param name="language">
+    /// A normalised <c>si</c>/<c>ta</c>/<c>en</c>, or <see langword="null"/> to let Nominatim
+    /// answer in OSM's own <c>name</c>. See <see cref="GeoLanguages"/> for why absent is not
+    /// English.
+    /// </param>
     Task<IReadOnlyList<GeocodedPlace>> SearchAsync(
-        string query, GeoPoint? bias, int limit, CancellationToken cancellationToken);
+        string query, GeoPoint? bias, int limit, string? language, CancellationToken cancellationToken);
 
     /// <summary>The nearest addressable place to a coordinate, or <see langword="null"/>.</summary>
-    Task<GeocodedPlace?> ReverseAsync(GeoPoint point, CancellationToken cancellationToken);
+    /// <param name="language">
+    /// A normalised <c>si</c>/<c>ta</c>/<c>en</c>, or <see langword="null"/> for no preference.
+    /// </param>
+    Task<GeocodedPlace?> ReverseAsync(GeoPoint point, string? language, CancellationToken cancellationToken);
 }
 
 /// <inheritdoc cref="IGeocoder"/>
@@ -56,6 +64,20 @@ public interface IGeocoder
 /// coarse enough that dragging a pin across a pavement reuses the answer.
 /// </para>
 /// <para>
+/// <b>The language is part of the cache key, not an afterthought on it.</b> Nominatim answers the
+/// same coordinate differently per <c>accept-language</c>, so a key that ignored the language
+/// would serve the first caller's script to every caller behind them until the entry expired —
+/// a Sinhala passenger reading English, or worse, an English one reading Sinhala, with no request
+/// leaving the service to explain it.
+/// </para>
+/// <para>
+/// <b>What a translated answer actually looks like is mixed.</b> OSM carries <c>name:si</c> and
+/// <c>name:ta</c> for Sri Lanka's towns, districts, provinces and the country itself, and for very
+/// little else; a road, a neighbourhood and a shop come back in Latin whatever is asked for. That
+/// is the data rather than the wiring, and it is why nothing here treats a Latin substring in the
+/// answer as a failed translation.
+/// </para>
+/// <para>
 /// <b>Unconfigured is a distinct state from failing.</b> With no base URL, forward search still
 /// answers from the caller's saved and recent places (BR-23.1 lists those as part of the prediction
 /// set) and reverse geocoding has no local answer at all, so it returns <see langword="null"/> and
@@ -75,6 +97,9 @@ public sealed class NominatimClient(
     private const string SearchCachePrefix = "geo:fwd";
     private const string ReverseCachePrefix = "geo:rev";
 
+    /// <summary>The cache-key segment for a request that asked for no particular language.</summary>
+    private const string NoLanguage = "-";
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private readonly QueryOptions _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
@@ -82,7 +107,7 @@ public sealed class NominatimClient(
     public bool IsConfigured => !string.IsNullOrWhiteSpace(_options.NominatimBaseUrl);
 
     public async Task<IReadOnlyList<GeocodedPlace>> SearchAsync(
-        string query, GeoPoint? bias, int limit, CancellationToken cancellationToken)
+        string query, GeoPoint? bias, int limit, string? language, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(query);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
@@ -93,10 +118,14 @@ public sealed class NominatimClient(
         }
 
         // The bias is part of the key: "Fort" from Colombo and "Fort" from Galle are different
-        // questions and Nominatim answers them differently.
+        // questions and Nominatim answers them differently. So is the language — see the type
+        // remarks. `-` rather than an empty segment for "no language asked", so the unasked case
+        // has a key of its own instead of colliding with whichever language sorts to empty.
+        var scope = language ?? NoLanguage;
+        var text = query.Trim().ToLowerInvariant();
         var cacheKey = string.Create(
             CultureInfo.InvariantCulture,
-            $"{SearchCachePrefix}:{limit}:{Round(bias?.Latitude)}:{Round(bias?.Longitude)}:{query.Trim().ToLowerInvariant()}");
+            $"{SearchCachePrefix}:{scope}:{limit}:{Round(bias?.Latitude)}:{Round(bias?.Longitude)}:{text}");
 
         if (await ReadCacheAsync<GeocodedPlace[]>(cacheKey) is { } cached)
         {
@@ -120,6 +149,8 @@ public sealed class NominatimClient(
             url += $"&viewbox={box}&bounded=0";
         }
 
+        url += AcceptLanguage(language);
+
         var results = await GetAsync<NominatimPlace[]>(url, "search", cancellationToken) ?? [];
 
         var places = results
@@ -132,7 +163,8 @@ public sealed class NominatimClient(
         return places;
     }
 
-    public async Task<GeocodedPlace?> ReverseAsync(GeoPoint point, CancellationToken cancellationToken)
+    public async Task<GeocodedPlace?> ReverseAsync(
+        GeoPoint point, string? language, CancellationToken cancellationToken)
     {
         if (!IsConfigured)
         {
@@ -141,7 +173,7 @@ public sealed class NominatimClient(
 
         var cacheKey = string.Create(
             CultureInfo.InvariantCulture,
-            $"{ReverseCachePrefix}:{Round(point.Latitude)}:{Round(point.Longitude)}");
+            $"{ReverseCachePrefix}:{language ?? NoLanguage}:{Round(point.Latitude)}:{Round(point.Longitude)}");
 
         if (await ReadCacheAsync<GeocodedPlace>(cacheKey) is { } cached)
         {
@@ -151,7 +183,8 @@ public sealed class NominatimClient(
 
         var url = "reverse?format=jsonv2&addressdetails=1"
                   + $"&lat={point.Latitude.ToString("0.######", CultureInfo.InvariantCulture)}"
-                  + $"&lon={point.Longitude.ToString("0.######", CultureInfo.InvariantCulture)}";
+                  + $"&lon={point.Longitude.ToString("0.######", CultureInfo.InvariantCulture)}"
+                  + AcceptLanguage(language);
 
         var result = await GetAsync<NominatimPlace>(url, "reverse", cancellationToken);
         var place = result?.ToPlace();
@@ -279,6 +312,19 @@ public sealed class NominatimClient(
             $"{centre.Longitude - lngSpan:0.####},{centre.Latitude + latSpan:0.####},"
             + $"{centre.Longitude + lngSpan:0.####},{centre.Latitude - latSpan:0.####}");
     }
+
+    /// <summary>
+    /// The <c>accept-language</c> query segment, or nothing at all when no language was asked for.
+    /// </summary>
+    /// <remarks>
+    /// The <b>query parameter</b> rather than the HTTP header of the same name. Nominatim accepts
+    /// either and they mean the same thing, but the header would be set on a pooled
+    /// <see cref="HttpClient"/> shared by every in-flight request, and the parameter travels with
+    /// the one request it belongs to. It is also what appears in the Nominatim access log, which
+    /// is where anyone debugging "why is this English" will look first.
+    /// </remarks>
+    private static string AcceptLanguage(string? language) =>
+        string.IsNullOrEmpty(language) ? string.Empty : $"&accept-language={Uri.EscapeDataString(language)}";
 
     /// <summary>Nominatim's <c>format=jsonv2</c> shape, only the fields this service uses.</summary>
     private sealed record NominatimPlace(

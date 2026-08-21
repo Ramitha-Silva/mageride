@@ -21,6 +21,33 @@ import lk.mageride.driver.R
  * fill, buildings, boundaries and place labels, against the Protomaps basemap's source-layer
  * names. It is a legible map, not a designed one; a full basemap style is a design asset rather
  * than something a shell should invent. See the C067 handoff.
+ *
+ * ### The labels on this map are not trilingual, and cannot be
+ *
+ * D-26 makes every user-facing string Si/Ta/En and the basemap's own place names are the one
+ * exception on the platform. `["get", "name"]` in both style files is a **ceiling, not an
+ * oversight**, and it is three walls deep — each of which alone is enough:
+ *
+ * 1. **The tiles carry no Sinhala or Tamil.** `infra/replica/tiles/deploy-tiles.sh` cuts the
+ *    archive from the Protomaps basemap, which carries `name:xx` for 41 languages. `si` and `ta`
+ *    are not among them, so there is no field for a style to ask for.
+ * 2. **MapLibre cannot render either script.** Both are complex scripts needing reordering and
+ *    ligature shaping; MapLibre Native draws SDF glyphs per codepoint with no shaping engine
+ *    (maplibre-native#706 is still open). Protomaps' own localized styles list Sinhalese and Tamil
+ *    under "no MapLibre support" and **hide** text in those scripts rather than draw it wrong.
+ * 3. **The glyph server has no such glyphs.** `glyphs` points at `fonts/{fontstack}`, the stack is
+ *    `Inter Regular`, and the live box symlinks that to **Noto Sans Regular** — which covers
+ *    neither block. Those SDF ranges were never generated.
+ *
+ * Getting there means building our own tiles with `name:si` from the Sri Lanka OSM extract *and*
+ * shipping a positioned-glyph font (HarfBuzz-shaped, per Protomaps' Devanagari precedent). That is
+ * a project, not a style edit. **Do not add a language parameter to this object expecting it to
+ * work** — the honest failure is a label that renders as broken glyph sequences.
+ *
+ * Everything the app draws ITSELF is unaffected: markers, pin labels and sheet copy are Compose
+ * text and render Sinhala correctly. The geocoder is trilingual too — `GET /v1/geo/search` and
+ * `/v1/geo/reverse` take a `lang` — so a place a driver or passenger searches for reads in their
+ * language even where the map underneath it does not.
  */
 internal object MapStyles {
 

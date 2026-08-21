@@ -31,6 +31,18 @@ internal interface AppPreferences {
     /** Whether the local choice still has to be pushed to `iam.users` after sign-in. */
     var languagePendingSync: Boolean
 
+    /**
+     * The language the labels in `place_recents` are written in, or `null` if none have been.
+     *
+     * A **whole-table** stamp rather than a column per row, which is what keeps this out of
+     * `mobile_db_schema.md` §2.2 and out of a migration. The invariant it stands for is "every row
+     * is in this language", and two things maintain it: `remember` writes in the language in force,
+     * and `RecentPlaces.recent` sweeps the table when this disagrees with [language]. A row written
+     * between a language change and the sweep is re-labelled by the sweep anyway, which costs one
+     * redundant lookup and keeps the invariant true.
+     */
+    var recentsLanguage: Language?
+
     /** Whether SCR-PA-005 has been shown and dismissed. Grants themselves are asked of the OS. */
     var locationRationaleAcknowledged: Boolean
 
@@ -75,6 +87,10 @@ internal class AndroidAppPreferences(context: Context) : AppPreferences {
         get() = store.getString(KEY_LANGUAGE, null)?.let(Language::fromWire)
         set(value) = store.edit { putString(KEY_LANGUAGE, value?.wire) }
 
+    override var recentsLanguage: Language?
+        get() = store.getString(KEY_RECENTS_LANGUAGE, null)?.let(Language::fromWire)
+        set(value) = store.edit { putString(KEY_RECENTS_LANGUAGE, value?.wire) }
+
     override var languagePendingSync: Boolean
         get() = store.getBoolean(KEY_PENDING_SYNC, false)
         set(value) = store.edit { putBoolean(KEY_PENDING_SYNC, value) }
@@ -105,6 +121,7 @@ internal class AndroidAppPreferences(context: Context) : AppPreferences {
         // which locale to inflate resources in. Nothing here is a secret.
         const val FILE = "passenger_prefs"
         const val KEY_LANGUAGE = "language"
+        const val KEY_RECENTS_LANGUAGE = "recents.language"
         const val KEY_PENDING_SYNC = "language_pending_sync"
         const val KEY_LOCATION_RATIONALE = "location_rationale_acknowledged"
     }

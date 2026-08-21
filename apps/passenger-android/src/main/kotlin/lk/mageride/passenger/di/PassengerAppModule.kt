@@ -57,6 +57,7 @@ import lk.mageride.passenger.subscription.SubscriptionRepository
 import lk.mageride.passenger.support.SupportRepository
 import lk.mageride.shared.data.api.ApiConfig
 import lk.mageride.shared.data.api.AttestationProvider
+import lk.mageride.shared.data.api.query.AppLanguage
 import lk.mageride.shared.data.models.AppSurface
 import lk.mageride.shared.db.DatabaseDriverFactory
 import lk.mageride.shared.db.MageRideApp
@@ -130,6 +131,12 @@ internal fun passengerAppModule(environment: PassengerEnvironment = PassengerEnv
         single { PushRouter() }
         single { PushTokenProvider() }
         single<AppPreferences> { AndroidAppPreferences(androidContext()) }
+
+        // D-26 — the language every geocode is read in. A supplier rather than a value: the graph is
+        // a `single` and outlives the `recreate()` a language change performs, so a snapshot taken
+        // here would pin the language the app opened in. `:shared`'s `LocalisedQueryApi` picks this
+        // up, which is why no screen passes a `lang` and no screen can forget to.
+        single<AppLanguage> { AppLanguage { get<AppPreferences>().language } }
         // Δ C097. The source is wrapped so every fix that reaches a screen also reaches
         // `LastKnownFix`, which is what a booking's default pickup and SCR-PA-008's geocoder bias
         // read. A `single` because it is a handover between screens that never meet.
@@ -194,7 +201,7 @@ private fun Module.onboardingBindings() {
  * pin whatever a passenger had switched on when the app launched.
  */
 private fun Module.liveMapScreenBindings() {
-    single<RecentPlaces> { LocalRecentPlaces(databases = get()) }
+    single<RecentPlaces> { LocalRecentPlaces(databases = get(), query = get(), preferences = get()) }
 
     viewModel {
         LiveMapViewModel(live = get(), locations = get(), iam = get(), query = get(), recents = get())
