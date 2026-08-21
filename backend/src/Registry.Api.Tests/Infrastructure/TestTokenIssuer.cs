@@ -45,6 +45,15 @@ internal sealed class TestTokenIssuer
     /// A passenger who opened the Driver App: <c>app=driver</c> but no driver role. C020
     /// decision 4 means this is a real, reachable principal, not a contrived one.
     /// </summary>
+    /// <summary>
+    /// A Driver-App token carrying <b>only</b> the passenger role — the shape every driver-only
+    /// route has to refuse.
+    /// </summary>
+    /// <remarks>
+    /// Synthetic, and deliberately so. A real Driver-App sign-in grants the driver role at OTP
+    /// verify now, so this pairing no longer comes off the wire; what it still tests is that the
+    /// role gate reads the role and not the <c>app</c> claim beside it.
+    /// </remarks>
     public string PassengerOnDriverApp(Guid userId) =>
         Issue(userId, [MageRideRoles.Passenger], MageRideApps.Driver);
 

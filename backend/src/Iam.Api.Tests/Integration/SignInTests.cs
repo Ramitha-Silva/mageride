@@ -99,19 +99,108 @@ public sealed class SignInTests(PostgresFixture postgres, RedisFixture redis)
     }
 
     [Fact]
-    public async Task Opening_the_driver_app_does_not_hand_an_existing_passenger_the_driver_role()
+    public async Task Signing_into_the_driver_app_grants_a_passenger_the_driver_role_and_keeps_the_passenger_one()
     {
+        // One person, one number, both apps. Before this, `GrantRoleAsync` had a single call site
+        // — inside "the account did not exist" — so the role set was decided by whichever app was
+        // installed first and could never change afterwards. A passenger-first number was refused
+        // by every `/v1/vehicles` and `/v1/drivers` route forever, including the Profile Setup
+        // that was meant to make them a driver: a dead end with no way out from inside the app.
         await using var harness = await IamHarness.StartWithoutResendCooldownAsync(postgres, redis);
         var phone = IamHarness.NextPhone();
 
         await harness.SignInAsync(phone, "device-p", "passenger");
         var asDriver = await harness.SignInAsync(phone, "device-d", "driver");
 
-        // The app claim follows the surface, but the role set does not: holding the driver role
-        // is what registry-svc onboarding grants (C029), not what opening an app does.
-        Assert.Equal(MageRideRoles.Passenger, asDriver.Role);
+        var roles = RolesIn(asDriver.AccessToken);
+        Assert.Contains(MageRideRoles.Driver, roles);
+        Assert.Contains(MageRideRoles.Passenger, roles);
         Assert.Equal("driver", new JsonWebToken(asDriver.AccessToken).GetClaim(MageRideClaims.App).Value);
     }
+
+    [Fact]
+    public async Task Signing_into_the_passenger_app_grants_a_driver_the_passenger_role_and_keeps_the_driver_one()
+    {
+        // The mirror, and the half that is easy to forget: a number that signed into the Driver
+        // App first held `driver` alone, so `POST /v1/rides/request` — which is
+        // `RequireMageRideRole(Passenger)` — refused the same person a ride home from their shift.
+        await using var harness = await IamHarness.StartWithoutResendCooldownAsync(postgres, redis);
+        var phone = IamHarness.NextPhone();
+
+        await harness.SignInAsync(phone, "device-d", "driver");
+        var asPassenger = await harness.SignInAsync(phone, "device-p", "passenger");
+
+        var roles = RolesIn(asPassenger.AccessToken);
+        Assert.Contains(MageRideRoles.Passenger, roles);
+        Assert.Contains(MageRideRoles.Driver, roles);
+        Assert.Equal("passenger", new JsonWebToken(asPassenger.AccessToken).GetClaim(MageRideClaims.App).Value);
+    }
+
+    [Fact]
+    public async Task Holding_both_roles_leaves_the_primary_role_the_account_was_created_with()
+    {
+        // `iam.users.role` is what the directory and the admin console call this person, and the
+        // union in `iam.user_roles` is what permissions are evaluated from (AL-06). Somebody who
+        // has driven for a year does not stop being a driver because they opened the Passenger
+        // App, so the grant is additive and the primary is left exactly as it was.
+        await using var harness = await IamHarness.StartWithoutResendCooldownAsync(postgres, redis);
+        var phone = IamHarness.NextPhone();
+
+        await harness.SignInAsync(phone, "device-d", "driver");
+        await harness.SignInAsync(phone, "device-p", "passenger");
+
+        var factory = harness.Services.GetRequiredService<INpgsqlConnectionFactory>();
+        await using var connection = await factory.OpenAsync();
+
+        var primary = await connection.QuerySingleAsync<string>(
+            "SELECT role FROM iam.users WHERE phone = @Phone;", new { Phone = phone });
+        var granted = await connection.QueryAsync<string>(
+            """
+            SELECT role FROM iam.user_roles
+             WHERE user_id = (SELECT id FROM iam.users WHERE phone = @Phone)
+             ORDER BY role;
+            """,
+            new { Phone = phone });
+
+        Assert.Equal(MageRideRoles.Driver, primary);
+        Assert.Equal([MageRideRoles.Driver, MageRideRoles.Passenger], granted);
+    }
+
+    [Fact]
+    public async Task Signing_into_the_same_app_twice_does_not_write_a_second_grant()
+    {
+        // `ON CONFLICT DO NOTHING`, asserted: the common case is somebody opening the app they
+        // always use, and that must not accumulate rows.
+        await using var harness = await IamHarness.StartWithoutResendCooldownAsync(postgres, redis);
+        var phone = IamHarness.NextPhone();
+
+        await harness.SignInAsync(phone, "device-1", "driver");
+        await harness.SignInAsync(phone, "device-2", "driver");
+
+        var factory = harness.Services.GetRequiredService<INpgsqlConnectionFactory>();
+        await using var connection = await factory.OpenAsync();
+
+        // `long`, not `int`: Postgres COUNT(*) is bigint and Dapper does not narrow it for you.
+        var grants = await connection.QuerySingleAsync<long>(
+            """
+            SELECT COUNT(*) FROM iam.user_roles
+             WHERE user_id = (SELECT id FROM iam.users WHERE phone = @Phone);
+            """,
+            new { Phone = phone });
+
+        Assert.Equal(1L, grants);
+    }
+
+    /// <summary>Every <c>role</c> claim in <paramref name="accessToken"/>.</summary>
+    /// <remarks>
+    /// One claim when a person holds one role and several when they hold more — see
+    /// <c>AccessTokenIssuer</c>, which emits an array only in the second case. Reading them all
+    /// is what makes these tests independent of that.
+    /// </remarks>
+    private static IReadOnlyList<string> RolesIn(string accessToken) =>
+        [.. new JsonWebToken(accessToken).Claims
+            .Where(claim => claim.Type == MageRideClaims.Role)
+            .Select(claim => claim.Value)];
 
     [Fact]
     public async Task The_sign_in_writes_the_user_the_device_and_the_session()

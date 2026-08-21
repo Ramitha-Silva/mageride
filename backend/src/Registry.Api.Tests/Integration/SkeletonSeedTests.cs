@@ -53,10 +53,10 @@ public sealed class SkeletonSeedTests(PostgresFixture postgres)
 
         await using var connection = await harness.OpenAsync();
 
-        // C020 decision 4: a first sign-in creates the account with the role of the app it came
-        // from, and an existing account is never escalated. The seed creates the account, so the
-        // seed has to grant the role — otherwise the skeleton driver signs in and is refused by
-        // every route here.
+        // The seed creates this account with SQL rather than through a sign-in, so nothing has
+        // granted it a role along the way and the seed has to do it. A sign-in would now grant
+        // the app's role itself (iam-svc, at OTP verify, additively), but the skeleton driver
+        // never signs in — it exists so the walking skeleton has a driver to dispatch to.
         var roles = await connection.QueryAsync<string>(
             """
             SELECT role FROM iam.user_roles WHERE user_id = @DriverId

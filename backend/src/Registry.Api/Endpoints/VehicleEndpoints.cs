@@ -24,9 +24,11 @@ namespace MageRide.Registry.Endpoints;
 /// merchant bind — is C028/C029 and is left unmapped rather than stubbed.
 /// </para>
 /// <para>
-/// Every route demands the <c>driver</c> role. Opening the Driver App does not grant it (C020
-/// decision 4): a passenger who signs in there carries <c>app=driver, role=passenger</c> and is
-/// refused here, which is deny-by-default working as intended.
+/// Every route demands the <c>driver</c> role. Signing into the Driver App is what grants it —
+/// iam-svc writes the grant at OTP verify, additively, so one account can hold both roles and run
+/// both apps (AL-06's union, AL-08's per-app session). Deny-by-default still holds here: the role
+/// opens onboarding and nothing else, and every route below that could move money or take a ride
+/// has a second gate on top of it.
 /// </para>
 /// </remarks>
 public static class VehicleEndpoints
