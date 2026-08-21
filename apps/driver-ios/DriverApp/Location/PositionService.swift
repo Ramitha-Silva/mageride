@@ -227,7 +227,10 @@ final class PositionService: NSObject, ObservableObject {
     private func startDraining() {
         drainTimer?.invalidate()
         drainTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+            // Re-captured rather than inherited from the timer closure: reading the outer `[weak self]`
+            // binding from inside a concurrently-executing `Task` is an error on Swift 5, which is what
+            // ci.yml's Xcode builds with. The capture list says the same thing to both compilers.
+            Task { @MainActor [weak self] in
                 guard let self, let pipeline = self.pipeline else { return }
                 if pipeline.drainReplay(livePending: false) > 0 { self.refreshBufferedCount() }
             }

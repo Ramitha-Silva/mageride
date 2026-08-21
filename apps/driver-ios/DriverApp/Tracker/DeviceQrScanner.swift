@@ -92,6 +92,9 @@ struct DeviceQrScannerView: UIViewControllerRepresentable {
     /// Two separate answers and both are needed: `isSupported` is the hardware (A12 and later, so
     /// `false` on every simulator) and `isAvailable` is the camera grant plus Screen Time
     /// restrictions. Neither is something the app can talk its way past.
+    /// `@MainActor` because both VisionKit properties are, and a `UIViewControllerRepresentable`
+    /// does not confer that on its own statics under Swift 5. Both callers are already on the actor.
+    @MainActor
     static var isSupported: Bool {
         DataScannerViewController.isSupported && DataScannerViewController.isAvailable
     }
