@@ -6,8 +6,8 @@
 # Jobs, and the component verify each one runs (see .github/workflows/README.md):
 #   build (backend)   C001 C002 C008 C010   dotnet build + test + the container templates
 #   build (android)   C001 C011-C019        gradle; grows as the KMP modules land
-#   build (ios)       C085-C102             macos-14 ONLY; never on Linux. **ADVISORY** — see
-#                                           the matrix entry: 67 uncompiled Swift errors, needs a Mac
+#   build (ios)       C085-C102             macos-14 ONLY; never on Linux. BINDING when it runs.
+#                                           Auto-runs on iOS/KMP changes; see the plan job (MCS-08)
 #   build (portal)    C001 C103-C117        npm ci + build + lint
 #   contracts         C007                  spectral lint over backend/contracts/*.yaml
 #   migrations        C003-C006             apply twice; a non-no-op second run fails
@@ -86,6 +86,65 @@ jobs:
     outputs:
       targets: ${{ steps.pick.outputs.targets }}
     steps:
+      # Δ MCS-08. Needed only to diff paths, but the diff has to be able to reach the base commit,
+      # so this is the one place in the workflow that wants full history. It is an ubuntu runner
+      # and costs seconds; the alternative (a third-party paths-filter action) is a supply-chain
+      # dependency in the job that decides what CI runs, which is the worst place to have one.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: did iOS or KMP change?
+        id: ios-paths
+        run: |
+          set -euo pipefail
+
+          # DEFAULT TRUE on anything unrecognised. A paths filter that fails open costs one macOS
+          # run; one that fails closed silently stops compiling the Swift, which is the exact
+          # failure this filter exists to prevent.
+          touched=true
+
+          case "${{ github.event_name }}" in
+            pull_request)
+              base='${{ github.event.pull_request.base.sha }}'
+              head='${{ github.event.pull_request.head.sha }}'
+              ;;
+            push)
+              base='${{ github.event.before }}'
+              head='${{ github.sha }}'
+              # All-zeros is a branch's first push: there is no "before" to diff against.
+              case "$base" in 0000000000000000000000000000000000000000) base='' ;; esac
+              ;;
+            workflow_dispatch)
+              # The `ios` input is an explicit answer and this filter must not overrule it — a
+              # dispatch with `ios: false` means "do not spend the 10x", including when the branch
+              # happens to touch Swift.
+              base=''; head=''; touched=false
+              ;;
+            *)
+              base=''; head=''
+              ;;
+          esac
+
+          if [ -n "$base" ] && [ -n "$head" ] \
+             && git cat-file -e "$base^{commit}" 2>/dev/null \
+             && git cat-file -e "$head^{commit}" 2>/dev/null; then
+            changed=$(git diff --name-only "$base" "$head" -- \
+                        'apps/driver-ios/**' 'apps/passenger-ios/**' 'shared/kmp/**' \
+                        'shared/swiftpm/**' || true)
+            if [ -n "$changed" ]; then
+              touched=true
+              echo "::notice::iOS/KMP paths changed — the ios leg will run and is binding"
+              printf '%s\n' "$changed" | head -20
+            else
+              touched=false
+            fi
+          elif [ "$touched" = "true" ]; then
+            echo "::notice::could not resolve a base commit to diff; including the ios leg"
+          fi
+
+          echo "touched=$touched" >> "$GITHUB_OUTPUT"
+
       - name: pick the legs
         id: pick
         run: |
@@ -101,22 +160,26 @@ jobs:
           # When it IS requested it is BINDING, not advisory. The only reason to ask for it is to
           # find out whether the Swift compiles, and an advisory leg answers that question with a
           # green tick.
-          if [ "$DISPATCH_IOS" = "true" ] || [ "$HAS_LABEL" = "true" ]; then
+          if [ "$DISPATCH_IOS" = "true" ] || [ "$HAS_LABEL" = "true" ] || [ "$IOS_TOUCHED" = "true" ]; then
             legs=$(printf '%s' "$legs" | sed 's/\]$/,{"target":"ios","runner":"macos-14","advisory":false}]/')
             echo "::notice::the ios leg is included and is binding"
           else
             {
-              echo "### iOS leg not built"
+              echo "### iOS leg not run"
               echo
-              echo "\`apps/driver-ios/\` has **67 unique Swift compile errors across 15 files**"
-              echo "(C085-C102's Swift was authored on a host that cannot compile it). The leg runs"
-              echo "on \`macos-14\`, which GitHub bills at a **10x multiplier** for ~15 minutes, and"
-              echo "its answer does not change between commits — so it is off by default."
+              echo "Nothing under \`apps/driver-ios/\`, \`apps/passenger-ios/\` or \`shared/kmp/\`"
+              echo "changed in this run, so the leg was not requested. \`macos-14\` bills at a"
+              echo "**10x multiplier** for ~15 minutes and a backend or portal commit cannot move"
+              echo "its answer."
               echo
-              echo "To run it: the **\`run-ios\`** label on a pull request, or"
-              echo "**Run workflow** with \`ios: true\`. It is binding when requested."
+              echo "To force it: the **\`run-ios\`** label on a pull request, or **Run workflow**"
+              echo "with \`ios: true\`. It is binding whenever it runs."
               echo
-              echo "Closing it needs a Mac session: fix the 67 errors, commit \`Package.resolved\`."
+              echo "**Both apps archive cleanly** as of 2026-08-19 (PR #38) — the 67-error estimate"
+              echo "this summary used to quote was wrong twice over (the real counts were 109 and"
+              echo "95, on Xcode 26.6) and is closed. **What is still owed is \`xcodebuild … test\`:**"
+              echo "neither app's XCTest suite has ever been run, which is why C085-C102 are still"
+              echo "PARTIAL and the wave 4b gate is half met. See the MCS-08 handoff."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -124,6 +187,16 @@ jobs:
         env:
           DISPATCH_IOS: ${{ github.event_name == 'workflow_dispatch' && inputs.ios }}
           HAS_LABEL: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-ios') }}
+          # Δ MCS-08 — the leg now runs ITSELF when the code it compiles changes.
+          #
+          # It was request-only because its answer was known ("fails") and did not move between
+          # commits. Both apps archive as of PR #38, so the answer is now worth having — but only
+          # when something that could change it moved. `shared/kmp/**` is in the filter because the
+          # Obj-C export is where every root cause in that PR lived: a Kotlin rename, a new
+          # `typealias`, a PascalCase enum entry or a property colliding with `NSObject` all break
+          # Swift while every Linux leg stays green. That is precisely how 204 errors accumulated
+          # unseen, and a paths filter is the cheapest control that would have caught it.
+          IOS_TOUCHED: ${{ steps.ios-paths.outputs.touched }}
 
 
   # ===================================================================================
