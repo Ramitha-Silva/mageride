@@ -60,6 +60,48 @@ paths:
   # Driver identity
   # -------------------------------------------------------------------------------------------
   /v1/drivers/profile:
+    get:
+      operationId: getDriverProfile
+      summary: This driver's identity profile, or `null` when Profile Setup has not been done.
+      description: |
+        **Δ MCS-05.** SCR-DA/DI-001's boot router asks one question — *has this person completed
+        driver Profile Setup?* — and until this operation existed there was nothing to ask. Both
+        apps asked iam-svc instead, reading `iam.users.first_name` off `GET /v1/users/me`.
+
+        That is the **passenger** app's question and it is the wrong one on this surface. Profile
+        Setup writes `registry.driver_profiles` and never touches `iam.users` — registry-svc holds
+        no reference to that table and emits no event iam-svc consumes — so the two failure modes
+        were mirror images and both were wrong:
+
+        * a driver who *had* completed Profile Setup still read as incomplete, and was sent back to
+          the form on every cold start;
+        * a **passenger** who already had a name from the other app read as complete, skipped
+          driver onboarding altogether and reached Home without ever submitting a driving licence.
+
+        **`null` is a `200`, not a `404`.** The same shape `getActiveDriverRide` uses and for the
+        same reason its handler gives: this is a cold-start read, and a `404` is something an app
+        puts in front of a driver as an error.
+
+        The profile **row** only. The AL-29 extracted fields belong to the licence documents and
+        come back from `PUT /v1/drivers/profile`, which is the screen that has something to do
+        with them.
+      tags: [drivers]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The driver's profile, or `null` when they have none.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/DriverProfileSummary'
+                  - type: 'null'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
     put:
       operationId: upsertDriverProfile
       summary: Profile Setup — driver name, photo and driving licence.
@@ -1174,6 +1216,33 @@ components:
           enum: [pending_verification, verified, rejected, superseded]
         rejectionReason: { type: string, nullable: true }
         verifiedAt: { type: string, format: date-time, nullable: true }
+
+    DriverProfileSummary:
+      type: object
+      description: |
+        **Δ MCS-05.** One `registry.driver_profiles` row — what Profile Setup wrote, read back.
+
+        `status` is the same derivation `PUT /v1/drivers/profile` returns: `PENDING` while any
+        identity field is still waiting on a Verification Officer, `APPROVED` once none is. D3'
+        types it as a `RegistrationStatus`, which is the vehicle vocabulary; for a driver it reads
+        as *"has this identity been checked"*.
+      required: [driverId, status, displayName]
+      properties:
+        driverId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        status:
+          $ref: '#/components/schemas/RegistrationStatus'
+        displayName:
+          type: string
+        photoUrl:
+          type: string
+          format: uri
+        nicNo:
+          type: string
+        allowedVehicleTypes:
+          type: array
+          items:
+            $ref: './_shared.yaml#/components/schemas/VehicleType'
 
     DriverPayoutProfile:
       type: object

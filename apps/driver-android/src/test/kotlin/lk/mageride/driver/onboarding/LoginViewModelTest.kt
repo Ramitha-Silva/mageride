@@ -8,6 +8,8 @@ import lk.mageride.shared.data.models.Language
 import lk.mageride.shared.data.models.Role
 import lk.mageride.shared.data.models.iam.UserProfile
 import lk.mageride.shared.data.models.iam.VerifyOtpResponse
+import lk.mageride.shared.data.models.registry.DriverProfileSummary
+import lk.mageride.shared.data.models.registry.RegistrationStatus
 import lk.mageride.shared.domain.auth.AuthConfig
 import lk.mageride.shared.domain.auth.AuthSessionManager
 import lk.mageride.shared.domain.auth.AuthSessionStore
@@ -93,7 +95,7 @@ class LoginViewModelTest {
     @Test
     fun a_verified_new_driver_lands_on_profile_setup_and_the_first_run_choices_reach_iam() = runBlocking {
         backend.returns("verifyOtp", verified(isNewUser = true))
-        backend.returns("getMyProfile", profile(firstName = null))
+        noDriverProfile()
         val model = signedOutWithNumber()
 
         model.submit()
@@ -115,7 +117,7 @@ class LoginViewModelTest {
     fun a_returning_driver_with_a_profile_and_no_vehicle_lands_on_home() = runBlocking {
         preferences.permissionsAcknowledged = true
         backend.returns("verifyOtp", verified(isNewUser = false))
-        backend.returns("getMyProfile", profile(firstName = "K. Fernando"))
+        backend.returns("getDriverProfile", driverProfile())
         val model = signedOutWithNumber()
 
         model.submit()
@@ -133,8 +135,37 @@ class LoginViewModelTest {
         // A driver who installed, signed in and killed the app before Profile Setup is not a new
         // user on the next verify — and still has no profile. Trusting `isNewUser` would send
         // them to Home with no name and no licence on file.
+        //
+        // Δ MCS-05: "has a profile" is `GET /v1/drivers/profile` now. It used to be a name in
+        // `iam.users`, which Profile Setup never writes and the *passenger* app does — so a
+        // driver signing in with the number they already use as a passenger sailed past this
+        // screen without ever handing over a driving licence.
         backend.returns("verifyOtp", verified(isNewUser = false))
-        backend.returns("getMyProfile", profile(firstName = null))
+        noDriverProfile()
+        val model = signedOutWithNumber()
+
+        model.submit()
+        model.state.await { it.phase == LoginPhase.OTP && !it.busy }
+        model.onOtpChanged("123456")
+        model.submit()
+        model.destination.await { it != null }
+
+        assertEquals(OnboardingDestination.PROFILE_SETUP, model.destination.value)
+    }
+
+    @Test
+    fun a_passenger_signing_into_the_driver_app_still_has_to_do_driver_profile_setup() = runBlocking {
+        // The one this was built for: one number, both apps, **separate** onboarding. This person
+        // onboarded as a passenger, so `iam.users` has had their name for months — and that name
+        // is precisely what the router used to read. They went straight past the screen that
+        // collects a driving licence and reached Home as a "driver" who had never shown one.
+        //
+        // `getMyProfile` is stubbed with a name on purpose: the assertion is worth nothing unless
+        // the old signal is present and being ignored.
+        backend.returns("verifyOtp", verified(isNewUser = false))
+        backend.returns("getMyProfile", profile(firstName = "K. Fernando"))
+        noDriverProfile()
+        preferences.permissionsAcknowledged = true
         val model = signedOutWithNumber()
 
         model.submit()
@@ -206,6 +237,16 @@ class LoginViewModelTest {
         assertEquals("771234567", model.state.value.phone, "the number is kept — it is usually one digit wrong")
         assertEquals("", model.state.value.otp)
     }
+
+    /** The driver has no `registry.driver_profiles` row — the read answers a literal `null`. */
+    private fun noDriverProfile() = backend.returns<DriverProfileSummary?>("getDriverProfile", null)
+
+    /** A stored driver profile, which is what sends a returning driver past Profile Setup. */
+    private fun driverProfile() = DriverProfileSummary(
+        driverId = "01JDRIVER00000000000000000",
+        status = RegistrationStatus.APPROVED,
+        displayName = "K. Fernando",
+    )
 
     private fun signedOutWithNumber(): LoginViewModel = viewModel().apply { onPhoneChanged("0771234567") }
 

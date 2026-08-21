@@ -7,11 +7,72 @@ using MageRide.TestKit;
 namespace MageRide.Registry.Tests.Integration;
 
 /// <summary>
-/// <c>PUT /v1/drivers/profile</c> — AL-27's phase 1, and AL-29's per-field provenance.
+/// <c>PUT /v1/drivers/profile</c> — AL-27's phase 1, and AL-29's per-field provenance — and
+/// <c>GET /v1/drivers/profile</c>, the read that tells the boot router which phase this is
+/// (Δ MCS-05).
 /// </summary>
 [Collection<PostgresCollection>]
 public sealed class DriverProfileSetupTests(PostgresFixture postgres)
 {
+    /// <summary>
+    /// Δ MCS-05. The cold-start read, before Profile Setup has been done.
+    /// </summary>
+    /// <remarks>
+    /// <b>A literal <c>null</c> and a 200, not a 404.</b> "This driver has no profile yet" is the
+    /// normal answer on a boot — it is what sends them to Profile Setup — and a 404 is something
+    /// the app puts in front of them as an error over the top of the right behaviour. ride-svc's
+    /// two recovery reads are shaped the same way for the same reason.
+    /// </remarks>
+    [Fact]
+    public async Task A_driver_who_has_not_done_profile_setup_reads_null_rather_than_a_404()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+
+        var driverId = await harness.CreateDriverAsync();
+
+        var response = await harness.GetAsync("/v1/drivers/profile", harness.Tokens.Driver(driverId));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("null", (await response.Content.ReadAsStringAsync()).Trim());
+    }
+
+    /// <summary>
+    /// Δ MCS-05. After Profile Setup, the read answers what was stored.
+    /// </summary>
+    /// <remarks>
+    /// This is the question SCR-DA/DI-001 actually asks, and until this operation existed both
+    /// apps asked iam-svc instead — <c>GET /v1/users/me</c>, is there a <c>first_name</c>? Profile
+    /// Setup writes <c>registry.driver_profiles</c> and never touches <c>iam.users</c>, so that
+    /// read was wrong in both directions: a driver who had done this went round the form again on
+    /// every cold start, and a passenger who had a name from the other app skipped it entirely.
+    /// </remarks>
+    [Fact]
+    public async Task The_read_answers_what_profile_setup_stored()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+
+        var driverId = await harness.CreateDriverAsync();
+        var bearer = harness.Tokens.Driver(driverId);
+        await harness.CompleteProfileSetupAsync(driverId, bearer);
+
+        var response = await harness.GetAsync("/v1/drivers/profile", bearer);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await RegistryHarness.ReadJsonAsync(response);
+        Assert.Equal(driverId.ToString(), body.GetProperty("driverId").GetString());
+        Assert.Equal("Nimal Perera", body.GetProperty("displayName").GetString());
+
+        // The same derivation the write returns, off the same `verified_at` column — the two must
+        // not be able to disagree about a verdict the driver has already been shown.
+        Assert.Equal("APPROVED", body.GetProperty("status").GetString());
+
+        // The row, and deliberately not the AL-29 fields: those belong to the licence documents
+        // and come back from the write, on the screen that can act on them.
+        Assert.False(body.TryGetProperty("fields", out _));
+    }
+
     [Fact]
     public async Task Profile_setup_stores_the_profile_and_a_vehicle_less_driving_licence()
     {

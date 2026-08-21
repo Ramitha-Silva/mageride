@@ -206,6 +206,31 @@ public data class UpsertDriverProfileRequest(
 )
 
 /**
+ * `GET /v1/drivers/profile` — 200, or a literal `null` when Profile Setup has not been done
+ * (Δ MCS-05).
+ *
+ * The boot router's read. **Not** [UpsertDriverProfileResponse] with an empty `fields`: the AL-29
+ * extracted values belong to the licence documents and come back from the write, on the screen
+ * that can act on them. Saying they were empty is a different claim from not having fetched them.
+ *
+ * @property driverId The driver this profile belongs to.
+ * @property status `PENDING` while an identity field is still with a Verification Officer.
+ * @property displayName The name Profile Setup stored.
+ * @property photoUrl The stored profile photo (US-2.12).
+ * @property nicNo NIC as stored, whether extracted or driver-supplied.
+ * @property allowedVehicleTypes The licence classes as stored.
+ */
+@Serializable
+public data class DriverProfileSummary(
+    val driverId: Ulid,
+    val status: RegistrationStatus,
+    val displayName: String,
+    val photoUrl: String? = null,
+    val nicNo: String? = null,
+    val allowedVehicleTypes: List<VehicleType> = emptyList(),
+)
+
+/**
  * `PUT /v1/drivers/profile` — 200.
  *
  * The screen that follows Profile Setup shows the driver their own name and classes back, so the

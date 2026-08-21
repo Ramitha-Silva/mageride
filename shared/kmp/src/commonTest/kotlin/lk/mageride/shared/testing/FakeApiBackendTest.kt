@@ -203,7 +203,7 @@ class FakeApiBackendTest {
          * `downloadSignedGtfsObject` is the third binary read. It stays out because it is
          * `/v1/internal` and has no client, not because the table cannot hold it any more.
          */
-        const val EXPECTED_OPERATIONS = 203
+        const val EXPECTED_OPERATIONS = 204
 
         /**
          * The reads that answer with bytes, sorted — a `List` rather than a sorted `Set` because

@@ -50,22 +50,25 @@ internal class SplashViewModel(
     }
 
     /**
-     * Whether `registry.driver_profiles` already has a name for this driver (US-2.21).
+     * Whether `registry.driver_profiles` already has a profile for this driver (US-2.21).
      *
-     * `firstName` is `iam.users`' copy of the Profile Setup name, and D1' A.1 makes "no name" the
-     * entry condition for the profile screen on both apps.
+     * **Δ MCS-05 — this asks registry-svc now, not iam-svc.** It used to read
+     * `iam.users.first_name`, which Profile Setup never writes: a driver who had completed the
+     * screen was sent back to it on every cold start, and a passenger who had a name from the
+     * other app skipped it entirely. `GET /v1/drivers/profile` is the read that answers the
+     * question actually being asked.
      *
-     * **A failed call answers `true`, and that is deliberate.** This runs on a session that was
-     * restored from the secure store, so the driver has signed in before and has therefore already
-     * been through Profile Setup — the screen cannot be reached without it. Answering `false` on a
-     * flat tunnel would put a working driver back on an onboarding form; answering `true` lands
-     * them on the dashboard, which has the offline banner and can retry everything. A genuinely
-     * new account never takes this path: the login screen computes its own destination from the
-     * verify it just made.
+     * **A failed call answers `true`, and that is deliberate.** This runs on a session restored
+     * from the secure store, so the driver has signed in before and has therefore already been
+     * through Profile Setup — the screen cannot be reached without it. Answering `false` on a flat
+     * tunnel would put a working driver back on an onboarding form; answering `true` lands them on
+     * the dashboard, which has the offline banner and can retry everything. A genuinely new
+     * account never takes this path: the login screen computes its own destination from the verify
+     * it just made.
      */
     @Suppress("TooGenericExceptionCaught")
     private suspend fun hasProfile(): Boolean = try {
-        !profiles.me().firstName.isNullOrBlank()
+        profiles.hasDriverProfile()
     } catch (cause: CancellationException) {
         throw cause
     } catch (_: Throwable) {
