@@ -1,6 +1,5 @@
 package lk.mageride.shared.data.api.comms
 
-import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.MageRideError
@@ -20,6 +19,7 @@ import lk.mageride.shared.data.models.comms.SendNotificationResponse
 import lk.mageride.shared.data.models.comms.StartCallRequest
 import lk.mageride.shared.data.models.comms.StartCallResponse
 import lk.mageride.shared.data.models.comms.VoipTokenResponse
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * voip-svc — LiveKit call signalling (`backend/contracts/voip.yaml`, D-24/D-25).

@@ -1,6 +1,5 @@
 package lk.mageride.shared.data.api.trip
 
-import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.MageRideError
@@ -16,6 +15,7 @@ import lk.mageride.shared.data.models.trip.Rating
 import lk.mageride.shared.data.models.trip.RatingInput
 import lk.mageride.shared.data.models.trip.Session
 import lk.mageride.shared.data.models.trip.StartSessionRequest
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * trip-state-svc — Mode A/B tracking sessions and their ratings

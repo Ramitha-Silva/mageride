@@ -2,7 +2,6 @@ package lk.mageride.shared.data.api.support
 
 import io.ktor.client.call.body
 import io.ktor.client.request.parameter
-import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.FileUpload
@@ -24,6 +23,7 @@ import lk.mageride.shared.data.models.support.FaqListResponse
 import lk.mageride.shared.data.models.support.Ticket
 import lk.mageride.shared.data.models.support.TicketDetail
 import lk.mageride.shared.data.models.support.UploadedScreenshot
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * support-svc — the FAQ and the ticket queue (`backend/contracts/support.yaml`, Epic 16).

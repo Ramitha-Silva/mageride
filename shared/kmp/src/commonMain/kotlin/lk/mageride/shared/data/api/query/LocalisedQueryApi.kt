@@ -1,10 +1,10 @@
 package lk.mageride.shared.data.api.query
 
-import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.MageRideError
 import lk.mageride.shared.data.models.Language
 import lk.mageride.shared.data.models.query.GeocodedPlace
 import lk.mageride.shared.data.models.query.PlaceSearchResponse
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * The language a geocode should be read in, as the app that has one supplies it.

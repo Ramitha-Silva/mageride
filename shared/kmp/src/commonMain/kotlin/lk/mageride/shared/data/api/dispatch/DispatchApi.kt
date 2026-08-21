@@ -1,7 +1,6 @@
 package lk.mageride.shared.data.api.dispatch
 
 import io.ktor.client.request.parameter
-import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.MageRideError
@@ -33,6 +32,7 @@ import lk.mageride.shared.data.models.dispatch.ScheduledRide
 import lk.mageride.shared.data.models.dispatch.SetDirectionalFilterRequest
 import lk.mageride.shared.data.models.dispatch.SettlePenaltiesRequest
 import lk.mageride.shared.data.models.dispatch.SettledPenalties
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * dispatch-svc — driver presence, Directional Travel, the Job Board and the Driver Level System

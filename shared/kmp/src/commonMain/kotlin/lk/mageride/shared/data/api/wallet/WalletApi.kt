@@ -4,7 +4,6 @@ import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.accept
 import io.ktor.client.request.parameter
 import io.ktor.http.ContentType
-import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.MageRideError
@@ -34,6 +33,7 @@ import lk.mageride.shared.data.models.wallet.VoucherDiscountTierUsageList
 import lk.mageride.shared.data.models.wallet.Wallet
 import lk.mageride.shared.data.models.wallet.WalletTransaction
 import lk.mageride.shared.data.models.wallet.WalletVoucherPurchase
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * wallet-svc — balance, ledger, driver-to-driver transfers and top-ups

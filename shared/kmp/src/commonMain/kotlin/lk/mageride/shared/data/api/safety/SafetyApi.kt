@@ -1,7 +1,6 @@
 package lk.mageride.shared.data.api.safety
 
 import io.ktor.http.encodeURLPathPart
-import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.Credential
@@ -23,6 +22,7 @@ import lk.mageride.shared.data.models.safety.SosEvent
 import lk.mageride.shared.data.models.safety.TriggerSosRequest
 import lk.mageride.shared.data.models.safety.TripShareLink
 import lk.mageride.shared.data.models.safety.VehicleReport
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * safety-svc — SOS, trip sharing, vehicle reports and driver blocks

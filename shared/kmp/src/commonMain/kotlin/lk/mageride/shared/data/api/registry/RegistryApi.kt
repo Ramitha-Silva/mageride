@@ -1,6 +1,5 @@
 package lk.mageride.shared.data.api.registry
 
-import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.CapturedDocument
@@ -47,6 +46,7 @@ import lk.mageride.shared.data.models.registry.VehicleListResponse
 import lk.mageride.shared.data.models.registry.VehicleOnboardingStatusResponse
 import lk.mageride.shared.data.models.registry.VehicleRegistration
 import lk.mageride.shared.data.models.registry.VehicleStatusResponse
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * registry-svc — driver identity, vehicles, onboarding, sharing and device binding

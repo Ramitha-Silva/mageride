@@ -1,6 +1,5 @@
 package lk.mageride.shared.data.api.ride
 
-import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.FileUpload
@@ -47,6 +46,7 @@ import lk.mageride.shared.data.models.ride.StartRideRequest
 import lk.mageride.shared.data.models.ride.SystemCancelRideRequest
 import lk.mageride.shared.data.models.ride.VersionedCommand
 import lk.mageride.shared.data.models.support.TicketRef
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * ride-svc — the Mode C ride aggregate and its sole write surface

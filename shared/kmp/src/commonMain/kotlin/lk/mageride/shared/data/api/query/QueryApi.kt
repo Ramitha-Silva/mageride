@@ -2,7 +2,6 @@ package lk.mageride.shared.data.api.query
 
 import io.ktor.client.request.parameter
 import io.ktor.http.encodeURLPathPart
-import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.MageRideError
@@ -25,6 +24,7 @@ import lk.mageride.shared.data.models.query.SessionEarning
 import lk.mageride.shared.data.models.query.TransportOptionsResponse
 import lk.mageride.shared.data.models.query.TripDetail
 import lk.mageride.shared.data.models.query.TripSummary
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * query-svc — the read models: nearby vehicles, trip history, earnings and geocoding

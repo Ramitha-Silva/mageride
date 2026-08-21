@@ -1,7 +1,6 @@
 package lk.mageride.shared.data.api.fare
 
 import io.ktor.client.request.parameter
-import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.MageRideError
@@ -25,6 +24,7 @@ import lk.mageride.shared.data.models.fare.RefundFareRequest
 import lk.mageride.shared.data.models.fare.RefundResponse
 import lk.mageride.shared.data.models.fare.ScanDriverQrRequest
 import lk.mageride.shared.data.models.support.TicketRef
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * fare-svc — estimates, the final fare and the payment state machine

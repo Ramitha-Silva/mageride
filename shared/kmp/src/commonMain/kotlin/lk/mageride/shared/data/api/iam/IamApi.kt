@@ -3,7 +3,6 @@ package lk.mageride.shared.data.api.iam
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.http.HttpHeaders
-import kotlin.coroutines.cancellation.CancellationException
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.Credential
@@ -45,6 +44,7 @@ import lk.mageride.shared.data.models.iam.UpdateProfileRequest
 import lk.mageride.shared.data.models.iam.UserProfile
 import lk.mageride.shared.data.models.iam.VerifyOtpRequest
 import lk.mageride.shared.data.models.iam.VerifyOtpResponse
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * iam-svc — auth, profile, session and saved addresses (`backend/contracts/iam.yaml`).
