@@ -6,6 +6,7 @@ import XCTest
 ///
 /// The tables are `static` and pure, so this needs no running app — the same split the Android side
 /// makes.
+@MainActor
 final class PushRouterTests: XCTestCase {
 
     // MARK: - The two kinds that carry no deep link

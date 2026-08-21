@@ -93,7 +93,7 @@ final class ApiAddressBook: AddressBook {
     /// implementation's explicit `CancellationException` re-throw is simply that the task that owns
     /// this await is the one being cancelled, and it checks for itself at the next suspension point.
     func describe(_ point: GeoPoint) async -> GeocodedPlace? {
-        try? await query.reverseGeocode(lat: point.lat, lng: point.lng)
+        try? await query.reverseGeocode(lat: point.lat, lng: point.lng, lang: nil)
     }
 }
 

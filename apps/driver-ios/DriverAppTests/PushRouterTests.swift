@@ -7,6 +7,7 @@ import XCTest
 /// The same table as `apps/driver-android/.../push/PushRouter.kt` and the same assertions as its
 /// `NavigationShellTest` — a `mageride://` host added on the server with no client route, or a
 /// client that started trusting the URI it was handed, are both build failures here.
+@MainActor
 final class PushRouterTests: XCTestCase {
 
     /// `DeepLinks` in `Notification.Api/Messaging/EventHandlers.cs` mints exactly four.

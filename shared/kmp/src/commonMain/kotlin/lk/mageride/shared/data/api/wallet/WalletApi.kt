@@ -6,6 +6,7 @@ import io.ktor.client.request.parameter
 import io.ktor.http.ContentType
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
+import lk.mageride.shared.data.api.MageRideError
 import lk.mageride.shared.data.api.apiGet
 import lk.mageride.shared.data.api.apiPost
 import lk.mageride.shared.data.api.apiPostExempt
@@ -32,6 +33,7 @@ import lk.mageride.shared.data.models.wallet.VoucherDiscountTierUsageList
 import lk.mageride.shared.data.models.wallet.Wallet
 import lk.mageride.shared.data.models.wallet.WalletTransaction
 import lk.mageride.shared.data.models.wallet.WalletVoucherPurchase
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * wallet-svc — balance, ledger, driver-to-driver transfers and top-ups
@@ -54,9 +56,11 @@ import lk.mageride.shared.data.models.wallet.WalletVoucherPurchase
 public interface WalletApi {
 
     /** `GET /v1/wallet/{userId}` — balance, available balance and any outstanding debt. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getWallet(userId: Ulid): Wallet
 
     /** `GET /v1/wallet/{userId}/transactions` — the ledger, newest first. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listWalletTransactions(
         userId: Ulid,
         from: BusinessDate? = null,
@@ -65,6 +69,7 @@ public interface WalletApi {
     ): Page<WalletTransaction>
 
     /** `GET /v1/wallet/{userId}/transactions` with `Accept: text/csv` — the same rows as a statement. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun downloadWalletStatementCsv(
         userId: Ulid,
         from: BusinessDate? = null,
@@ -72,6 +77,7 @@ public interface WalletApi {
     ): String
 
     /** `GET /v1/wallet/{userId}/transactions` with `Accept: application/pdf`. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun downloadWalletStatementPdf(
         userId: Ulid,
         from: BusinessDate? = null,
@@ -79,6 +85,7 @@ public interface WalletApi {
     ): ByteArray
 
     /** `GET /v1/wallet/{driverId}/transfers` — credit sent to and received from other drivers. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listWalletTransfers(
         driverId: Ulid,
         direction: TransferDirectionFilter? = null,
@@ -86,6 +93,7 @@ public interface WalletApi {
     ): Page<TransferRow>
 
     /** `POST /v1/wallet/credit-transfer/initiate` — send credit to another driver. Attested. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun initiateWalletCreditTransfer(
         request: InitiateWalletCreditTransferRequest,
         idempotencyKey: String? = null,
@@ -97,12 +105,14 @@ public interface WalletApi {
      * The **pull** half of AL-01's transfer; [initiateWalletCreditTransfer] is the push half.
      * Creates a `PENDING` row the holder then approves or rejects.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun requestWalletCreditTransfer(
         request: RequestWalletCreditTransferRequest,
         idempotencyKey: String? = null,
     ): TransferRow
 
     /** `GET /v1/wallet/credit-transfer/pending` — requests waiting on this driver's decision. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listPendingWalletCreditTransfers(page: PageRequest = PageRequest.FIRST): Page<TransferRow>
 
     /**
@@ -113,9 +123,11 @@ public interface WalletApi {
      * (AL-01). `402 insufficient-wallet` when the holder cannot cover it at approval time;
      * approving twice is a `409` and moves nothing.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun approveWalletCreditTransfer(transferId: Ulid, idempotencyKey: String? = null): TransferRow
 
     /** `POST /v1/wallet/credit-transfer/{transferId}/reject` — the holder declines. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun rejectWalletCreditTransfer(transferId: Ulid, idempotencyKey: String? = null): TransferRow
 
     /**
@@ -123,12 +135,14 @@ public interface WalletApi {
      *
      * The discount is the tier's and the server prices it; this names the denomination.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun purchaseVoucherFromWallet(
         request: PurchaseVoucherFromWalletRequest,
         idempotencyKey: String? = null,
     ): WalletVoucherPurchase
 
     /** `GET /v1/wallet/voucher/discount-tiers` — the active voucher denominations and discounts. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listVoucherDiscountTiers(): VoucherDiscountTierList
 
     /**
@@ -136,9 +150,11 @@ public interface WalletApi {
      *
      * Runs on the payment timeout budget: the response waits on OnePay for its redirect.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun topupWithOnepay(request: OnepayTopupRequest, idempotencyKey: String? = null): Topup
 
     /** `POST /v1/wallet/topup/lankaqr` — start a LankaQR top-up (D-12). Attested. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun topupWithLankaqr(request: LankaqrTopupRequest, idempotencyKey: String? = null): Topup
 
     /**
@@ -149,6 +165,7 @@ public interface WalletApi {
      * D6' §7.1 gives the session a 90-second pending window and this is how the driver's screen
      * resolves it without guessing. Only the session's own driver may read it.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getTopup(topupId: Ulid): Topup
 
     /**
@@ -157,9 +174,11 @@ public interface WalletApi {
      * **Inbound, HMAC-signed and `x-idempotency-exempt`** (R-19). Not an app call; present for
      * contract coverage and never retried by the transport.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun onepayTopupWebhook(request: TopupCallback): CallbackAck
 
     /** `POST /v1/wallet/topup/lankaqr/confirm` — the bank IPG equivalent of [onepayTopupWebhook]. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun lankaqrTopupConfirm(request: TopupCallback): CallbackAck
 
     /**
@@ -167,18 +186,22 @@ public interface WalletApi {
      *
      * The read model is richer than the public one: same tiers, plus usage.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun adminListVoucherDiscountTiers(): VoucherDiscountTierUsageList
 
     /** `PUT /v1/wallet/admin/voucher-discount-tiers` — Admin Portal replaces the tier table. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun adminUpdateVoucherDiscountTiers(request: VoucherDiscountTierList): VoucherDiscountTierList
 }
 
 @Suppress("TooManyFunctions")
 internal class KtorWalletApi(private val transport: ApiTransport) : WalletApi {
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getWallet(userId: Ulid): Wallet =
         transport.apiGet(SERVICE, "getWallet", "$WALLET_PATH/$userId").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listWalletTransactions(
         userId: Ulid,
         from: BusinessDate?,
@@ -189,18 +212,21 @@ internal class KtorWalletApi(private val transport: ApiTransport) : WalletApi {
         pageParameters(page)
     }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun downloadWalletStatementCsv(userId: Ulid, from: BusinessDate?, to: BusinessDate?): String =
         transport.apiGet(SERVICE, "listWalletTransactions", transactionsPath(userId)) {
             accept(ContentType.Text.CSV)
             dateRange(from, to)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun downloadWalletStatementPdf(userId: Ulid, from: BusinessDate?, to: BusinessDate?): ByteArray =
         transport.apiGet(SERVICE, "listWalletTransactions", transactionsPath(userId)) {
             accept(ContentType.Application.Pdf)
             dateRange(from, to)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listWalletTransfers(
         driverId: Ulid,
         direction: TransferDirectionFilter?,
@@ -210,6 +236,7 @@ internal class KtorWalletApi(private val transport: ApiTransport) : WalletApi {
         pageParameters(page)
     }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun initiateWalletCreditTransfer(
         request: InitiateWalletCreditTransferRequest,
         idempotencyKey: String?,
@@ -221,6 +248,7 @@ internal class KtorWalletApi(private val transport: ApiTransport) : WalletApi {
         attested = true,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun requestWalletCreditTransfer(
         request: RequestWalletCreditTransferRequest,
         idempotencyKey: String?,
@@ -232,11 +260,13 @@ internal class KtorWalletApi(private val transport: ApiTransport) : WalletApi {
         attested = true,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listPendingWalletCreditTransfers(page: PageRequest): Page<TransferRow> =
         transport.apiGet(SERVICE, "listPendingWalletCreditTransfers", "$WALLET_PATH/credit-transfer/pending") {
             pageParameters(page)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun approveWalletCreditTransfer(transferId: Ulid, idempotencyKey: String?): TransferRow =
         transport.apiPost(
             service = SERVICE,
@@ -246,6 +276,7 @@ internal class KtorWalletApi(private val transport: ApiTransport) : WalletApi {
             attested = true,
         ).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun rejectWalletCreditTransfer(transferId: Ulid, idempotencyKey: String?): TransferRow =
         transport.apiPost(
             service = SERVICE,
@@ -254,6 +285,7 @@ internal class KtorWalletApi(private val transport: ApiTransport) : WalletApi {
             idempotencyKey = idempotencyKey,
         ).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun purchaseVoucherFromWallet(
         request: PurchaseVoucherFromWalletRequest,
         idempotencyKey: String?,
@@ -265,9 +297,11 @@ internal class KtorWalletApi(private val transport: ApiTransport) : WalletApi {
         attested = true,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listVoucherDiscountTiers(): VoucherDiscountTierList =
         transport.apiGet(SERVICE, "listVoucherDiscountTiers", "$WALLET_PATH/voucher/discount-tiers").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun topupWithOnepay(request: OnepayTopupRequest, idempotencyKey: String?): Topup =
         transport.apiPost(
             service = SERVICE,
@@ -278,9 +312,11 @@ internal class KtorWalletApi(private val transport: ApiTransport) : WalletApi {
             requestTimeout = transport.config.timeouts.paymentRequestTimeout,
         ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getTopup(topupId: Ulid): Topup =
         transport.apiGet(SERVICE, "getTopup", "$TOPUP_PATH/$topupId").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun topupWithLankaqr(request: LankaqrTopupRequest, idempotencyKey: String?): Topup =
         transport.apiPost(
             service = SERVICE,
@@ -291,19 +327,23 @@ internal class KtorWalletApi(private val transport: ApiTransport) : WalletApi {
             requestTimeout = transport.config.timeouts.paymentRequestTimeout,
         ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun onepayTopupWebhook(request: TopupCallback): CallbackAck =
         transport.apiPostExempt(SERVICE, "onepayTopupWebhook", "$TOPUP_PATH/onepay/webhook") {
             jsonBody(request)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun lankaqrTopupConfirm(request: TopupCallback): CallbackAck =
         transport.apiPostExempt(SERVICE, "lankaqrTopupConfirm", "$TOPUP_PATH/lankaqr/confirm") {
             jsonBody(request)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun adminListVoucherDiscountTiers(): VoucherDiscountTierUsageList =
         transport.apiGet(SERVICE, "adminListVoucherDiscountTiers", ADMIN_TIERS_PATH).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun adminUpdateVoucherDiscountTiers(request: VoucherDiscountTierList): VoucherDiscountTierList =
         transport.apiPut(SERVICE, "adminUpdateVoucherDiscountTiers", ADMIN_TIERS_PATH) {
             jsonBody(request)

@@ -11,7 +11,7 @@ import XCTest
 final class RideBookingModelTests: XCTestCase {
 
     private var bookings: FakeBookingRepository!
-    private var keys: FakeIdempotencyKeys!
+    private var keys: FakePinnedIdempotencyKeys!
     private var preferences: FakeAppPreferences!
     private var draft: BookingDraft!
 
@@ -19,7 +19,7 @@ final class RideBookingModelTests: XCTestCase {
     override func setUp() {
         super.setUp()
         bookings = FakeBookingRepository()
-        keys = FakeIdempotencyKeys()
+        keys = FakePinnedIdempotencyKeys()
         preferences = FakeAppPreferences()
         draft = BookingDraft(preferences: preferences, lastFix: LastKnownFix())
         draft.begin(dropoff: BookingFixtures.nugegoda, pickup: BookingFixtures.colombo)
@@ -195,7 +195,7 @@ final class RideBookingModelTests: XCTestCase {
     /// P-01 / P-05 — a proxy booking travels with the rider's name and number, and `isProxy` is
     /// derived from the kind rather than taken, so the two cannot disagree.
     @MainActor
-    func testAProxyBookingCarriesTheRiderAndSaysItIsOne() async {
+    func testAProxyBookingCarriesTheRiderAndSaysItIsOne() async throws {
         draft.update {
             $0.bookingFor = .someoneElse
             $0.riderName = "Nimal"
@@ -208,11 +208,14 @@ final class RideBookingModelTests: XCTestCase {
         model.book()
         await eventually("booked") { await MainActor.run { model.state.booked != nil } }
 
-        let sent = bookings.requested.first
-        XCTAssertEqual(sent?.kind, RideKind.proxy)
-        XCTAssertEqual(sent?.isProxy?.boolValue, true)
-        XCTAssertEqual(sent?.riderName, "Nimal")
-        XCTAssertEqual(sent?.riderPhone, PhoneNumber.toE164(BookingFixtures.riderPhone))
+        let sent = try XCTUnwrap(bookings.requested.first)
+        XCTAssertEqual(sent.kind, RideKind.proxy)
+        // `RideRequest.isProxy` collides with `NSObject.isProxy()`. Unwrapped and annotated, the
+        // exported property is the only candidate that type-checks.
+        let isProxy: KotlinBoolean? = sent.isProxy()
+        XCTAssertEqual(isProxy?.boolValue, true)
+        XCTAssertEqual(sent.riderName, "Nimal")
+        XCTAssertEqual(sent.riderPhone, PhoneNumber.toE164(BookingFixtures.riderPhone))
     }
 
     /// A parcel quotes on the sizes P-06 says fit, not on the six passenger tiers.

@@ -5,11 +5,13 @@ import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.Credential
 import lk.mageride.shared.data.api.MageRideApiSignals
+import lk.mageride.shared.data.api.MageRideError
 import lk.mageride.shared.data.api.UpgradeRequiredSignal
 import lk.mageride.shared.data.api.apiGet
 import lk.mageride.shared.data.api.decode
 import lk.mageride.shared.data.models.ClientPlatform
 import lk.mageride.shared.data.models.version.AppVersionCheck
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * version-check — the gateway's min-version gate, asked politely (D-31,
@@ -35,7 +37,16 @@ public interface VersionApi {
      * @param publishSignal When `true` and an update is required, also publishes on
      *   [MageRideApiSignals.upgradeRequired], so the cold-start check and a mid-session `426`
      *   reach the app shell through exactly one channel.
+     *
+     * `@Throws` is load-bearing on this one. Kotlin/Native bridges an exception out of a `suspend`
+     * function as an `NSError` **only** when its class is on this list; anything else is "unexpected
+     * and unhandled" and terminates the process. This is the cold-start call, it runs before a
+     * driver has typed anything, and [MageRideError.Network] is its ordinary answer with no
+     * backend reachable — so without this the app dies on launch offline, and no `try?` on the
+     * Swift side can catch it (the throw is on a Kotlin worker, not the caller's thread). The same
+     * hazard the C091 finding records for non-suspend functions in `IosLiveHubPayloads`.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun checkAppVersion(
         platform: ClientPlatform? = null,
         currentVersion: String? = null,
@@ -46,6 +57,7 @@ public interface VersionApi {
 internal class KtorVersionApi(private val transport: ApiTransport, private val signals: MageRideApiSignals) :
     VersionApi {
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun checkAppVersion(
         platform: ClientPlatform?,
         currentVersion: String?,

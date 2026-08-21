@@ -116,7 +116,7 @@ final class SplashModelTests: XCTestCase {
     func testASignedOutDriverNeverCostsAProfileCall() async {
         let profiles = FakeDriverProfileRepository()
         let sessions = FakeDriverSessions()
-        let model = SplashModel(sessions: sessions, profiles: profiles, preferences: .firstRunDone)
+        let model = SplashModel(sessions: sessions, profiles: profiles, preferences: FakeOnboardingPreferences.firstRunDone)
 
         await model.route()
 
@@ -151,7 +151,7 @@ final class SplashModelTests: XCTestCase {
         let profiles = FakeDriverProfileRepository()
         profiles.name = nil
 
-        let model = SplashModel(sessions: sessions, profiles: profiles, preferences: .firstRunDone)
+        let model = SplashModel(sessions: sessions, profiles: profiles, preferences: FakeOnboardingPreferences.firstRunDone)
         await model.route()
 
         XCTAssertEqual(model.destination, .profileSetup)
@@ -164,7 +164,7 @@ final class SplashModelTests: XCTestCase {
         let model = SplashModel(
             sessions: sessions,
             profiles: FakeDriverProfileRepository(),
-            preferences: .firstRunDone
+            preferences: FakeOnboardingPreferences.firstRunDone
         )
 
         await model.route()
@@ -176,6 +176,7 @@ final class SplashModelTests: XCTestCase {
 
 /// D-26 — a driver never reads a `ProblemDetails` string, and every failure resolves to a key that
 /// exists in all three languages.
+@MainActor
 final class OnboardingErrorsTests: XCTestCase {
 
     /// **A Kotlin exception does not cross the bridge as itself**: Kotlin/Native wraps it in an
@@ -185,7 +186,7 @@ final class OnboardingErrorsTests: XCTestCase {
         // `MageRideError.CircuitOpen` rather than `.Network`, only because it is the one arm whose
         // constructor takes no `KotlinThrowable`. Kotlin's nested types are flattened by the export,
         // which is why the name reads the way it does.
-        let cause = MageRideErrorCircuitOpen(service: ApiService.content, retryAfterMillis: 1_000)
+        let cause = MageRideError.CircuitOpen(service: ApiService.content, retryAfterMillis: 1_000)
         let wrapped = NSError(domain: "KotlinException", code: 0, userInfo: ["KotlinException": cause])
 
         XCTAssertEqual(OnboardingErrors.messageKey(for: wrapped), "error_offline")

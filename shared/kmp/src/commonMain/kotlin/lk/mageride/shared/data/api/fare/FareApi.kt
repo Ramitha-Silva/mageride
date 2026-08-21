@@ -3,6 +3,7 @@ package lk.mageride.shared.data.api.fare
 import io.ktor.client.request.parameter
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
+import lk.mageride.shared.data.api.MageRideError
 import lk.mageride.shared.data.api.apiGet
 import lk.mageride.shared.data.api.apiPost
 import lk.mageride.shared.data.api.decode
@@ -23,6 +24,7 @@ import lk.mageride.shared.data.models.fare.RefundFareRequest
 import lk.mageride.shared.data.models.fare.RefundResponse
 import lk.mageride.shared.data.models.fare.ScanDriverQrRequest
 import lk.mageride.shared.data.models.support.TicketRef
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * fare-svc — estimates, the final fare and the payment state machine
@@ -48,6 +50,7 @@ public interface FareApi {
      * `422 route-unavailable` when the router cannot connect the two points;
      * `400 unserviceable-area` outside an operating city.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun estimateFare(
         fromLat: Double,
         fromLng: Double,
@@ -63,6 +66,7 @@ public interface FareApi {
      * **Service-to-service (mTLS).** ride-svc calls this on completion; present for contract
      * coverage.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun calculateFinalFare(
         request: CalculateFinalFareRequest,
         idempotencyKey: String? = null,
@@ -74,18 +78,22 @@ public interface FareApi {
      * The response carries whichever provider hand-off the chosen method needs: a OnePay
      * redirect or a LankaQR payload. `409 payment-already-settled` if the ride is already paid.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun initiatePayment(
         request: InitiatePaymentRequest,
         idempotencyKey: String? = null,
     ): PaymentInitiation
 
     /** `GET /v1/fare/pay/{paymentId}/status` — poll the payment state machine. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getPaymentStatus(paymentId: Ulid): PaymentStatus
 
     /** `POST /v1/fare/pay/{paymentId}/fallback-cash` — abandon the gateway and settle in cash. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun fallbackToCash(paymentId: Ulid, idempotencyKey: String? = null): PaymentStatus
 
     /** `POST /v1/fare/pay/scan-driver-qr` — the passenger pays by scanning the driver's QR (AL-22). */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun payByScanningDriverQr(
         request: ScanDriverQrRequest,
         idempotencyKey: String? = null,
@@ -96,30 +104,35 @@ public interface FareApi {
      *
      * `202`: the payment moves to `QrClaimedByPassenger` and waits for [confirmDriverQrPayment].
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun claimDriverQrPayment(
         request: ClaimDriverQrRequest,
         idempotencyKey: String? = null,
     ): PaymentStatus
 
     /** `POST /v1/fare/pay/driver-qr/confirm` — the driver attests the money arrived (AL-47). */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun confirmDriverQrPayment(
         request: ConfirmDriverQrRequest,
         idempotencyKey: String? = null,
     ): PaymentStatus
 
     /** `POST /v1/fare/pay/driver-qr/dispute` — the driver says it did not. Opens a ticket. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun disputeDriverQrPayment(
         request: DisputeDriverQrRequest,
         idempotencyKey: String? = null,
     ): TicketRef
 
     /** `POST /v1/admin/fare/refund` — Finance Officer issues a refund. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun refundFare(request: RefundFareRequest, idempotencyKey: String? = null): RefundResponse
 }
 
 @Suppress("TooManyFunctions")
 internal class KtorFareApi(private val transport: ApiTransport) : FareApi {
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun estimateFare(
         fromLat: Double,
         fromLng: Double,
@@ -136,6 +149,7 @@ internal class KtorFareApi(private val transport: ApiTransport) : FareApi {
         parameter("kind", kind?.wire)
     }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun calculateFinalFare(
         request: CalculateFinalFareRequest,
         idempotencyKey: String?,
@@ -146,6 +160,7 @@ internal class KtorFareApi(private val transport: ApiTransport) : FareApi {
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun initiatePayment(request: InitiatePaymentRequest, idempotencyKey: String?): PaymentInitiation =
         transport.apiPost(
             service = SERVICE,
@@ -156,9 +171,11 @@ internal class KtorFareApi(private val transport: ApiTransport) : FareApi {
             requestTimeout = transport.config.timeouts.paymentRequestTimeout,
         ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getPaymentStatus(paymentId: Ulid): PaymentStatus =
         transport.apiGet(SERVICE, "getPaymentStatus", "$PAY_PATH/$paymentId/status").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun fallbackToCash(paymentId: Ulid, idempotencyKey: String?): PaymentStatus = transport.apiPost(
         service = SERVICE,
         operationId = "fallbackToCash",
@@ -166,6 +183,7 @@ internal class KtorFareApi(private val transport: ApiTransport) : FareApi {
         idempotencyKey = idempotencyKey,
     ).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun payByScanningDriverQr(request: ScanDriverQrRequest, idempotencyKey: String?): PaymentStatus =
         transport.apiPost(
             service = SERVICE,
@@ -175,6 +193,7 @@ internal class KtorFareApi(private val transport: ApiTransport) : FareApi {
             attested = true,
         ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun claimDriverQrPayment(request: ClaimDriverQrRequest, idempotencyKey: String?): PaymentStatus =
         transport.apiPost(
             service = SERVICE,
@@ -184,6 +203,7 @@ internal class KtorFareApi(private val transport: ApiTransport) : FareApi {
             attested = true,
         ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun confirmDriverQrPayment(
         request: ConfirmDriverQrRequest,
         idempotencyKey: String?,
@@ -195,6 +215,7 @@ internal class KtorFareApi(private val transport: ApiTransport) : FareApi {
         attested = true,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun disputeDriverQrPayment(request: DisputeDriverQrRequest, idempotencyKey: String?): TicketRef =
         transport.apiPost(
             service = SERVICE,
@@ -203,6 +224,7 @@ internal class KtorFareApi(private val transport: ApiTransport) : FareApi {
             idempotencyKey = idempotencyKey,
         ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun refundFare(request: RefundFareRequest, idempotencyKey: String?): RefundResponse =
         transport.apiPost(
             service = SERVICE,

@@ -3,6 +3,7 @@ package lk.mageride.shared.data.api.dispatch
 import io.ktor.client.request.parameter
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
+import lk.mageride.shared.data.api.MageRideError
 import lk.mageride.shared.data.api.apiDelete
 import lk.mageride.shared.data.api.apiGet
 import lk.mageride.shared.data.api.apiPost
@@ -31,6 +32,7 @@ import lk.mageride.shared.data.models.dispatch.ScheduledRide
 import lk.mageride.shared.data.models.dispatch.SetDirectionalFilterRequest
 import lk.mageride.shared.data.models.dispatch.SettlePenaltiesRequest
 import lk.mageride.shared.data.models.dispatch.SettledPenalties
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * dispatch-svc — driver presence, Directional Travel, the Job Board and the Driver Level System
@@ -50,12 +52,15 @@ public interface DispatchApi {
      *
      * `409 driver-already-live` when another session or ride is already running.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun goOnline(request: GoOnlineRequest, idempotencyKey: String? = null): PresenceResponse
 
     /** `POST /v1/standby/offline` — stop receiving offers. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun goOffline(idempotencyKey: String? = null): PresenceResponse
 
     /** `GET /v1/standby/directional` — the active Directional filter and what is left of it (DT-08). */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getDirectionalFilter(): DirectionalFilterState
 
     /**
@@ -63,21 +68,26 @@ public interface DispatchApi {
      *
      * `403 not-online` off standby; `409 directional-limit-reached` once the day's uses are gone.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun setDirectionalFilter(
         request: SetDirectionalFilterRequest,
         idempotencyKey: String? = null,
     ): DirectionalFilterCreated
 
     /** `DELETE /v1/standby/directional` — clear the filter and take any ride again. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun clearDirectionalFilter(): DirectionalFilterCleared
 
     /** `POST /v1/rides/schedule` — a passenger books ahead onto the Job Board. Attested (D-30). */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun scheduleRide(request: ScheduleRideRequest, idempotencyKey: String? = null): ScheduledRide
 
     /** `DELETE /v1/rides/schedule/{scheduledRideId}` — withdraw a scheduled ride. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun cancelScheduledRide(scheduledRideId: Ulid)
 
     /** `GET /v1/rides/scheduled/{driverId}` — what this driver has already claimed. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listDriverScheduledRides(
         driverId: Ulid,
         page: PageRequest = PageRequest.FIRST,
@@ -88,6 +98,7 @@ public interface DispatchApi {
      *
      * @param radiusMetres Search radius; the contract's own bounds are 1 000–30 000 m.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listJobBoard(
         lat: Double,
         lng: Double,
@@ -96,12 +107,15 @@ public interface DispatchApi {
     ): Page<ScheduledRide>
 
     /** `POST /v1/rides/job-board/{rideId}/intent` — register interest in a Job Board ride. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun postJobBoardIntent(rideId: Ulid, idempotencyKey: String? = null): JobBoardIntentResponse
 
     /** `GET /v1/drivers/{driverId}/level` — the Driver Level and progress to the next one. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getDriverLevel(driverId: Ulid): DriverLevelResponse
 
     /** `GET /v1/drivers/{driverId}/stats` — acceptance rate, no-shows and points. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getDriverStats(driverId: Ulid): DriverStatsResponse
 
     /**
@@ -109,6 +123,7 @@ public interface DispatchApi {
      *
      * **Service-to-service (mTLS).** Present for contract coverage; not reachable from an app.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun reportDriverNoShow(
         driverId: Ulid,
         request: ReportDriverNoShowRequest,
@@ -116,9 +131,11 @@ public interface DispatchApi {
     ): DriverLevelAfterNoShow
 
     /** `PUT /v1/admin/dispatch/directional-config` — Admin Portal tuning of DT-01..08. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun updateDirectionalConfig(request: DirectionalConfig): DirectionalConfig
 
     /** `PUT /v1/admin/drivers/level-config` — Admin Portal tuning of the Driver Level System. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun updateDriverLevelConfig(request: LevelConfig): LevelConfig
 
     /**
@@ -128,6 +145,7 @@ public interface DispatchApi {
      * completed trip; US-6A.10b's re-enablement is evaluated against the same total. Not reachable
      * from an app.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listOutstandingPenalties(passengerId: Ulid): OutstandingPenalties
 
     /**
@@ -137,6 +155,7 @@ public interface DispatchApi {
      * has posted the ledger entries: the money is fare-svc's (D-09) and this row is only the
      * debt's record. A second call with the same ride settles nothing.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun settleOutstandingPenalties(
         passengerId: Ulid,
         request: SettlePenaltiesRequest,
@@ -147,15 +166,19 @@ public interface DispatchApi {
 @Suppress("TooManyFunctions")
 internal class KtorDispatchApi(private val transport: ApiTransport) : DispatchApi {
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun goOnline(request: GoOnlineRequest, idempotencyKey: String?): PresenceResponse =
         transport.apiPost(SERVICE, "goOnline", "/v1/standby/online", idempotencyKey) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun goOffline(idempotencyKey: String?): PresenceResponse =
         transport.apiPost(SERVICE, "goOffline", "/v1/standby/offline", idempotencyKey).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getDirectionalFilter(): DirectionalFilterState =
         transport.apiGet(SERVICE, "getDirectionalFilter", DIRECTIONAL_PATH).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun setDirectionalFilter(
         request: SetDirectionalFilterRequest,
         idempotencyKey: String?,
@@ -163,9 +186,11 @@ internal class KtorDispatchApi(private val transport: ApiTransport) : DispatchAp
         jsonBody(request)
     }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun clearDirectionalFilter(): DirectionalFilterCleared =
         transport.apiDelete(SERVICE, "clearDirectionalFilter", DIRECTIONAL_PATH).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun scheduleRide(request: ScheduleRideRequest, idempotencyKey: String?): ScheduledRide =
         transport.apiPost(
             service = SERVICE,
@@ -175,15 +200,18 @@ internal class KtorDispatchApi(private val transport: ApiTransport) : DispatchAp
             attested = true,
         ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun cancelScheduledRide(scheduledRideId: Ulid) {
         transport.apiDelete(SERVICE, "cancelScheduledRide", "$SCHEDULE_PATH/$scheduledRideId")
     }
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listDriverScheduledRides(driverId: Ulid, page: PageRequest): Page<ScheduledRide> =
         transport.apiGet(SERVICE, "listDriverScheduledRides", "/v1/rides/scheduled/$driverId") {
             pageParameters(page)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listJobBoard(
         lat: Double,
         lng: Double,
@@ -196,6 +224,7 @@ internal class KtorDispatchApi(private val transport: ApiTransport) : DispatchAp
         pageParameters(page)
     }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun postJobBoardIntent(rideId: Ulid, idempotencyKey: String?): JobBoardIntentResponse =
         transport.apiPost(
             service = SERVICE,
@@ -204,12 +233,15 @@ internal class KtorDispatchApi(private val transport: ApiTransport) : DispatchAp
             idempotencyKey = idempotencyKey,
         ).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getDriverLevel(driverId: Ulid): DriverLevelResponse =
         transport.apiGet(SERVICE, "getDriverLevel", "$DRIVERS_PATH/$driverId/level").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getDriverStats(driverId: Ulid): DriverStatsResponse =
         transport.apiGet(SERVICE, "getDriverStats", "$DRIVERS_PATH/$driverId/stats").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun reportDriverNoShow(
         driverId: Ulid,
         request: ReportDriverNoShowRequest,
@@ -221,19 +253,23 @@ internal class KtorDispatchApi(private val transport: ApiTransport) : DispatchAp
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun updateDirectionalConfig(request: DirectionalConfig): DirectionalConfig =
         transport.apiPut(SERVICE, "updateDirectionalConfig", "/v1/admin/dispatch/directional-config") {
             jsonBody(request)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun updateDriverLevelConfig(request: LevelConfig): LevelConfig =
         transport.apiPut(SERVICE, "updateDriverLevelConfig", "/v1/admin/drivers/level-config") {
             jsonBody(request)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listOutstandingPenalties(passengerId: Ulid): OutstandingPenalties =
         transport.apiGet(SERVICE, "listOutstandingPenalties", "/v1/internal/passengers/$passengerId/penalties").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun settleOutstandingPenalties(
         passengerId: Ulid,
         request: SettlePenaltiesRequest,

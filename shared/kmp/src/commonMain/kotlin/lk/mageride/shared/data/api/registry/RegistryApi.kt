@@ -3,6 +3,7 @@ package lk.mageride.shared.data.api.registry
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.CapturedDocument
+import lk.mageride.shared.data.api.MageRideError
 import lk.mageride.shared.data.api.apiDelete
 import lk.mageride.shared.data.api.apiGet
 import lk.mageride.shared.data.api.apiPost
@@ -45,6 +46,7 @@ import lk.mageride.shared.data.models.registry.VehicleListResponse
 import lk.mageride.shared.data.models.registry.VehicleOnboardingStatusResponse
 import lk.mageride.shared.data.models.registry.VehicleRegistration
 import lk.mageride.shared.data.models.registry.VehicleStatusResponse
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * registry-svc — driver identity, vehicles, onboarding, sharing and device binding
@@ -72,6 +74,7 @@ public interface RegistryApi {
      * `null` is a 200, not a 404 — see the contract, and [lk.mageride.shared.data.api.ride.RideApi]'s
      * two recovery reads, which are shaped the same way for the same reason.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getDriverProfile(): DriverProfileSummary?
 
     /**
@@ -81,6 +84,7 @@ public interface RegistryApi {
      * themselves instead; on a mobile client that is almost always the one you want, because
      * nothing else mints those ids.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun upsertDriverProfile(request: UpsertDriverProfileRequest): UpsertDriverProfileResponse
 
     /**
@@ -102,6 +106,7 @@ public interface RegistryApi {
      *   and until now nothing could carry the correction).
      * @param licenceExpiry Same, for its expiry date.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun uploadDriverProfile(
         driverName: String,
         photo: CapturedDocument,
@@ -118,21 +123,26 @@ public interface RegistryApi {
      *
      * `409 registration-exists` when the plate is already on the platform.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun registerVehicle(
         request: VehicleRegistration,
         idempotencyKey: String? = null,
     ): RegisterVehicleResponse
 
     /** `GET /v1/vehicles/mine` — every vehicle this user owns or has been granted. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listMyVehicles(): VehicleListResponse
 
     /** `GET /v1/vehicles/{vehicleId}` — the full record, documents included. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getVehicle(vehicleId: Ulid): VehicleDetail
 
     /** `GET /v1/vehicles/{vehicleId}/status` — approval status and any rejection reason. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getVehicleStatus(vehicleId: Ulid): VehicleStatusResponse
 
     /** `GET /v1/vehicles/{vehicleId}/onboarding-status` — per-step verdicts and the resume point. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getVehicleOnboardingStatus(vehicleId: Ulid): VehicleOnboardingStatusResponse
 
     /**
@@ -142,6 +152,7 @@ public interface RegistryApi {
      * [uploadVehicleOnboardingStep] to send the bytes in the same request instead — the contract
      * declares both media types for this one operation.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun saveVehicleOnboardingStep(
         vehicleId: Ulid,
         step: OnboardingStep,
@@ -163,6 +174,7 @@ public interface RegistryApi {
      * expiry is the roadside experience that rule exists to avoid. The step must already own a
      * document; correcting one that has none is `400 validation-failed`.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun uploadVehicleOnboardingStep(
         vehicleId: Ulid,
         step: OnboardingStep,
@@ -179,6 +191,7 @@ public interface RegistryApi {
      * `404` before they have entered any. MageRide takes custody of card fares and discharges it
      * through the payout rail, so this is what a payout is actually sent to.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getDriverPayoutProfile(): DriverPayoutProfile
 
     /**
@@ -188,6 +201,7 @@ public interface RegistryApi {
      * a field an approved profile lets you change quietly, so the version is superseded and an
      * officer approves the new one through the AL-39 queue.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun upsertDriverPayoutProfile(request: UpsertDriverPayoutProfileRequest): DriverPayoutProfile
 
     /**
@@ -196,6 +210,7 @@ public interface RegistryApi {
      * The `lankaqr_code` slot is the driver's **own** bank-app QR (AL-59) — the same code a
      * passenger scans to pay them directly under AL-47.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun uploadDriverPayoutDocument(
         kind: PayoutDocumentKind,
         file: CapturedDocument,
@@ -203,9 +218,11 @@ public interface RegistryApi {
     ): UploadedPayoutDocument
 
     /** `POST /v1/vehicles/{vehicleId}/deactivate` — take a vehicle out of service. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun deactivateVehicle(vehicleId: Ulid, idempotencyKey: String? = null)
 
     /** `PUT /v1/vehicles/{vehicleId}/driver-profile` — the driver shown to passengers. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun updateVehicleDriverProfile(
         vehicleId: Ulid,
         request: UpdateVehicleDriverProfileRequest,
@@ -216,6 +233,7 @@ public interface RegistryApi {
      *
      * `409 imei-duplicate` is the anti-clone check (T-08), not a retryable conflict.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun bindVehicleDevice(
         vehicleId: Ulid,
         request: BindVehicleDeviceRequest,
@@ -223,6 +241,7 @@ public interface RegistryApi {
     ): BindVehicleDeviceResponse
 
     /** `POST /v1/vehicles/{vehicleId}/share` — offer a passenger access to a Mode A/B vehicle. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun createShareGrant(
         vehicleId: Ulid,
         request: CreateShareGrantRequest,
@@ -230,6 +249,7 @@ public interface RegistryApi {
     ): CreateShareGrantResponse
 
     /** `POST /v1/vehicles/{vehicleId}/share/{grantId}/accept` — the invited user accepts. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun acceptShareGrant(
         vehicleId: Ulid,
         grantId: Ulid,
@@ -237,15 +257,19 @@ public interface RegistryApi {
     ): AcceptShareGrantResponse
 
     /** `DELETE /v1/vehicles/{vehicleId}/share/{grantId}` — the owner withdraws a grant. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun revokeShareGrant(vehicleId: Ulid, grantId: Ulid)
 
     /** `GET /v1/vehicles/{vehicleId}/subscribers` — who can see this vehicle, one page at a time. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listVehicleSubscribers(vehicleId: Ulid, page: PageRequest = PageRequest.FIRST): Page<Subscriber>
 
     /** `DELETE /v1/vehicles/{vehicleId}/subscribers/{userId}` — drop a subscriber. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun unsubscribeFromVehicle(vehicleId: Ulid, userId: Ulid)
 
     /** `POST /v1/share-requests` — a passenger asks an owner for access. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun requestVehicleAccess(
         request: RequestVehicleAccessRequest,
         idempotencyKey: String? = null,
@@ -255,12 +279,15 @@ public interface RegistryApi {
 @Suppress("TooManyFunctions")
 internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryApi {
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getDriverProfile(): DriverProfileSummary? =
         transport.apiGet(SERVICE, "getDriverProfile", "/v1/drivers/profile").decodeOrNull(transport.json)
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun upsertDriverProfile(request: UpsertDriverProfileRequest): UpsertDriverProfileResponse =
         transport.apiPut(SERVICE, "upsertDriverProfile", "/v1/drivers/profile") { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun uploadDriverProfile(
         driverName: String,
         photo: CapturedDocument,
@@ -285,6 +312,7 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
         }
     }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun registerVehicle(
         request: VehicleRegistration,
         idempotencyKey: String?,
@@ -296,18 +324,23 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
         attested = true,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listMyVehicles(): VehicleListResponse =
         transport.apiGet(SERVICE, "listMyVehicles", "$VEHICLES_PATH/mine").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getVehicle(vehicleId: Ulid): VehicleDetail =
         transport.apiGet(SERVICE, "getVehicle", "$VEHICLES_PATH/$vehicleId").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getVehicleStatus(vehicleId: Ulid): VehicleStatusResponse =
         transport.apiGet(SERVICE, "getVehicleStatus", "$VEHICLES_PATH/$vehicleId/status").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getVehicleOnboardingStatus(vehicleId: Ulid): VehicleOnboardingStatusResponse =
         transport.apiGet(SERVICE, "getVehicleOnboardingStatus", "$VEHICLES_PATH/$vehicleId/onboarding-status").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun saveVehicleOnboardingStep(
         vehicleId: Ulid,
         step: OnboardingStep,
@@ -316,6 +349,7 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
         jsonBody(request)
     }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun uploadVehicleOnboardingStep(
         vehicleId: Ulid,
         step: OnboardingStep,
@@ -337,14 +371,17 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
         }
     }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getDriverPayoutProfile(): DriverPayoutProfile =
         transport.apiGet(SERVICE, "getDriverPayoutProfile", PAYOUT_PROFILE_PATH).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun upsertDriverPayoutProfile(request: UpsertDriverPayoutProfileRequest): DriverPayoutProfile =
         transport.apiPut(SERVICE, "upsertDriverPayoutProfile", PAYOUT_PROFILE_PATH) {
             jsonBody(request)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun uploadDriverPayoutDocument(
         kind: PayoutDocumentKind,
         file: CapturedDocument,
@@ -361,10 +398,12 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
         }
     }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun deactivateVehicle(vehicleId: Ulid, idempotencyKey: String?) {
         transport.apiPost(SERVICE, "deactivateVehicle", "$VEHICLES_PATH/$vehicleId/deactivate", idempotencyKey)
     }
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun updateVehicleDriverProfile(
         vehicleId: Ulid,
         request: UpdateVehicleDriverProfileRequest,
@@ -373,6 +412,7 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
             jsonBody(request)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun bindVehicleDevice(
         vehicleId: Ulid,
         request: BindVehicleDeviceRequest,
@@ -384,6 +424,7 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun createShareGrant(
         vehicleId: Ulid,
         request: CreateShareGrantRequest,
@@ -395,6 +436,7 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun acceptShareGrant(
         vehicleId: Ulid,
         grantId: Ulid,
@@ -406,19 +448,23 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
         idempotencyKey = idempotencyKey,
     ).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun revokeShareGrant(vehicleId: Ulid, grantId: Ulid) {
         transport.apiDelete(SERVICE, "revokeShareGrant", "$VEHICLES_PATH/$vehicleId/share/$grantId")
     }
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listVehicleSubscribers(vehicleId: Ulid, page: PageRequest): Page<Subscriber> =
         transport.apiGet(SERVICE, "listVehicleSubscribers", "$VEHICLES_PATH/$vehicleId/subscribers") {
             pageParameters(page)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun unsubscribeFromVehicle(vehicleId: Ulid, userId: Ulid) {
         transport.apiDelete(SERVICE, "unsubscribeFromVehicle", "$VEHICLES_PATH/$vehicleId/subscribers/$userId")
     }
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun requestVehicleAccess(
         request: RequestVehicleAccessRequest,
         idempotencyKey: String?,

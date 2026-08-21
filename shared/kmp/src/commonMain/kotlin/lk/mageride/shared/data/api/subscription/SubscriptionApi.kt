@@ -5,6 +5,7 @@ import io.ktor.client.request.parameter
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.FileUpload
+import lk.mageride.shared.data.api.MageRideError
 import lk.mageride.shared.data.api.apiDelete
 import lk.mageride.shared.data.api.apiGet
 import lk.mageride.shared.data.api.apiPost
@@ -45,6 +46,7 @@ import lk.mageride.shared.data.models.subscription.SubscriptionProviderCallback
 import lk.mageride.shared.data.models.subscription.TodaysDailyFee
 import lk.mageride.shared.data.models.subscription.VoucherDiscountTierList
 import lk.mageride.shared.data.models.subscription.VoucherPurchase
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * subscription-svc — the driver daily fee, credit transfers, vouchers and Mode B subscriptions
@@ -64,6 +66,7 @@ import lk.mageride.shared.data.models.subscription.VoucherPurchase
 public interface SubscriptionApi {
 
     /** `GET /v1/fees/rates` — the daily fee per vehicle type and mode. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listDailyFeeRates(): DailyFeeRateList
 
     /**
@@ -71,6 +74,7 @@ public interface SubscriptionApi {
      *
      * `firstTripFree` is the D-08 degraded-mode allowance surfacing in the read model.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getTodaysDailyFee(driverId: Ulid): TodaysDailyFee
 
     /**
@@ -78,6 +82,7 @@ public interface SubscriptionApi {
      *
      * Raises one `support.tickets` row, so its status is the ticket's and support-svc owns it.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun requestDailyFeeRefund(
         driverId: Ulid,
         request: RequestDailyFeeRefundRequest,
@@ -85,6 +90,7 @@ public interface SubscriptionApi {
     ): FeeRefundRequest
 
     /** `GET /v1/fees/{driverId}/refund-requests` — the driver's disputes, newest first. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listDailyFeeRefundRequests(driverId: Ulid, limit: Int? = null): FeeRefundRequestList
 
     /**
@@ -94,9 +100,11 @@ public interface SubscriptionApi {
      * support-svc's screenshot read. The URL goes to an image loader, which carries no bearer,
      * and an access token in a query string is an access token in every proxy log on the way.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getModeBFile(kind: ModeBFileKind, id: Ulid, expires: Long, signature: String): ByteArray
 
     /** `GET /v1/fees/{driverId}/history` — past daily-fee charges, optionally date-bounded. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listDailyFeeHistory(
         driverId: Ulid,
         from: BusinessDate? = null,
@@ -109,6 +117,7 @@ public interface SubscriptionApi {
      *
      * **Service-to-service (mTLS).** `402 insufficient-wallet` is the gate D-08 describes.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun chargeDailyFeeBeforeTrip(
         driverId: Ulid,
         request: ChargeDailyFeeRequest,
@@ -116,39 +125,47 @@ public interface SubscriptionApi {
     ): DailyFeeCharge
 
     /** `POST /v1/subscriptions/credit-transfer/request` — a driver asks a reseller for credit. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun requestCreditTransfer(
         request: RequestCreditTransferRequest,
         idempotencyKey: String? = null,
     ): CreditTransfer
 
     /** `GET /v1/subscriptions/credit-transfer/pending` — requests waiting on this reseller. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listPendingCreditTransfers(page: PageRequest = PageRequest.FIRST): Page<CreditTransfer>
 
     /** `POST /v1/subscriptions/credit-transfer/{transferId}/approve` — pay it. Attested (D-30). */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun approveCreditTransfer(transferId: Ulid, idempotencyKey: String? = null): CreditTransfer
 
     /** `POST /v1/subscriptions/credit-transfer/{transferId}/reject` — decline it. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun rejectCreditTransfer(transferId: Ulid, idempotencyKey: String? = null): CreditTransfer
 
     /** `POST /v1/transfers/driver` — push credit to another driver outright. Attested (D-30). */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun sendCreditToDriver(
         request: SendCreditToDriverRequest,
         idempotencyKey: String? = null,
     ): CreditTransfer
 
     /** `POST /v1/vouchers/purchase` — buy discounted credit at a denomination tier. Attested. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun purchaseVoucher(
         request: PurchaseVoucherRequest,
         idempotencyKey: String? = null,
     ): VoucherPurchase
 
     /** `GET /v1/mode-b/{vehicleId}/access-requests` — passengers asking to join this vehicle. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listModeBAccessRequests(
         vehicleId: Ulid,
         page: PageRequest = PageRequest.FIRST,
     ): Page<AccessRequest>
 
     /** `POST /v1/mode-b/{vehicleId}/access-requests` — a passenger asks to join. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun requestModeBAccess(
         vehicleId: Ulid,
         request: RequestModeBAccessRequest,
@@ -156,9 +173,11 @@ public interface SubscriptionApi {
     ): AccessRequest
 
     /** `POST /v1/mode-b/access-requests/{requestId}/accept` — the owner admits them. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun acceptModeBAccessRequest(requestId: Ulid, idempotencyKey: String? = null): AccessRequestAccepted
 
     /** `POST /v1/mode-b/access-requests/{requestId}/reject` — the owner declines. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun rejectModeBAccessRequest(
         requestId: Ulid,
         request: RejectAccessRequest,
@@ -166,15 +185,18 @@ public interface SubscriptionApi {
     ): AccessRequest
 
     /** `GET /v1/mode-b/subscriptions/{passengerId}` — this passenger's Mode B subscriptions. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listPassengerSubscriptions(
         passengerId: Ulid,
         page: PageRequest = PageRequest.FIRST,
     ): Page<Subscription>
 
     /** `POST /v1/mode-b/subscriptions/{subscriptionId}/unsubscribe` — leave the vehicle. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun unsubscribeModeB(subscriptionId: Ulid, idempotencyKey: String? = null): Subscription
 
     /** `POST /v1/mode-b/subscriptions/{subscriptionId}/pay` — pay a month (AL-24). */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun payModeBSubscription(
         subscriptionId: Ulid,
         request: PayModeBSubscriptionRequest,
@@ -182,12 +204,14 @@ public interface SubscriptionApi {
     ): SubscriptionPayment
 
     /** `GET /v1/mode-b/subscriptions/{subscriptionId}/payments` — this subscription's payments. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listSubscriptionPayments(
         subscriptionId: Ulid,
         page: PageRequest = PageRequest.FIRST,
     ): Page<SubscriptionPayment>
 
     /** `POST /v1/mode-b/payments/{paymentId}/transfer-slip` — upload the bank slip. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun uploadTransferSlip(
         paymentId: Ulid,
         file: FileUpload,
@@ -195,6 +219,7 @@ public interface SubscriptionApi {
     ): SubscriptionPayment
 
     /** `POST /v1/mode-b/payments/{paymentId}/confirm` — the owner accepts the slip. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun confirmTransferSlip(paymentId: Ulid, idempotencyKey: String? = null): SubscriptionPayment
 
     /**
@@ -203,18 +228,22 @@ public interface SubscriptionApi {
      * **Inbound, HMAC-signed and `x-idempotency-exempt`** (R-19). Not an app call; present for
      * contract coverage and never retried by the transport.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun modeBLankaqrConfirm(request: SubscriptionProviderCallback): CallbackAck
 
     /** `GET /v1/mode-b/{vehicleId}/subscribers` — the owner's subscriber roster. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listModeBSubscribers(
         vehicleId: Ulid,
         page: PageRequest = PageRequest.FIRST,
     ): Page<SubscriberRow>
 
     /** `DELETE /v1/mode-b/{vehicleId}/subscribers/{subscriberId}` — remove a subscriber. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun deleteModeBSubscriber(vehicleId: Ulid, subscriberId: Ulid)
 
     /** `PUT /v1/mode-b/{vehicleId}/subscribers/{subscriberId}/fare` — per-subscriber monthly fare. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun setSubscriberFare(
         vehicleId: Ulid,
         subscriberId: Ulid,
@@ -222,6 +251,7 @@ public interface SubscriptionApi {
     ): SubscriberRow
 
     /** `POST /v1/mode-b/{vehicleId}/subscribers/{subscriberId}/mark-cash` — record a cash month. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun markSubscriberCashPaid(
         vehicleId: Ulid,
         subscriberId: Ulid,
@@ -230,6 +260,7 @@ public interface SubscriptionApi {
     ): SubscriptionPayment
 
     /** `GET /v1/mode-b/{vehicleId}/subscribers/{subscriberId}/payments` — one subscriber's history. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listSubscriberPayments(
         vehicleId: Ulid,
         subscriberId: Ulid,
@@ -237,21 +268,26 @@ public interface SubscriptionApi {
     ): Page<SubscriptionPayment>
 
     /** `PUT /v1/admin/fees/rates` — Admin Portal sets the daily fee table. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun updateDailyFeeRates(request: DailyFeeRateList): DailyFeeRateList
 
     /** `PUT /v1/admin/voucher-discount-tiers` — Admin Portal sets the voucher discount tiers. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun updateVoucherDiscountTiers(request: VoucherDiscountTierList): VoucherDiscountTierList
 }
 
 @Suppress("TooManyFunctions", "LargeClass")
 internal class KtorSubscriptionApi(private val transport: ApiTransport) : SubscriptionApi {
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listDailyFeeRates(): DailyFeeRateList =
         transport.apiGet(SERVICE, "listDailyFeeRates", "$FEES_PATH/rates").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getTodaysDailyFee(driverId: Ulid): TodaysDailyFee =
         transport.apiGet(SERVICE, "getTodaysDailyFee", "$FEES_PATH/$driverId/today").decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun requestDailyFeeRefund(
         driverId: Ulid,
         request: RequestDailyFeeRefundRequest,
@@ -263,17 +299,20 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listDailyFeeRefundRequests(driverId: Ulid, limit: Int?): FeeRefundRequestList =
         transport.apiGet(SERVICE, "listDailyFeeRefundRequests", "$FEES_PATH/$driverId/refund-requests") {
             limit?.let { parameter("limit", it) }
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getModeBFile(kind: ModeBFileKind, id: Ulid, expires: Long, signature: String): ByteArray =
         transport.apiGet(SERVICE, "getModeBFile", "$MODE_B_PATH/files/${kind.wire}/$id") {
             parameter("expires", expires)
             parameter("signature", signature)
         }.body()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listDailyFeeHistory(
         driverId: Ulid,
         from: BusinessDate?,
@@ -285,6 +324,7 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
         pageParameters(page)
     }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun chargeDailyFeeBeforeTrip(
         driverId: Ulid,
         request: ChargeDailyFeeRequest,
@@ -296,6 +336,7 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun requestCreditTransfer(
         request: RequestCreditTransferRequest,
         idempotencyKey: String?,
@@ -306,11 +347,13 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listPendingCreditTransfers(page: PageRequest): Page<CreditTransfer> =
         transport.apiGet(SERVICE, "listPendingCreditTransfers", "$CREDIT_TRANSFER_PATH/pending") {
             pageParameters(page)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun approveCreditTransfer(transferId: Ulid, idempotencyKey: String?): CreditTransfer =
         transport.apiPost(
             service = SERVICE,
@@ -320,6 +363,7 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
             attested = true,
         ).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun rejectCreditTransfer(transferId: Ulid, idempotencyKey: String?): CreditTransfer =
         transport.apiPost(
             service = SERVICE,
@@ -328,6 +372,7 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
             idempotencyKey = idempotencyKey,
         ).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun sendCreditToDriver(
         request: SendCreditToDriverRequest,
         idempotencyKey: String?,
@@ -339,6 +384,7 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
         attested = true,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun purchaseVoucher(request: PurchaseVoucherRequest, idempotencyKey: String?): VoucherPurchase =
         transport.apiPost(
             service = SERVICE,
@@ -349,11 +395,13 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
             requestTimeout = transport.config.timeouts.paymentRequestTimeout,
         ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listModeBAccessRequests(vehicleId: Ulid, page: PageRequest): Page<AccessRequest> =
         transport.apiGet(SERVICE, "listModeBAccessRequests", accessRequestsPath(vehicleId)) {
             pageParameters(page)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun requestModeBAccess(
         vehicleId: Ulid,
         request: RequestModeBAccessRequest,
@@ -365,6 +413,7 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun acceptModeBAccessRequest(requestId: Ulid, idempotencyKey: String?): AccessRequestAccepted =
         transport.apiPost(
             service = SERVICE,
@@ -373,6 +422,7 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
             idempotencyKey = idempotencyKey,
         ).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun rejectModeBAccessRequest(
         requestId: Ulid,
         request: RejectAccessRequest,
@@ -384,11 +434,13 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listPassengerSubscriptions(passengerId: Ulid, page: PageRequest): Page<Subscription> =
         transport.apiGet(SERVICE, "listPassengerSubscriptions", "$SUBSCRIPTIONS_PATH/$passengerId") {
             pageParameters(page)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun unsubscribeModeB(subscriptionId: Ulid, idempotencyKey: String?): Subscription =
         transport.apiPost(
             service = SERVICE,
@@ -397,6 +449,7 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
             idempotencyKey = idempotencyKey,
         ).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun payModeBSubscription(
         subscriptionId: Ulid,
         request: PayModeBSubscriptionRequest,
@@ -409,11 +462,13 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
         requestTimeout = transport.config.timeouts.paymentRequestTimeout,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listSubscriptionPayments(subscriptionId: Ulid, page: PageRequest): Page<SubscriptionPayment> =
         transport.apiGet(SERVICE, "listSubscriptionPayments", "$SUBSCRIPTIONS_PATH/$subscriptionId/payments") {
             pageParameters(page)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun uploadTransferSlip(
         paymentId: Ulid,
         file: FileUpload,
@@ -425,6 +480,7 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
         idempotencyKey = idempotencyKey,
     ) { multipartBody { filePart("file", file) } }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun confirmTransferSlip(paymentId: Ulid, idempotencyKey: String?): SubscriptionPayment =
         transport.apiPost(
             service = SERVICE,
@@ -433,20 +489,24 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
             idempotencyKey = idempotencyKey,
         ).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun modeBLankaqrConfirm(request: SubscriptionProviderCallback): CallbackAck =
         transport.apiPostExempt(SERVICE, "modeBLankaqrConfirm", "$MODE_B_PATH/pay/lankaqr/confirm") {
             jsonBody(request)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listModeBSubscribers(vehicleId: Ulid, page: PageRequest): Page<SubscriberRow> =
         transport.apiGet(SERVICE, "listModeBSubscribers", subscribersPath(vehicleId)) {
             pageParameters(page)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun deleteModeBSubscriber(vehicleId: Ulid, subscriberId: Ulid) {
         transport.apiDelete(SERVICE, "deleteModeBSubscriber", "${subscribersPath(vehicleId)}/$subscriberId")
     }
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun setSubscriberFare(
         vehicleId: Ulid,
         subscriberId: Ulid,
@@ -456,6 +516,7 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
             jsonBody(request)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun markSubscriberCashPaid(
         vehicleId: Ulid,
         subscriberId: Ulid,
@@ -468,6 +529,7 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listSubscriberPayments(
         vehicleId: Ulid,
         subscriberId: Ulid,
@@ -478,9 +540,11 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
         path = "${subscribersPath(vehicleId)}/$subscriberId/payments",
     ) { pageParameters(page) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun updateDailyFeeRates(request: DailyFeeRateList): DailyFeeRateList =
         transport.apiPut(SERVICE, "updateDailyFeeRates", "/v1/admin/fees/rates") { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun updateVoucherDiscountTiers(request: VoucherDiscountTierList): VoucherDiscountTierList =
         transport.apiPut(SERVICE, "updateVoucherDiscountTiers", "/v1/admin/voucher-discount-tiers") {
             jsonBody(request)

@@ -9,6 +9,7 @@ import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.Conditional
 import lk.mageride.shared.data.api.Credential
+import lk.mageride.shared.data.api.MageRideError
 import lk.mageride.shared.data.api.apiGet
 import lk.mageride.shared.data.api.apiPut
 import lk.mageride.shared.data.api.decode
@@ -22,6 +23,7 @@ import lk.mageride.shared.data.models.content.OnboardingAudience
 import lk.mageride.shared.data.models.content.OnboardingSlidesResponse
 import lk.mageride.shared.data.models.content.OperatingCityListResponse
 import lk.mageride.shared.data.models.content.UpdateNotificationTemplateRequest
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * content-svc — operating cities, trilingual notification templates and in-app broadcasts
@@ -42,6 +44,7 @@ public interface ContentApi {
      *
      * Public: no credential.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getOperatingCities(ifNoneMatch: String? = null): Conditional<OperatingCityListResponse>
 
     /**
@@ -50,9 +53,11 @@ public interface ContentApi {
      * **Service-to-service (mTLS).** notification-svc renders through this; present for contract
      * coverage.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun renderNotificationTemplate(key: String, lang: Language? = null): NotificationTemplate
 
     /** `GET /v1/content/broadcasts` — in-app banners that are live right now. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listActiveBroadcasts(lang: Language? = null): BroadcastListResponse
 
     /**
@@ -62,6 +67,7 @@ public interface ContentApi {
      * reads `SupportApi.listFaqArticles`; this is the source those rows are authored in, and the
      * two carried one `operationId` until MCS-02 separated them.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listAuthoredFaqArticles(
         lang: Language? = null,
         category: String? = null,
@@ -74,9 +80,11 @@ public interface ContentApi {
      * screen. **All three languages come back in one answer** — the language picker is on that
      * screen, so the client re-renders from the response rather than re-fetching.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun listOnboardingSlides(audience: OnboardingAudience): OnboardingSlidesResponse
 
     /** `PUT /v1/admin/content/{key}` — Admin Portal edits a template in all three languages. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun updateNotificationTemplate(
         key: String,
         request: UpdateNotificationTemplateRequest,
@@ -85,12 +93,14 @@ public interface ContentApi {
 
 internal class KtorContentApi(private val transport: ApiTransport) : ContentApi {
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listAuthoredFaqArticles(lang: Language?, category: String?): AuthoredFaqListResponse =
         transport.apiGet(ApiService.CONTENT, "listAuthoredFaqArticles", "/v1/content/faq") {
             lang?.let { parameter("lang", it.wire) }
             category?.let { parameter("category", it) }
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listOnboardingSlides(audience: OnboardingAudience): OnboardingSlidesResponse =
         transport.apiGet(
             ApiService.CONTENT,
@@ -98,6 +108,7 @@ internal class KtorContentApi(private val transport: ApiTransport) : ContentApi 
             "/v1/content/onboarding/${audience.wire}",
         ).decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getOperatingCities(ifNoneMatch: String?): Conditional<OperatingCityListResponse> {
         val response = transport.apiGet(
             service = SERVICE,
@@ -110,16 +121,19 @@ internal class KtorContentApi(private val transport: ApiTransport) : ContentApi 
         return Conditional.Value(response.decode(), response.headers[HttpHeaders.ETag])
     }
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun renderNotificationTemplate(key: String, lang: Language?): NotificationTemplate =
         transport.apiGet(SERVICE, "renderNotificationTemplate", "/v1/content/templates/${key.encodeURLPathPart()}") {
             parameter("lang", lang?.wire)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun listActiveBroadcasts(lang: Language?): BroadcastListResponse =
         transport.apiGet(SERVICE, "listActiveBroadcasts", "/v1/content/broadcasts") {
             parameter("lang", lang?.wire)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun updateNotificationTemplate(
         key: String,
         request: UpdateNotificationTemplateRequest,

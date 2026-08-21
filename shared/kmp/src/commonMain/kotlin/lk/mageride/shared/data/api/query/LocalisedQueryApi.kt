@@ -1,8 +1,10 @@
 package lk.mageride.shared.data.api.query
 
+import lk.mageride.shared.data.api.MageRideError
 import lk.mageride.shared.data.models.Language
 import lk.mageride.shared.data.models.query.GeocodedPlace
 import lk.mageride.shared.data.models.query.PlaceSearchResponse
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * The language a geocode should be read in, as the app that has one supplies it.
@@ -43,6 +45,7 @@ public fun interface AppLanguage {
 internal class LocalisedQueryApi(private val delegate: QueryApi, private val language: AppLanguage?) :
     QueryApi by delegate {
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun searchPlaces(
         query: String,
         lat: Double?,
@@ -51,6 +54,7 @@ internal class LocalisedQueryApi(private val delegate: QueryApi, private val lan
         lang: Language?,
     ): PlaceSearchResponse = delegate.searchPlaces(query, lat, lng, limit, lang ?: language?.current())
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun reverseGeocode(lat: Double, lng: Double, lang: Language?): GeocodedPlace =
         delegate.reverseGeocode(lat, lng, lang ?: language?.current())
 }

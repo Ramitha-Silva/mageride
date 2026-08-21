@@ -20,6 +20,7 @@ import XCTest
 /// (correctly) fail on a device. Comments are stripped first, because half of this cluster's job is
 /// to *document* why the masking bridge is gone and a check that fired on the explanation would push
 /// the explanation out of the code.
+@MainActor
 final class CommsFenceTests: XCTestCase {
 
     // MARK: - AL-48 · one fallback, and it is a dial

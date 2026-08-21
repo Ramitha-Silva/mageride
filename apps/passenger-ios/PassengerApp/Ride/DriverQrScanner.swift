@@ -93,6 +93,9 @@ struct DriverQrScannerView: UIViewControllerRepresentable {
     /// `false` on every simulator) and `isAvailable` is the camera grant plus Screen Time
     /// restrictions. Neither is something the app can talk its way past — which is why
     /// ``PayFareModel/openScanner()`` asks for the grant *before* this view is presented.
+    /// `@MainActor` because both VisionKit properties are, and a `UIViewControllerRepresentable`
+    /// does not confer that on its own statics under Swift 5. Both callers are already on the actor.
+    @MainActor
     static var isSupported: Bool {
         DataScannerViewController.isSupported && DataScannerViewController.isAvailable
     }

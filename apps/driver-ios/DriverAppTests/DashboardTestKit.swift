@@ -331,7 +331,7 @@ final class FakeActiveRideRepository: ActiveRideRepository {
     var detailToReturn = rideDetail()
     var snapshotToReturn: RideStateSnapshot?
     var nextMove: RideStateSnapshot?
-    var qrState = PaymentState.driverConfirmedQR
+    var qrState = PaymentState.driverconfirmedqr
     var nextFailure: Error?
 
     private(set) var arrived: [Int32] = []
@@ -358,19 +358,19 @@ final class FakeActiveRideRepository: ActiveRideRepository {
     func arrive(rideId: String, version: Int32) async throws -> RideStateSnapshot {
         arrived.append(version)
         try throwIfProgrammed()
-        return nextMove ?? snapshot(RideState.driverArrived, version + 1)
+        return nextMove ?? snapshot(RideState.driverarrived, version + 1)
     }
 
     func start(rideId: String, kind: RideKind, version: Int32, otp: String) async throws -> RideStateSnapshot {
         started.append((kind, version, otp))
         try throwIfProgrammed()
-        return nextMove ?? snapshot(RideState.inProgress, version + 1)
+        return nextMove ?? snapshot(RideState.inprogress, version + 1)
     }
 
     func complete(rideId: String, version: Int32) async throws -> RideStateSnapshot {
         completed.append(version)
         try throwIfProgrammed()
-        return nextMove ?? snapshot(RideState.paymentPending, version + 1)
+        return nextMove ?? snapshot(RideState.paymentpending, version + 1)
     }
 
     func confirmQrPayment(rideId: String) async throws -> PaymentState {
@@ -486,7 +486,7 @@ final class FakeDriverLocationSource: DriverLocationSource {
 
 /// ``PositionPublisher`` with no MQTT socket. The **order** of these calls is the rule under test.
 @MainActor
-final class FakePositionPublisher: PositionPublisher {
+final class FakeOrderedPositionPublisher: PositionPublisher {
 
     private(set) var events: [String] = []
 

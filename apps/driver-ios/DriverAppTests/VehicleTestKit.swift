@@ -156,7 +156,7 @@ func apiFailure(code: String, status: Int32 = 409) -> NSError {
     return NSError(
         domain: "KotlinException",
         code: 0,
-        userInfo: ["KotlinException": MageRideErrorConflict(problem: problem)]
+        userInfo: ["KotlinException": MageRideError.Conflict(problem: problem)]
     )
 }
 

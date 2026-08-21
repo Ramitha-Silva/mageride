@@ -10,6 +10,7 @@ import XCTest
 /// fallback and puts the same string on the push, so the only number available before the ride is read
 /// is `1,240.00`. Parsing it through a `Double` is exactly the bug C012's *"money is `Long` minor
 /// units, never `Double`"* fence exists to prevent.
+@MainActor
 final class OfferInboxTests: XCTestCase {
 
     // MARK: - The envelope

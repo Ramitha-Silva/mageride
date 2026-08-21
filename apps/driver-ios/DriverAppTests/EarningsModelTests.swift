@@ -25,7 +25,7 @@ final class EarningsModelTests: XCTestCase {
 
     /// The blunt version of the rule: rows that sum to Rs 1 under a card that still says Rs 3,180.
     func testTheSummaryIsPrintedAsSentAndIsNeverReSummedFromTheRows() async {
-        earnings.summaries[EarningsPeriod.today] = earningsSummary(netMinor: 318_000, grossMinor: 328_000)
+        earnings.summaries[EarningsPeriod.today] = earningsSummary(grossMinor: 328_000, netMinor: 318_000)
         earnings.sessions = [sessionEarning(grossMinor: 100, netMinor: 100)]
         let model = makeModel()
 
@@ -53,7 +53,7 @@ final class EarningsModelTests: XCTestCase {
     }
 
     func testAnAnsweredPeriodWithNoTripsIsTheEmptyPeriod() async {
-        earnings.summaries[EarningsPeriod.today] = earningsSummary(netMinor: 0, grossMinor: 0, trips: 0)
+        earnings.summaries[EarningsPeriod.today] = earningsSummary(grossMinor: 0, netMinor: 0, trips: 0)
         let model = makeModel()
 
         await model.refresh()

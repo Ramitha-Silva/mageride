@@ -2,6 +2,7 @@ package lk.mageride.shared.data.api.comms
 
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
+import lk.mageride.shared.data.api.MageRideError
 import lk.mageride.shared.data.api.apiPost
 import lk.mageride.shared.data.api.apiPostExempt
 import lk.mageride.shared.data.api.apiPut
@@ -18,6 +19,7 @@ import lk.mageride.shared.data.models.comms.SendNotificationResponse
 import lk.mageride.shared.data.models.comms.StartCallRequest
 import lk.mageride.shared.data.models.comms.StartCallResponse
 import lk.mageride.shared.data.models.comms.VoipTokenResponse
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * voip-svc — LiveKit call signalling (`backend/contracts/voip.yaml`, D-24/D-25).
@@ -36,6 +38,7 @@ public interface VoipApi {
      *
      * `409 ride-terminal`: a finished ride has no one left to call.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun issueVoipToken(
         request: IssueVoipTokenRequest,
         idempotencyKey: String? = null,
@@ -47,6 +50,7 @@ public interface VoipApi {
      * The response's `session` is present only for a free VoIP call; a direct dial carries none
      * and the app places a PSTN call itself (AL-33).
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun startCall(request: StartCallRequest, idempotencyKey: String? = null): StartCallResponse
 
     /**
@@ -62,6 +66,7 @@ public interface VoipApi {
      * guessable, and "that id exists" is itself something a stranger should not learn about two
      * other people's conversation.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun recordCallOutcome(
         callId: Ulid,
         request: RecordCallOutcomeRequest,
@@ -71,6 +76,7 @@ public interface VoipApi {
 
 internal class KtorVoipApi(private val transport: ApiTransport) : VoipApi {
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun issueVoipToken(request: IssueVoipTokenRequest, idempotencyKey: String?): VoipTokenResponse =
         transport.apiPost(
             service = ApiService.VOIP,
@@ -80,6 +86,7 @@ internal class KtorVoipApi(private val transport: ApiTransport) : VoipApi {
             attested = true,
         ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun recordCallOutcome(callId: Ulid, request: RecordCallOutcomeRequest, idempotencyKey: String?) {
         transport.apiPost(
             service = ApiService.VOIP,
@@ -89,6 +96,7 @@ internal class KtorVoipApi(private val transport: ApiTransport) : VoipApi {
         ) { jsonBody(request) }
     }
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun startCall(request: StartCallRequest, idempotencyKey: String?): StartCallResponse =
         transport.apiPost(ApiService.VOIP, "startCall", "/v1/calls/start", idempotencyKey) {
             jsonBody(request)
@@ -106,9 +114,11 @@ internal class KtorVoipApi(private val transport: ApiTransport) : VoipApi {
 public interface NotificationApi {
 
     /** `POST /v1/notify/register-token` — register this install's FCM/APNs token. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun registerPushToken(request: RegisterPushTokenRequest, idempotencyKey: String? = null)
 
     /** `PUT /v1/notify/preferences` — set the per-type switches. */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun updateNotificationPreferences(request: NotificationPreferences): NotificationPreferences
 
     /**
@@ -116,6 +126,7 @@ public interface NotificationApi {
      *
      * **Service-to-service (mTLS).** Present for contract coverage; not reachable from an app.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun sendNotification(
         request: SendNotificationRequest,
         idempotencyKey: String? = null,
@@ -133,11 +144,13 @@ public interface NotificationApi {
      * `404` means there was nothing left to acknowledge: the window had closed and the SMS has
      * gone, or the notification belongs to another account.
      */
+    @Throws(MageRideError::class, CancellationException::class)
     public suspend fun acknowledgeNotification(request: AcknowledgeNotificationRequest)
 }
 
 internal class KtorNotificationApi(private val transport: ApiTransport) : NotificationApi {
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun registerPushToken(request: RegisterPushTokenRequest, idempotencyKey: String?) {
         transport.apiPost(
             service = ApiService.NOTIFICATION,
@@ -147,11 +160,13 @@ internal class KtorNotificationApi(private val transport: ApiTransport) : Notifi
         ) { jsonBody(request) }
     }
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun updateNotificationPreferences(request: NotificationPreferences): NotificationPreferences =
         transport.apiPut(ApiService.NOTIFICATION, "updateNotificationPreferences", "/v1/notify/preferences") {
             jsonBody(request)
         }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun sendNotification(
         request: SendNotificationRequest,
         idempotencyKey: String?,
@@ -162,6 +177,7 @@ internal class KtorNotificationApi(private val transport: ApiTransport) : Notifi
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Throws(MageRideError::class, CancellationException::class)
     override suspend fun acknowledgeNotification(request: AcknowledgeNotificationRequest) {
         transport.apiPostExempt(ApiService.NOTIFICATION, "acknowledgeNotification", "/v1/notify/ack") {
             jsonBody(request)

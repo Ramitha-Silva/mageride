@@ -386,7 +386,7 @@ final class TripDetailsModelTests: XCTestCase {
         // `aggregate_1m` omits the distance rather than understating it (`query.yaml`'s own remark),
         // so a trip with no distance has nothing to qualify and the row draws the dash instead.
         history.tripDetail = HistoryFixtures.trip(distanceKm: nil, geometrySource: GeometrySource.telemetry)
-        let noDistance = model()
+        let noDistance = self.model()
         await noDistance.load()
         XCTAssertFalse(noDistance.state.isApproximate)
         XCTAssertNil(noDistance.state.distance)

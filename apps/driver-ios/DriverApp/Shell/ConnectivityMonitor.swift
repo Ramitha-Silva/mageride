@@ -31,7 +31,8 @@ final class ConnectivityMonitor: ObservableObject {
     init() {
         monitor.pathUpdateHandler = { [weak self] path in
             let satisfied = path.status == .satisfied
-            Task { @MainActor in self?.isOnline = satisfied }
+            // `[weak self]` again here, not the handler's — see ``PositionService/startDraining()``.
+            Task { @MainActor [weak self] in self?.isOnline = satisfied }
         }
         monitor.start(queue: queue)
     }
