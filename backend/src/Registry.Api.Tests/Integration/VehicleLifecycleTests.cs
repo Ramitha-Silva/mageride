@@ -246,9 +246,16 @@ public sealed class VehicleLifecycleTests(PostgresFixture postgres)
     }
 
     /// <summary>
-    /// The whole vehicle surface is driver-only. A passenger who opened the Driver App carries
-    /// <c>app=driver, role=passenger</c> and is refused — deny-by-default working as intended.
+    /// The whole vehicle surface is driver-only: a token without the <c>driver</c> role is refused,
+    /// which is deny-by-default working as intended.
     /// </summary>
+    /// <remarks>
+    /// The token here is <b>synthetic</b>. Signing into the Driver App now grants the driver role
+    /// additively (iam-svc, at OTP verify), so <c>app=driver</c> with only <c>role=passenger</c> is
+    /// no longer a shape a real sign-in produces. It is still exactly the shape this gate has to
+    /// refuse — an internal caller, a stale token minted before the grant, or a bug upstream — so
+    /// the assertion stands and only the story behind it changed.
+    /// </remarks>
     [Fact]
     public async Task The_new_routes_require_the_driver_role()
     {

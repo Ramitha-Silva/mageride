@@ -198,14 +198,33 @@ public sealed class OtpService(
             var found = await users.FindByPhoneAsync(unitOfWork.Connection, unitOfWork.Transaction, attempt.Phone, cancellationToken);
             isNewUser = found is null;
 
+            // The role this surface runs on, granted on every sign-in to it and never taken away
+            // from the other one (AL-06's union, AL-08's per-app session).
+            //
+            // C020 wrote this as create-only and deferred the rest to C029 — "holding `driver` is
+            // C029's grant to make" — and C029 never made it. `GrantRoleAsync` had exactly one
+            // call site in the whole backend, inside the branch below, so the role a person held
+            // was decided by which app they happened to install FIRST and could never change: a
+            // number that signed into the Passenger App first was refused by every `/v1/vehicles`
+            // and `/v1/drivers` route forever, including the Profile Setup that was supposed to
+            // make them a driver, and a driver-first number could never book a ride.
+            //
+            // Granting it here rather than at the end of onboarding is what keeps the token
+            // honest from the first call: `GET /v1/vehicles/mine` is the driver dashboard's first
+            // read and it needs the role already in the JWT, which a grant written by another
+            // service over the outbox could not be in time for. The role opens *onboarding*, not
+            // *operating* — going online still needs an APPROVED vehicle (US-9.6), accepting a
+            // ride still needs to be the driver it was offered to, and a blocked account is
+            // refused below before any of it.
+            var appRole = app == MageRideApps.Driver ? MageRideRoles.Driver : MageRideRoles.Passenger;
+
             if (found is null)
             {
-                // First sign-in creates the account with the role of the app it came from. An
-                // existing account is never escalated here — holding the driver role is what
-                // registry-svc's onboarding grants (C029), not what opening the driver app does.
-                var role = app == MageRideApps.Driver ? MageRideRoles.Driver : MageRideRoles.Passenger;
-                found = await users.CreateAsync(unitOfWork.Connection, unitOfWork.Transaction, attempt.Phone, role, cancellationToken);
-                await users.GrantRoleAsync(unitOfWork.Connection, unitOfWork.Transaction, found.Id, role, cancellationToken);
+                // The primary role of a brand-new account is the app it was created from. For an
+                // account that already exists it is left alone: `iam.users.role` is what the
+                // directory and the admin console call this person, and someone who has driven
+                // for a year does not stop being a driver because they opened the Passenger App.
+                found = await users.CreateAsync(unitOfWork.Connection, unitOfWork.Transaction, attempt.Phone, appRole, cancellationToken);
             }
             else if (found.IsBlocked)
             {
@@ -213,6 +232,11 @@ public sealed class OtpService(
             }
 
             user = found;
+
+            // Idempotent (`ON CONFLICT DO NOTHING`), so the common case — the same person signing
+            // into the same app again — writes nothing.
+            await users.GrantRoleAsync(unitOfWork.Connection, unitOfWork.Transaction, user.Id, appRole, cancellationToken);
+
             principal = await users.PrincipalAsync(unitOfWork.Connection, unitOfWork.Transaction, user.Id, cancellationToken);
 
             deviceRowId = await devices.EnsureAsync(
