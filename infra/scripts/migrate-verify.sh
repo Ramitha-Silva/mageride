@@ -2204,12 +2204,33 @@ psql_run "INSERT INTO iam.users (id, phone, role)
                     'c0000054-0000-0000-0000-000000000001','licence.png','driving_license');" >/dev/null \
   || die "could not seed the C054 extraction fixture."
 
-# The D-36 invariant, in the last place able to refuse to record its violation: a row saying the
-# external model ran on an image the pre-pass never touched describes the one thing that must never
-# have happened. NOT VALID, so this proves it bites on a NEW write — the half that closes the hole.
-check_rejects "an unredacted Gemini extraction is refused (ck_extractions_gemini_is_redacted)" \
+# Δ MCS-07 — this assertion is INVERTED, not removed, and 1315 is why.
+#
+# It read "an unredacted Gemini extraction is refused (ck_extractions_gemini_is_redacted)": the D-36
+# invariant in the last place able to refuse to record its violation. That was true while ocr-svc
+# could not make the call without a redacted image — the extractor took a type only the pre-pass
+# could construct — so such a row could only come from a defect.
+#
+# The pre-pass is best-effort now: it runs when it can and is skipped when it cannot, and the image
+# goes to the model either way. So this row is ordinary, and it is one the service must be able to
+# WRITE: `ExtractionPipeline.PersistAsync` swallows an NpgsqlException here and returns the fields
+# anyway, so a surviving constraint would silently drop the audit record of exactly the extractions
+# a privacy review is opened to look at. `redaction_applied` per row is what carries the fact now.
+check_accepts "an unredacted Gemini extraction is recordable (1315 dropped ck_extractions_gemini_is_redacted)" \
   "INSERT INTO docs.extractions (upload_id, doc_type, status, redaction_applied, engine)
      VALUES ('c0000054-0000-0000-0000-000000000002','driving_license','EXTRACTED',false,'gemini');"
+
+# By NAME, because 1310 added it NOT VALID — a NOT VALID CHECK still rejects new rows, so "the
+# insert worked" only proves the constraint is gone if you already know it was never VALIDATEd.
+check_eq "the D-36 CHECK is gone by name, not merely unenforced" "0" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid = 'docs.extractions'::regclass
+      AND conname = 'ck_extractions_gemini_is_redacted';"
+
+# The unmasked population has to stay countable, which is the whole compensating control (1315).
+check_eq "unredacted sends are countable (ix_extractions_unredacted)" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname = 'docs' AND indexname = 'ix_extractions_unredacted';"
 
 check_rejects "an unknown extraction engine is refused (ck_extractions_engine)" \
   "INSERT INTO docs.extractions (upload_id, doc_type, status, engine)
