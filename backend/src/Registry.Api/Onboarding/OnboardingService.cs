@@ -80,6 +80,23 @@ public interface IOnboardingService
 {
     Task<DriverProfileResult> UpsertProfileAsync(UpsertDriverProfileCommand command, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// This driver's <c>registry.driver_profiles</c> row, or <see langword="null"/> when Profile
+    /// Setup has not been done (Δ MCS-05).
+    /// </summary>
+    /// <remarks>
+    /// The boot router's question, answered by the service that owns the answer. Both apps used to
+    /// ask iam-svc — <c>GET /v1/users/me</c>, is there a <c>first_name</c>? — which is the
+    /// passenger app's question: Profile Setup writes here and never touches <c>iam.users</c>, so a
+    /// driver who had done it read as incomplete and a passenger who had a name from the other app
+    /// read as complete and skipped driver onboarding entirely.
+    ///
+    /// <see langword="null"/> rather than a <c>not-found</c> throw. "This driver has no profile
+    /// yet" is the **normal** answer on a cold start — it is what sends them to Profile Setup —
+    /// and an exception here would reach the handset as an error banner over the right behaviour.
+    /// </remarks>
+    Task<DriverProfileResult?> ReadProfileAsync(Guid driverId, CancellationToken cancellationToken);
+
     Task<OnboardingState> SaveStepAsync(SaveOnboardingStepCommand command, CancellationToken cancellationToken);
 
     Task<OnboardingState> GetStateAsync(Guid driverId, Guid vehicleId, CancellationToken cancellationToken);
@@ -118,6 +135,27 @@ public sealed class OnboardingService(
     private const int MaxNicLength = 20;
 
     private readonly RegistryOptions _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+
+    public async Task<DriverProfileResult?> ReadProfileAsync(Guid driverId, CancellationToken cancellationToken)
+    {
+        await using var connection = await connectionFactory.OpenAsync(cancellationToken);
+
+        var profile = await profiles.FindAsync(connection, null, driverId, cancellationToken);
+        if (profile is null)
+        {
+            return null;
+        }
+
+        // The same derivation the upsert returns, from the same column: `verified_at` is written
+        // only when no identity field was left pending, so reading it back is reading that verdict
+        // rather than re-computing one that could disagree with the one the driver was shown.
+        var status = profile.VerifiedAt is null ? RegistrationStatuses.Pending : RegistrationStatuses.Approved;
+
+        // The row, and deliberately not the AL-29 fields: they belong to the licence documents and
+        // are `PUT /v1/drivers/profile`'s to return, on the screen that can act on them. A read
+        // that gathered them would be two more queries for a boot router that wants one boolean.
+        return new DriverProfileResult(profile, status, []);
+    }
 
     public async Task<DriverProfileResult> UpsertProfileAsync(
         UpsertDriverProfileCommand command, CancellationToken cancellationToken)

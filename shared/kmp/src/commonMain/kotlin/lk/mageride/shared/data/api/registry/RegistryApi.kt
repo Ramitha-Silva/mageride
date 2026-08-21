@@ -9,6 +9,7 @@ import lk.mageride.shared.data.api.apiPost
 import lk.mageride.shared.data.api.apiPut
 import lk.mageride.shared.data.api.capturedDocumentPart
 import lk.mageride.shared.data.api.decode
+import lk.mageride.shared.data.api.decodeOrNull
 import lk.mageride.shared.data.api.jsonBody
 import lk.mageride.shared.data.api.multipartBody
 import lk.mageride.shared.data.api.pageParameters
@@ -24,6 +25,7 @@ import lk.mageride.shared.data.models.registry.BindVehicleDeviceResponse
 import lk.mageride.shared.data.models.registry.CreateShareGrantRequest
 import lk.mageride.shared.data.models.registry.CreateShareGrantResponse
 import lk.mageride.shared.data.models.registry.DriverPayoutProfile
+import lk.mageride.shared.data.models.registry.DriverProfileSummary
 import lk.mageride.shared.data.models.registry.OnboardingCorrections
 import lk.mageride.shared.data.models.registry.OnboardingStep
 import lk.mageride.shared.data.models.registry.OnboardingStepInput
@@ -56,6 +58,21 @@ import lk.mageride.shared.data.models.registry.VehicleStatusResponse
  */
 @Suppress("TooManyFunctions")
 public interface RegistryApi {
+
+    /**
+     * `GET /v1/drivers/profile` — this driver's profile, or `null` when they have none (Δ MCS-05).
+     *
+     * **The boot router's question, asked of the service that owns the answer.** SCR-DA/DI-001
+     * decides between Profile Setup and Home on whether driver identity is on file, and used to
+     * decide it on `iam.users.first_name` from [lk.mageride.shared.data.api.iam.IamApi.getMyProfile]
+     * — a column Profile Setup writes nothing to. A driver who had completed it read as incomplete
+     * and went round again; a passenger who had a name from the other app read as complete and
+     * skipped driver onboarding entirely.
+     *
+     * `null` is a 200, not a 404 — see the contract, and [lk.mageride.shared.data.api.ride.RideApi]'s
+     * two recovery reads, which are shaped the same way for the same reason.
+     */
+    public suspend fun getDriverProfile(): DriverProfileSummary?
 
     /**
      * `PUT /v1/drivers/profile` with a JSON body — the driver identity, by upload id.
@@ -237,6 +254,9 @@ public interface RegistryApi {
 
 @Suppress("TooManyFunctions")
 internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryApi {
+
+    override suspend fun getDriverProfile(): DriverProfileSummary? =
+        transport.apiGet(SERVICE, "getDriverProfile", "/v1/drivers/profile").decodeOrNull(transport.json)
 
     override suspend fun upsertDriverProfile(request: UpsertDriverProfileRequest): UpsertDriverProfileResponse =
         transport.apiPut(SERVICE, "upsertDriverProfile", "/v1/drivers/profile") { jsonBody(request) }.decode()

@@ -36,6 +36,11 @@ public static class OnboardingEndpoints
             .WithTags("drivers")
             .RequireMageRideRole(MageRideRoles.Driver);
 
+        // Δ MCS-05 — the boot router's read. Inside the driver-role group like the write beside
+        // it: signing into the Driver App grants that role now, so the first thing a driver does
+        // after OTP can ask this.
+        drivers.MapGet("/profile", ReadProfileAsync).WithName("getDriverProfile");
+
         // Δ MCS-01 — `DisableAntiforgery` because the route now also takes multipart/form-data.
         // The token would be a browser-form defence on an endpoint only a bearer-authenticated
         // mobile client reaches, and its absence is what ASP.NET refuses a form over otherwise.
@@ -61,6 +66,31 @@ public static class OnboardingEndpoints
         vehicles.MapGet("/{vehicleId}/onboarding-status", GetStatusAsync).WithName("getVehicleOnboardingStatus");
 
         return endpoints;
+    }
+
+    /// <summary>
+    /// <c>GET /v1/drivers/profile</c> — has this driver completed Profile Setup? (Δ MCS-05)
+    /// </summary>
+    /// <remarks>
+    /// SCR-DA/DI-001 decides between Profile Setup and Home on this, and used to decide it on
+    /// iam-svc's <c>first_name</c> — a column Profile Setup never writes. See
+    /// <see cref="IOnboardingService.ReadProfileAsync"/>.
+    /// </remarks>
+    private static async Task<IResult> ReadProfileAsync(
+        HttpContext context, IOnboardingService onboarding, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(onboarding);
+
+        var profile = await onboarding.ReadProfileAsync(context.User.RequireSubjectId(), cancellationToken);
+
+        // `oneOf(DriverProfileSummary, null)` and a 200, which is what the contract types and what
+        // ride-svc's two recovery reads already do: a driver with no profile is the normal answer
+        // on a cold start, and a 404 is something an app shows as an error over the right
+        // behaviour. `TypedResults.Ok(null)` writes nothing at all, so the literal is explicit.
+        return profile is null
+            ? TypedResults.Content("null", "application/json; charset=utf-8")
+            : TypedResults.Ok(DriverProfileSummaryResponse.From(profile));
     }
 
     /// <summary>

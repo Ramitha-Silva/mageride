@@ -125,8 +125,24 @@ internal data class LicenceExtraction(val fields: List<LicenceField>, val displa
  */
 internal class DriverProfileRepository(private val registry: RegistryApi, private val iam: IamApi) {
 
-    /** `GET /v1/users/me` — the splash router's input for "has this driver a profile yet?". */
+    /** `GET /v1/users/me` — the driver's own account row. */
     suspend fun me(): UserProfile = iam.getMyProfile()
+
+    /**
+     * **The boot router's question** — has this driver completed Profile Setup? (Δ MCS-05)
+     *
+     * `GET /v1/drivers/profile`, which is registry-svc's, because `registry.driver_profiles` is
+     * what Profile Setup writes. This used to read `iam.users.first_name` off [me] — the
+     * *passenger* app's question, copied onto a surface where it is the wrong one. Profile Setup
+     * never touches `iam.users`, so the answer was wrong in both directions:
+     *
+     * * a driver who **had** completed it still had no `first_name`, so every cold start sent them
+     *   back to the form they had already filled in;
+     * * a **passenger** who had a name from the other app read as complete, skipped driver
+     *   onboarding altogether and reached Home without ever submitting a driving licence — which
+     *   is the half that matters, because the licence is the whole point of the screen.
+     */
+    suspend fun hasDriverProfile(): Boolean = registry.getDriverProfile() != null
 
     /**
      * `PUT /v1/drivers/profile` — the three images and the name, in one request.

@@ -96,6 +96,7 @@ import lk.mageride.shared.data.models.registry.BindVehicleDeviceResponse
 import lk.mageride.shared.data.models.registry.CreateShareGrantRequest
 import lk.mageride.shared.data.models.registry.CreateShareGrantResponse
 import lk.mageride.shared.data.models.registry.DriverPayoutProfile
+import lk.mageride.shared.data.models.registry.DriverProfileSummary
 import lk.mageride.shared.data.models.registry.OnboardingStepInput
 import lk.mageride.shared.data.models.registry.RegisterVehicleResponse
 import lk.mageride.shared.data.models.registry.RequestVehicleAccessRequest
@@ -344,7 +345,8 @@ internal object ApiOperations {
             sends<OperatingCityPreference>(),
         ),
 
-        // registry-svc — driver identity, vehicles, onboarding, sharing (17)
+        // registry-svc — driver identity, vehicles, onboarding, sharing (18)
+        op<DriverProfileSummary>("getDriverProfile", ApiService.REGISTRY, "GET", "/v1/drivers/profile", 200),
         op<UpsertDriverProfileResponse>(
             "upsertDriverProfile",
             ApiService.REGISTRY,

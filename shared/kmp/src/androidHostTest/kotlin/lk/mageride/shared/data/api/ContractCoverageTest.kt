@@ -168,15 +168,19 @@ class ContractCoverageTest {
          * of contracts this module only ever calls the front of — C027's `/v1/admin/rbac`, C046's
          * eight `/v1/internal/wallet` postings, C053's support queue, C060's fleet billing. See
          * [ContractSurface] for why that no longer means 62 missing clients (Δ C076a).
+         *
+         * **242** since MCS-05 added `GET /v1/drivers/profile` — the read SCR-DA/DI-001 needs to
+         * tell "this driver has done Profile Setup" from "this person has a name in `iam.users`".
          */
-        const val EXPECTED_OPERATIONS = 241
+        const val EXPECTED_OPERATIONS = 242
 
         /**
          * The half of those an app can reach — everything outside `/v1/internal` and `/v1/admin`.
          *
-         * All 177 have a typed client today, which is the property this file exists to keep true.
+         * All 178 have a typed client today, which is the property this file exists to keep true.
+         * **178** since MCS-05's `getDriverProfile`.
          */
-        const val EXPECTED_APP_FACING = 177
+        const val EXPECTED_APP_FACING = 178
 
         /**
          * D3' §0's sensitive mutations: auth, payments, ride accept, wallet, SOS.

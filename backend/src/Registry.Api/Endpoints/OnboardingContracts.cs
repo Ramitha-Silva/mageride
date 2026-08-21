@@ -43,6 +43,36 @@ public sealed record ExtractedFieldResponse(
     }
 }
 
+/// <summary>
+/// 200 body of <c>GET /v1/drivers/profile</c> — the profile row, without the extracted fields
+/// (Δ MCS-05).
+/// </summary>
+/// <remarks>
+/// Not <see cref="DriverProfileResponse"/> with an empty <c>fields</c>: that would say the licence
+/// had no extracted fields, which is a different claim from "this read did not go and get them".
+/// </remarks>
+public sealed record DriverProfileSummaryResponse(
+    string DriverId,
+    string Status,
+    string DisplayName,
+    string? PhotoUrl,
+    string? NicNo,
+    IReadOnlyList<string> AllowedVehicleTypes)
+{
+    public static DriverProfileSummaryResponse From(DriverProfileResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        return new DriverProfileSummaryResponse(
+            result.Profile.DriverId.ToString(),
+            result.Status,
+            result.Profile.DisplayName,
+            result.Profile.PhotoUrl,
+            result.Profile.NicNo,
+            result.Profile.AllowedVehicleTypes ?? []);
+    }
+}
+
 /// <summary>200 body of <c>PUT /v1/drivers/profile</c>.</summary>
 /// <param name="Status">
 /// <c>PENDING</c> while any identity field is waiting on an officer, <c>APPROVED</c> once none is.

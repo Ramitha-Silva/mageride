@@ -195,6 +195,11 @@ internal class LoginViewModel(
     /**
      * Whether this driver already has a `registry.driver_profiles` row (US-2.21).
      *
+     * **Δ MCS-05 — `GET /v1/drivers/profile`, not `iam.users.first_name`.** The old read was the
+     * passenger app's, and on this surface it answered a different question: somebody who signs
+     * into the Driver App with the number they already use for the Passenger App has a name, and
+     * would have gone straight past the screen that collects their driving licence.
+     *
      * A failure answers `false` — the opposite of the splash's choice, and for the opposite
      * reason. Here the driver has just signed in, so the network was working a moment ago; the
      * safe outcome is to show Profile Setup, which is idempotent (`PUT /v1/drivers/profile`) and
@@ -202,7 +207,7 @@ internal class LoginViewModel(
      */
     @Suppress("TooGenericExceptionCaught")
     private suspend fun hasProfile(): Boolean = try {
-        !profiles.me().firstName.isNullOrBlank()
+        profiles.hasDriverProfile()
     } catch (cause: CancellationException) {
         throw cause
     } catch (_: Throwable) {
