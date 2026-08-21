@@ -267,6 +267,22 @@ internal sealed class OcrHarness : IAsyncDisposable
         await connection.ExecuteAsync(sql, parameters);
     }
 
+    /// <summary>
+    /// One scalar, for asserting on the schema itself rather than on a row (Δ MCS-07).
+    /// </summary>
+    /// <remarks>
+    /// A dropped CHECK has to be asserted BY NAME against <c>pg_constraint</c>. "The insert
+    /// succeeded" is not the same claim: 1310 added that constraint <c>NOT VALID</c>, which still
+    /// rejects new rows, so an insert that works proves the constraint is gone only if you already
+    /// know it was never <c>VALIDATE</c>d.
+    /// </remarks>
+    public async Task<T?> ScalarAsync<T>(string sql, object? parameters = null)
+    {
+        await using var connection = new NpgsqlConnection(_postgres.ConnectionString);
+
+        return await connection.ExecuteScalarAsync<T>(sql, parameters);
+    }
+
     private static async Task ResetAsync(PostgresFixture postgres)
     {
         await using var connection = new NpgsqlConnection(postgres.ConnectionString);

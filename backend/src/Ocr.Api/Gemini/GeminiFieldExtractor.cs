@@ -14,14 +14,22 @@ namespace MageRide.Ocr.Gemini;
 public sealed record GeminiExtraction(IReadOnlyList<ExtractedField> Fields);
 
 /// <summary>
-/// D6' §7.5's primary path: Gemini Flash 3.0, on the redacted image.
+/// D6' §7.5's primary path: Gemini Flash, on the redacted image where there is one.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>The parameter type is the fence.</b> This takes a <see cref="RedactedDocument"/> — a type only
-/// <see cref="RedactionPipeline"/> can construct — so there is no overload that accepts the bytes
-/// that came off object storage and no way to write one by accident. <c>PerimeterGuardHandler</c>,
-/// on this client's own pipeline, is the second check, on the wire.
+/// <b>Δ MCS-07: this takes an <see cref="OutboundDocument"/>, which may or may not have been
+/// redacted.</b> It used to take a <see cref="RedactedDocument"/> and nothing else, which made the
+/// D-36 pre-pass a compile-time precondition of the external call; that also made a box with no
+/// tesseract binary or no OpenCV cascade extract nothing at all, by any path. The pass now runs
+/// when it can and is skipped when it cannot. <c>PerimeterGuardHandler</c> still sits on this
+/// client and still refuses any image the pipeline did not admit for this job.
+/// </para>
+/// <para>
+/// <b>The prompt follows the image.</b> A redacted document is described as redacted and the model
+/// is told never to reconstruct what is behind a mask; a raw one is not, because telling a model
+/// that a portrait it can see plainly has been blurred is how it decides the fields beside it are
+/// unreliable too. <see cref="GeminiPrompts"/> holds both.
 /// </para>
 /// <para>
 /// <b>Nothing here throws.</b> A refusal, a timeout, an unparseable answer and a missing API key all
@@ -58,7 +66,7 @@ public sealed class GeminiFieldExtractor
 
     /// <summary>Reads <paramref name="document"/>, or returns null so the caller falls back.</summary>
     public async Task<GeminiExtraction?> ExtractAsync(
-        RedactedDocument document, ExtractionRequest request, CancellationToken cancellationToken)
+        OutboundDocument document, ExtractionRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(request);
@@ -115,9 +123,9 @@ public sealed class GeminiFieldExtractor
         }
     }
 
-    private string BuildRequest(RedactedDocument document, ExtractionRequest request)
+    private string BuildRequest(OutboundDocument document, ExtractionRequest request)
     {
-        var prompt = GeminiPrompts.For(request.Kind, DocumentSides.Normalise(request.Side));
+        var prompt = GeminiPrompts.For(request.Kind, DocumentSides.Normalise(request.Side), document.IsRedacted);
 
         var payload = new GeminiRequest(
             [new GeminiContent("user",

@@ -423,6 +423,27 @@ services:
       # that list is reordered — `Container7Tests` is what makes such a move a failing test rather
       # than a silent 502, and the same reordering would move this line.
       Dispatch__RideServiceBaseUrl: http://127.0.0.1:5106
+      # Δ MCS-07 — the same defect as the line above, one service along. `.env.app.example` ships
+      # `Registry__OcrBaseUrl=http://ocr-svc:5000/` and `Fleet__OcrBaseUrl=http://app-services:8080`,
+      # and **neither address exists on this network**: C054 planned ocr-svc as its own container
+      # (`Dockerfile.ocr`), C125 instead folded it into THIS one — `Dockerfile.appservices` is
+      # Debian and carries tesseract + opencv-data for exactly that reason — so there is no
+      # `ocr-svc` host to resolve, and nothing listens on `app-services:8080` either. Every
+      # extraction therefore died in `OcrDocumentExtractionClient`'s catch, came back
+      # `DocumentExtraction.Unavailable`, and registry-svc wrote each required key with a NULL
+      # value: the driver app drew the extract card with every row blank, on both Profile Setup
+      # and the Mode-C wizard, and every vehicle needed a Verification Officer.
+      #
+      # The gateway port (5000) would NOT have worked either. ocr-svc is co-located but has **no
+      # gateway cluster** (`Container7.ClustersElsewhere`'s remark says so), and C008 refuses the
+      # `/v1/internal/**` prefix at the edge regardless — so the address has to be the service's
+      # own loopback port, not the container's published one.
+      #
+      # 5118 is that port: `Container7.FirstServicePort` is 5101 and ocr-svc is EIGHTEENTH in
+      # `Container7.Services`. A position in a list, exactly like ride-svc's above — `Container7Tests`
+      # is what turns a reordering into a failing test rather than a silent 404.
+      Registry__OcrBaseUrl: http://127.0.0.1:5118/
+      Fleet__OcrBaseUrl: http://127.0.0.1:5118/
     volumes:
       # provisioning-svc's embedded step-ca (T-02). A bind mount rather than a named volume because
       # EMQX reads the same certs/ca_chain.crt as its 8883 cacertfile.

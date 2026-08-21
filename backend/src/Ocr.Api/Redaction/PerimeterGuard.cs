@@ -87,21 +87,28 @@ public sealed class PerimeterViolationException : InvalidOperationException
 
 /// <summary>
 /// The last thing between an image and the external model: every inline image on an outbound
-/// request must hash to something <see cref="IPerimeterLedger"/> admitted (D-36).
+/// request must hash to something <see cref="IPerimeterLedger"/> admitted.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Why a handler and not a code review.</b> <see cref="RedactedDocument"/> already makes the raw
-/// bytes untypeable at the call site, which is the primary fence. This is the second one, and it
-/// holds somewhere the first cannot: a payload assembled by hand, a retry that re-serialises from a
-/// cached buffer, a future extractor written by somebody who has not read D-36. It inspects what is
-/// actually on the wire.
+/// <b>Δ MCS-07 — read what this now proves, and what it does not.</b> It used to be D-36's second
+/// fence, behind a first one made of types: the extractor took a <see cref="RedactedDocument"/>, so
+/// an admitted hash was by construction a redacted image. The extractor takes an
+/// <see cref="OutboundDocument"/> now and the pre-pass is best-effort, so admission means
+/// <em>this is the document <c>ExtractionPipeline</c> resolved for this job</em> — not
+/// <em>this was masked</em>. Whether it was masked is
+/// <c>docs.extractions.redaction_applied</c>, per row.
+/// </para>
+/// <para>
+/// <b>Why a handler and not a code review.</b> Narrower is not nothing: this still holds where no
+/// review does — a payload assembled by hand, a retry that re-serialises from a cached buffer, a
+/// future extractor that reaches for the bytes off object storage instead of the ones the pipeline
+/// resolved, another provider's field name. It inspects what is actually on the wire.
 /// </para>
 /// <para>
 /// <b>It fails the request rather than stripping the image.</b> A stripped request would reach
 /// Gemini, return nothing useful and be indistinguishable from a bad scan; the exception is caught
-/// by the extractor and the document falls back to the on-prem path, which is the behaviour a
-/// D-36 breach should produce.
+/// by the extractor and the document falls back to the on-prem path.
 /// </para>
 /// </remarks>
 public sealed class PerimeterGuardHandler : DelegatingHandler

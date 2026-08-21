@@ -102,9 +102,11 @@ public static class OcrApplication
     /// <remarks>
     /// The same rule content-svc, notification-svc and support-svc are written under, and it matters
     /// here for its own reason: <b>a disarmed redactor looks exactly like a well-behaved one from
-    /// the outside.</b> Documents keep going in, fields keep coming out, drivers keep onboarding —
-    /// and every vehicle silently needs a Verification Officer, because AL-27's auto-approve is
-    /// unreachable without a Gemini path. Nothing else on the platform can tell the difference.
+    /// the outside.</b> Documents keep going in, fields keep coming out, drivers keep onboarding.
+    /// Before MCS-07 what that hid was an unreachable AL-27 auto-approve; since MCS-07 it hides
+    /// unmasked faces and identity numbers going to a third party instead. Nothing else on the
+    /// platform can tell the difference either way, which is why this runs at boot and not on the
+    /// first driver's upload.
     /// </remarks>
     private static void Announce(WebApplication app, OcrOptions settings)
     {
@@ -130,18 +132,32 @@ public static class OcrApplication
         if (!tesseract)
         {
             logger.LogError(
-                "The on-prem OCR engine is unavailable. It is BOTH D6' §7.5's fallback AND the source of "
-                + "ADD §12.5's redaction boxes, so nothing will be sent to Gemini and no field will be extracted "
-                + "by any path. Every document goes to a Verification Officer.");
+                "The on-prem OCR engine is unavailable. It is BOTH D6' §7.5's fallback for a model outage AND "
+                + "the source of ADD §12.5's redaction boxes, so a Gemini outage now extracts NOTHING and every "
+                + "document that does reach Gemini goes unredacted (Δ MCS-07).");
         }
 
-        if (!armed)
+        // Δ MCS-07: this pairing is the one an operator has to read together, because the two
+        // switches now compose into three postures rather than two, and the middle one is the
+        // dangerous one. Announced as ERROR because a document leaving unmasked is the loudest
+        // fact this service has; it is not a crash, and it is not meant to be.
+        if (!armed && gemini.IsConfigured)
         {
             logger.LogError(
-                "The D-36 redaction pre-pass is DISARMED ({Reason}), so no document will be sent to Gemini. "
-                + "Extraction continues on the on-prem path, where every field is capped at {Ceiling} and "
-                + "therefore always reviewed. This is the fail-closed direction and it is working as intended — "
-                + "but AL-27's auto-approve is unreachable until it is fixed.",
+                "The D-36 redaction pre-pass is DISARMED ({Reason}) and Gemini IS configured, so every document "
+                + "is sent to the external model UNREDACTED: human faces are not blurred and NIC / licence "
+                + "numbers are not masked. This is no longer the fail-closed direction — MCS-07 made the "
+                + "pre-pass best-effort — so it will keep working, and keep doing that, until the dependency is "
+                + "installed or Ocr:Gemini:Enabled is turned off. docs.extractions.redaction_applied records "
+                + "each one; ix_extractions_unredacted indexes them.",
+                redaction.DisarmedReason);
+        }
+        else if (!armed)
+        {
+            logger.LogWarning(
+                "The D-36 redaction pre-pass is DISARMED ({Reason}), but Gemini is not configured either, so "
+                + "nothing leaves this service. Extraction is on-prem only, capped at {Ceiling} and therefore "
+                + "always reviewed; AL-27's auto-approve is unreachable.",
                 redaction.DisarmedReason, settings.TesseractConfidenceCeiling);
         }
         else if (!gemini.IsConfigured)
@@ -155,7 +171,10 @@ public static class OcrApplication
             "ocr-svc is up: redaction {Redaction} (policy {Policy}, pass {Pass}), Gemini {Gemini} on {Model}, "
             + "on-prem engine {Engine}, auto-verify at {Threshold}, fallback capped at {Ceiling}, raw retention "
             + "{Retention}.",
-            armed ? "ARMED" : "DISARMED",
+            // Δ MCS-07: the third value is the whole point of this line now. "DISARMED" used to
+            // mean nothing left; it means the opposite when Gemini is configured, and an operator
+            // grepping one word out of a boot log should not have to know which release they are on.
+            armed ? "ARMED" : gemini.IsConfigured ? "DISARMED-SENDING-UNREDACTED" : "DISARMED",
             RedactionPipeline.PolicyVersion,
             RedactionPipeline.PassVersion,
             gemini.IsConfigured ? "configured" : "not configured",

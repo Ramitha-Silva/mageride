@@ -23,8 +23,17 @@ public interface IExtractionPipeline
 /// <b>The on-prem read happens first, on every document, whether or not Gemini will be called.</b>
 /// ADD §12.5 gets the boxes it blacks out from Tesseract, so the redaction pass cannot run without
 /// it — and the same page is then the fallback extractor's input, so the expensive step runs once.
-/// This is also what makes the D-36 posture legible: <b>no Tesseract ⇒ no boxes ⇒ no redaction ⇒ no
-/// Gemini</b>, all the way down, with no branch that skips a link.
+/// </para>
+/// <para>
+/// <b>Δ MCS-07 — the redaction pass is best-effort, and no longer gates the model.</b> The old
+/// chain was <c>no Tesseract ⇒ no boxes ⇒ no redaction ⇒ no Gemini</c>, with no branch that skipped
+/// a link, and it was load-bearing for D-36. It also meant a deployment missing either native
+/// dependency extracted <em>nothing at all</em> by any path while looking, from the outside, like a
+/// service that worked. The pass now runs when it can and is skipped when it cannot; the image goes
+/// to the model either way, and <see cref="OutboundDocument.IsRedacted"/> is what the prompt, the
+/// perimeter ledger and <c>docs.extractions.redaction_applied</c> all read so the three agree.
+/// <b>Tesseract stays the fallback for a model that is down</b> — that is D6' §8.3 and is
+/// unchanged.
 /// </para>
 /// <para>
 /// <b>Nothing in here throws.</b> Every failure — no such upload, unreadable bytes, no redactor,
@@ -94,7 +103,7 @@ public sealed class ExtractionPipeline : IExtractionPipeline
 
         if (raw is null)
         {
-            return await PersistAsync(request, [], ExtractionEngines.None, redaction: null, cancellationToken);
+            return await PersistAsync(request, [], ExtractionEngines.None, outbound: null, cancellationToken);
         }
 
         // One read, two consumers: the mask boxes (ADD §12.5) and the fallback fields (D6' §7.5).
@@ -102,32 +111,63 @@ public sealed class ExtractionPipeline : IExtractionPipeline
 
         var redaction = _redaction.Redact(raw.Bytes, raw.ContentType, page);
 
+        // Δ MCS-07: a warning, not a stop. The pass failing now costs the masking, not the read.
+        // This says only what happened HERE — whether the document then actually leaves is decided
+        // below and logged there, so neither line claims something the other one prevented.
         if (!redaction.Succeeded)
         {
             _logger.LogWarning(
-                "The D-36 pre-pass did not run on upload {UploadId} ({Reason}); NOTHING was sent to Gemini and "
-                + "the document falls back to the on-prem path.",
+                "The D-36 pre-pass did not run on upload {UploadId}: {Reason}.",
                 request.UploadId, redaction.Reason);
         }
 
-        var fields = await ReadFieldsAsync(request, page, redaction.Document, cancellationToken);
+        var outbound = redaction.Document is { } redacted
+            ? OutboundDocument.FromRedaction(redacted)
+            // The type declared on the wire is what the BYTES are, not what `docs.uploads` recorded:
+            // the stored value is whatever the uploading client called the file. Falling back to the
+            // stored one keeps the document intact for `MayBeSent` to refuse below, rather than
+            // asserting a type here that the magic number does not support.
+            : OutboundDocument.FromRaw(
+                raw.Bytes, ContentTypes.InlineImageType(raw.Bytes.Span) ?? raw.ContentType);
 
-        return await PersistAsync(request, fields.Fields, fields.Engine, redaction.Document, cancellationToken);
+        var fields = await ReadFieldsAsync(request, page, outbound, cancellationToken);
+
+        return await PersistAsync(request, fields.Fields, fields.Engine, outbound, cancellationToken);
     }
 
     private async Task<(IReadOnlyList<ExtractedField> Fields, string Engine)> ReadFieldsAsync(
         ExtractionRequest request,
         OcrPage page,
-        RedactedDocument? redacted,
+        OutboundDocument outbound,
         CancellationToken cancellationToken)
     {
-        if (redacted is not null)
+        if (MayBeSent(outbound))
         {
-            // Admitted *before* the call, so the guard on the way out can recognise it. Nothing else
-            // in this service admits a hash.
-            _ledger.Admit(redacted.RedactedSha256);
+            // The one place an unmasked document is recorded as it happens, rather than as a row
+            // somebody queries later. WARNING and not INFO because it is a privacy-relevant event
+            // per document; the reason it is unmasked was logged once by the caller, and the
+            // start-up ERROR says it will keep happening until a dependency is fixed.
+            if (!outbound.IsRedacted && _gemini.IsConfigured)
+            {
+                _logger.LogWarning(
+                    "Upload {UploadId} is going to Gemini UNREDACTED (sha256 {Hash}): any portrait and any "
+                    + "identity number on it leave the perimeter as photographed. docs.extractions."
+                    + "redaction_applied is false on this row (Δ MCS-07).",
+                    request.UploadId, outbound.Sha256);
+            }
 
-            if (await _gemini.ExtractAsync(redacted, request, cancellationToken) is { } extraction)
+            // Admitted *before* the call, so the guard on the way out can recognise it. Still the
+            // only place in this service that admits a hash — see OutboundDocument on what it means.
+            _ledger.Admit(outbound.Sha256);
+
+            // Δ MCS-07: `{ Fields.Count: > 0 }`, not `{ }`. A non-null extraction carrying ZERO
+            // fields used to count as success — engine `gemini`, succeeded `true`, Tesseract never
+            // consulted — and the caller then saw only the null rows `Complete` adds for the
+            // required keys. It is reachable whenever the model answers with keys this kind does not
+            // accept, or with `reg_no_match` alone, both of which the extractor's own filter drops.
+            // An answer with nothing usable in it is a read that did not happen, and belongs on the
+            // fallback.
+            if (await _gemini.ExtractAsync(outbound, request, cancellationToken) is { Fields.Count: > 0 } extraction)
             {
                 return (extraction.Fields, ExtractionEngines.Gemini);
             }
@@ -141,16 +181,38 @@ public sealed class ExtractionPipeline : IExtractionPipeline
     }
 
     /// <summary>
+    /// Whether this document may go to the external model at all (Δ MCS-07).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A redacted document always may: the pass produced it, so it decoded, and
+    /// <see cref="RedactionPipeline"/> re-encoded it as PNG or JPEG.
+    /// </para>
+    /// <para>
+    /// A RAW one only may if its magic number says it is an image the model takes inline. That
+    /// check used to be free: bytes that would not decode failed the redaction pass, and a failed
+    /// pass meant nothing was sent. Now that the pass no longer gates the send, this is the whole
+    /// of what stops a text file, a truncated upload or a PDF being posted to a third party
+    /// labelled <c>image/jpeg</c> — <c>ContentTypes.FromBytes</c> guesses that for anything it does
+    /// not recognise, which is right for naming a temporary file and wrong for the wire.
+    /// </para>
+    /// </remarks>
+    private static bool MayBeSent(OutboundDocument outbound) =>
+        outbound.IsRedacted || ContentTypes.InlineImageType(outbound.Bytes.Span) is not null;
+
+    /// <summary>
     /// Completes the field set, judges it, writes the row, and shapes the answer.
     /// </summary>
     private async Task<ExtractionResult> PersistAsync(
         ExtractionRequest request,
         IReadOnlyList<ExtractedField> read,
         string engine,
-        RedactedDocument? redaction,
+        OutboundDocument? outbound,
         CancellationToken cancellationToken)
     {
         var fields = Complete(request, read);
+
+        var redaction = outbound?.Redaction;
 
         var result = new ExtractionResult(
             engine != ExtractionEngines.None,
@@ -169,10 +231,14 @@ public sealed class ExtractionPipeline : IExtractionPipeline
                     result.Status,
                     result.LowestConfidence,
                     // The column defaults true, so it has to be written explicitly on the path that
-                    // skipped the pass — 1301's own comment says so.
+                    // skipped the pass — 1301's own comment says so. Since MCS-07 that path can end
+                    // at Gemini rather than at Tesseract, which is exactly what makes the per-row
+                    // value worth reading: it is now the only record of which images left masked.
                     redaction is not null,
                     engine,
-                    redaction?.RawSha256,
+                    // ADD §12.5's "which file was processed" comes off the OUTBOUND document, so it
+                    // is recorded even when the pass did not run and there is no RedactedDocument.
+                    outbound?.RawSha256,
                     redaction?.RedactedSha256,
                     redaction?.PolicyVersion,
                     redaction?.PassVersion,

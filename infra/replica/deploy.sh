@@ -156,13 +156,84 @@ else
 
   chmod 600 "$ENV_FILE"
 
-  # ASSIGNMENTS only. The first version grepped the whole file and matched the comment at the top
-  # that explains what CHANGEME means, so it refused to deploy over its own documentation.
-  if grep -nE '^[A-Za-z_][A-Za-z0-9_]*=.*CHANGEME' "$ENV_FILE"; then
-    die "a CHANGEME survived in $ENV_FILE — refusing to start with a placeholder secret"
-  fi
-
   ok "generated $ENV_FILE (mode 600, gitignored)"
+fi
+
+# -------------------------------------------------------------------------------------
+# Δ MCS-07 — the placeholder scan, over the WHOLE env layer and on EVERY deploy.
+#
+# It used to grep `.env.replica` alone, and only inside the first-run branch above — so it never
+# ran again on a box that already had one, and it never looked at `../env/.env.app.example` at
+# all. That file ships ~30 `CHANGEME_*` placeholders and is loaded with `required: true`, so any
+# one of them that nothing overrides is LIVE configuration. `Ocr__Gemini__ApiKey` was exactly
+# that: a non-empty placeholder, which made ocr-svc report "Gemini configured" at start-up and
+# every extraction fail at Google. The whole point of a CHANGEME is to be loud, and it was silent.
+#
+# LAYERING IS THE WHOLE DIFFICULTY, and a plain grep gets it wrong in both directions. The compose
+# file loads five env files in order and later ones win, so a CHANGEME in the example is FINE when
+# a later file overrides that key, and a real problem when nothing does. So this resolves each key
+# to its effective value the way compose does, and reports only the keys that are still
+# placeholders once the whole stack has been applied.
+#
+# ASSIGNMENTS only, never comment text — the first version of the old check matched the comment
+# that explains what CHANGEME means and refused to deploy over its own documentation.
+# -------------------------------------------------------------------------------------
+step "checking for placeholder configuration"
+
+# The five files the compose file's `x-app-env` anchor loads, IN ITS ORDER. Absent ones are
+# skipped rather than passed to awk, which would abort on the first one that is not there — three
+# of the five are optional by design.
+env_layer=()
+for candidate in \
+  "$REPO_ROOT/infra/env/.env.common.example" \
+  "$REPO_ROOT/infra/env/.env.common" \
+  "$REPO_ROOT/infra/env/.env.app.example" \
+  "$REPO_ROOT/infra/env/.env.app" \
+  "$ENV_FILE"; do
+  [ -f "$candidate" ] && env_layer+=("$candidate")
+done
+
+placeholders=$(
+  awk '
+    /^[A-Za-z_][A-Za-z0-9_]*=/ {
+      key = $0
+      sub(/=.*/, "", key)
+      val = $0
+      sub(/^[^=]*=/, "", val)
+      if (!(key in seen)) { seen[key] = ++n }
+      value[key] = val
+    }
+    END {
+      for (k in value) if (value[k] ~ /CHANGEME/) printf "%d\t%s\n", seen[k], k
+    }
+  ' "${env_layer[@]}" | sort -n | cut -f2-
+)
+
+if [ -n "$placeholders" ]; then
+  count=$(printf '%s\n' "$placeholders" | wc -l | tr -d ' ')
+
+  printf '  %s key(s) still resolve to a CHANGEME placeholder after the whole env layer:\n' "$count"
+  while IFS= read -r key; do printf '    %s\n' "$key"; done <<< "$placeholders"
+  printf '  set each in %s — it is the last file loaded, so it wins.\n' "$ENV_FILE"
+
+  # THE ESCAPE HATCH IS DELIBERATE, and so is it being off by default.
+  #
+  # Widening this check from one file to the whole layer surfaces a backlog that predates it: most
+  # of these are `*__InternalApiKey` pairs where BOTH sides read the same placeholder out of
+  # `.env.app.example`, so they currently match each other and the hop works. That is a real
+  # finding on a box with a public IP, and it is also not something a deployment at 2 a.m. can fix
+  # by filling in sixty values. Failing closed with a named, logged acknowledgement makes it a
+  # decision somebody took; failing open would make this check decorative, which is exactly the
+  # state `Ocr__Gemini__ApiKey` was already in.
+  if [ "${REPLICA_ALLOW_PLACEHOLDERS:-0}" = "1" ]; then
+    note "REPLICA_ALLOW_PLACEHOLDERS=1 — continuing with the $count placeholder(s) above"
+    note "this replica carries synthetic data only (root CLAUDE.md); do NOT set this anywhere else"
+  else
+    printf '  to proceed anyway on a synthetic-data replica, re-run with REPLICA_ALLOW_PLACEHOLDERS=1\n'
+    die "refusing to start with placeholder configuration — see the $count key(s) above"
+  fi
+else
+  ok "no CHANGEME survives the env layer (${#env_layer[@]} files)"
 fi
 
 # The env file is what the compose file's `${VAR:?}` reads. Export it for every docker compose call

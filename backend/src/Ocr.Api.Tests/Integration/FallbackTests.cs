@@ -97,6 +97,72 @@ public sealed class FallbackTests(PostgresFixture postgres)
     }
 
     [Fact]
+    public async Task A_model_that_answers_only_keys_this_document_cannot_carry_falls_back()
+    {
+        // Δ MCS-07, the latent half. `GeminiFieldExtractor` drops any key the kind does not accept
+        // (`field_key` is free text, and an invented key becomes an officer-queue row about a field
+        // no screen has), so a well-formed answer made ENTIRELY of such keys parses to a non-null
+        // extraction carrying ZERO fields.
+        //
+        // `ExtractionPipeline` matched that with `is { }`, so it counted as success: engine
+        // `gemini`, succeeded `true`, Tesseract never consulted — and the caller got only the null
+        // rows `Complete` adds for the required keys. Blank values, reported as a good read. The
+        // pattern is `is { Fields.Count: > 0 }` now, and an answer with nothing usable in it is
+        // treated as the read it actually was.
+        await using var harness = await OcrHarness.StartAsync(postgres);
+
+        harness.Gemini.Answer(("policy_holder_name", "A. Perera", 0.98m), ("issued_on", "2026-01-04", 0.97m));
+
+        var (uploadId, storageUrl, _) = await harness.UploadAsync(
+            DocumentFixtures.RevenueLicence(), DocumentKinds.RevenueLicense);
+
+        var result = await harness.ExtractAsync(uploadId, storageUrl, DocumentKinds.RevenueLicense);
+
+        // The model WAS called and DID answer 200 — this is not the Gemini-down path.
+        Assert.Single(harness.Gemini.Calls);
+
+        Assert.Equal(ExtractionEngines.Tesseract, result.Engine);
+
+        Assert.Equal(
+            DocumentFixtures.RevenueNumber,
+            result.Fields.Single(field => field.Key == DocumentFieldKeys.RevenueNo).Value);
+
+        // Neither invented key reached the caller; that filter is not what changed.
+        Assert.DoesNotContain(result.Fields, field => field.Key == "policy_holder_name");
+    }
+
+    [Fact]
+    public async Task A_photos_answer_of_reg_no_match_alone_falls_back_rather_than_reporting_success()
+    {
+        // The same gap, on the one document kind where it is reachable with keys that ARE accepted:
+        // `registration` accepts { reg_no_match, plate_text } and the extractor drops `reg_no_match`
+        // unconditionally — the comparison is computed here and is never the model's opinion
+        // (D5' §14.1a). A model that answers it alone therefore contributes nothing at all.
+        await using var harness = await OcrHarness.StartAsync(postgres);
+
+        harness.Gemini.Answer((DocumentFieldKeys.RegNoMatch, "true", 0.99m));
+
+        var (uploadId, storageUrl, _) = await harness.UploadAsync(
+            DocumentFixtures.VehiclePhoto(), DocumentKinds.Registration);
+
+        var result = await harness.ExtractAsync(
+            uploadId, storageUrl, DocumentKinds.Registration, registrationNumber: DocumentFixtures.Plate);
+
+        Assert.NotEqual(ExtractionEngines.Gemini, result.Engine);
+
+        // The regression this guards, stated directly: never report a successful read whose every
+        // field is blank. That combination is what reached the driver app as an extract card of
+        // empty rows over a green verdict, and it is unreachable whichever engine ends up running.
+        Assert.False(
+            result.Succeeded && result.Fields.All(field => field.Value is null),
+            "the extraction reported success with no value on any field");
+
+        // `reg_no_match` is still emitted — it is a required key, computed here (D5' §14.1a) and
+        // never the model's opinion, so the answer above cannot have become the verdict.
+        Assert.Contains(result.Fields, field => field.Key == DocumentFieldKeys.RegNoMatch);
+    }
+
+    [Fact]
     public async Task A_model_that_answers_nonsense_falls_back_rather_than_failing_the_document()
     {
         await using var harness = await OcrHarness.StartAsync(postgres);
