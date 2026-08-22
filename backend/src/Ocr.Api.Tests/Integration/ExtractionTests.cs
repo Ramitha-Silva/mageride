@@ -181,9 +181,17 @@ public sealed class ExtractionTests(PostgresFixture postgres)
             backId, backUrl, DocumentKinds.DrivingLicense, DocumentSides.Back);
 
         Assert.Equal(DocumentFixtures.LicenceNumber, Value(front, DocumentFieldKeys.LicenceNo));
-        Assert.Equal(DocumentFixtures.LicenceExpiry, Value(front, DocumentFieldKeys.LicenceExpiry));
         Assert.Contains(front.Fields, field => field.Key == DocumentFieldKeys.NicNo);
         Assert.Equal("A1,B,C1", Value(back, DocumentFieldKeys.AllowedVehicleTypes));
+
+        // Δ MCS-20 — the expiry is a BACK field now, and the front must not carry it at all.
+        //
+        // `4a` on the front is the date of ISSUE; the expiry is column 11 of the class table on the
+        // reverse. Asking the front for "the date of expiry" is what returned the issue date, and
+        // that value becomes `registry.documents.expires_at` and the input to E-03's sweep — so a
+        // test that accepted it on the front was pinning the defect.
+        Assert.Equal(DocumentFixtures.LicenceExpiry, Value(back, DocumentFieldKeys.LicenceExpiry));
+        Assert.DoesNotContain(front.Fields, field => field.Key == DocumentFieldKeys.LicenceExpiry);
 
         // The NIC was masked out of the image, so the model answered null — and that must not hold
         // the licence step down, because it is not a required field (I-25.1).

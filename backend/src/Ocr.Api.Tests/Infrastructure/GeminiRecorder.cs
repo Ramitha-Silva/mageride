@@ -185,25 +185,36 @@ internal sealed class GeminiRecorder : IAsyncDisposable
     /// </remarks>
     private static string DocumentTypeFor(string prompt)
     {
-        if (prompt.Contains("driving licence", StringComparison.OrdinalIgnoreCase))
+        // ONLY the caller's claim, never the whole prompt. Δ MCS-21 added a block listing every
+        // document type the model may answer with — so "driving licence" now appears in EVERY
+        // prompt, and matching against the whole thing classified an insurance certificate as a
+        // licence, contradicted it, and turned four green tests red. The claim is the one line
+        // after this marker.
+        var marker = prompt.IndexOf(ClaimMarker, StringComparison.Ordinal);
+        var claim = marker < 0 ? prompt : prompt[(marker + ClaimMarker.Length)..];
+
+        if (claim.Contains("driving licence", StringComparison.OrdinalIgnoreCase))
         {
             return DocumentTypes.DrivingLicence;
         }
 
-        if (prompt.Contains("insurance certificate", StringComparison.OrdinalIgnoreCase))
+        if (claim.Contains("insurance", StringComparison.OrdinalIgnoreCase))
         {
             return DocumentTypes.Insurance;
         }
 
-        if (prompt.Contains("revenue licence", StringComparison.OrdinalIgnoreCase))
+        if (claim.Contains("revenue licence", StringComparison.OrdinalIgnoreCase))
         {
             return DocumentTypes.RevenueLicence;
         }
 
-        return prompt.Contains("photograph", StringComparison.OrdinalIgnoreCase)
+        return claim.Contains("photograph", StringComparison.OrdinalIgnoreCase)
             ? DocumentTypes.VehiclePhoto
             : DocumentTypes.Unclear;
     }
+
+    /// <summary>The line <see cref="GeminiPrompts"/> puts the caller's claim on (Δ MCS-21).</summary>
+    private const string ClaimMarker = "Say what you actually see:";
 
     private static string? ValueFor(string key) => key switch
     {
