@@ -430,12 +430,11 @@ private fun hintFor(state: DocumentScannerState): Int = when {
  * its portrait width and took the reach down with it — below the 48 dp Material minimum, on the
  * axis where a thumb is least precise.
  */
-private fun nearestCorner(quad: CropQuad, touch: Offset, frame: IntSize): CropCorner =
-    CropCorner.entries
-        .minBy { corner ->
-            val point = quad.corner(corner)
-            (Offset(point.x * frame.width, point.y * frame.height) - touch).getDistance()
-        }
+private fun nearestCorner(quad: CropQuad, touch: Offset, frame: IntSize): CropCorner = CropCorner.entries
+    .minBy { corner ->
+        val point = quad.corner(corner)
+        (Offset(point.x * frame.width, point.y * frame.height) - touch).getDistance()
+    }
 
 /** The wireframe's `capbar` — `Retake · ◉ · Use photo ›`. */
 @Composable
