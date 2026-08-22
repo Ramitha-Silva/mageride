@@ -164,7 +164,7 @@ struct DriverProfileScreen: View {
             )
         ) {
             Button {
-                model.openSheet(.name)
+                model.open(.name)
             } label: {
                 Image(systemName: "pencil")
                     .foregroundStyle(MageRideColor.primary)

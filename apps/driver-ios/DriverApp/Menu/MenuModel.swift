@@ -18,9 +18,9 @@ final class MenuModel: ObservableObject {
     @Published private(set) var header = DriverHeaderState()
 
     private let identity: DriverIdentity
-    private let profiles: ProfileSettingsRepository
+    private let profiles: ProfileRepository
 
-    init(identity: DriverIdentity, profiles: ProfileSettingsRepository) {
+    init(identity: DriverIdentity, profiles: ProfileRepository) {
         self.identity = identity
         self.profiles = profiles
     }
