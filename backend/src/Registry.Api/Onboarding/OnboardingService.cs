@@ -237,7 +237,9 @@ public sealed class OnboardingService(
             displayName,
             photo.StorageUrl,
             nicNo ?? ValueOf(written, DocumentFieldKeys.NicNo),
-            allowedTypes ?? SplitTypes(ValueOf(written, DocumentFieldKeys.AllowedVehicleTypes)),
+            // Δ MCS-11 — CanonicalTypesOnly, not SplitTypes. The column is answered as
+            // `VehicleType[]` by the contract, and what extraction reads here is licence classes.
+            allowedTypes ?? CanonicalTypesOnly(ValueOf(written, DocumentFieldKeys.AllowedVehicleTypes)),
             verifiedAt,
             cancellationToken);
 
@@ -902,6 +904,20 @@ public sealed class OnboardingService(
             return VerifyStatuses.Pending;
         }
 
+        // Δ MCS-11 — the same shape as the line above, for the same reason. `allowed_vehicle_types`
+        // is extracted as the LICENCE CLASSES printed on the card ("B,G1") — GeminiPrompts asks for
+        // them "exactly as printed", and that is right, because what is printed is the evidence an
+        // officer checks. They are not MageRide vehicle types (AL-09: motorbike, three_wheeler,
+        // sedan, …), and no table on the platform maps one vocabulary to the other.
+        //
+        // So a confident reading here is a confident reading of something this platform cannot act
+        // on, and auto-verifying it would mean a driver's allowed types were settled by a value
+        // nothing understands. It goes to a Verification Officer however sure ocr-svc was.
+        if (key == DocumentFieldKeys.AllowedVehicleTypes && !AllCanonicalTypes(value))
+        {
+            return VerifyStatuses.Pending;
+        }
+
         // No confidence is treated exactly like a low one. An unscored value has not been
         // verified, whatever produced it.
         return confidence is null || confidence < _options.OcrConfidenceThreshold
@@ -1159,6 +1175,46 @@ public sealed class OnboardingService(
         string.IsNullOrWhiteSpace(value)
             ? null
             : [.. value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+
+    /// <summary>Whether every entry in a comma-separated list is an AL-09 vehicle type.</summary>
+    /// <remarks>
+    /// A blank value is not "all canonical" — it is unread, and <see cref="DeriveVerifyStatus"/>
+    /// has already returned <c>pending</c> for it before this is reached.
+    /// </remarks>
+    private static bool AllCanonicalTypes(string? value) =>
+        SplitTypes(value) is { Length: > 0 } types && types.All(type => VehicleTypes.IsCanonical(type));
+
+    /// <summary>
+    /// The extracted licence classes, reduced to the ones that are actually AL-09 vehicle types
+    /// (Δ MCS-11).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is what keeps <c>registry.driver_profiles.allowed_vehicle_types</c> inside the
+    /// contract.</b> `registry.yaml` types both the request and the 200 response as
+    /// <c>VehicleType[]</c>, and <see cref="RequireAllowedVehicleTypes"/> has always enforced that
+    /// on the value a DRIVER types. The extracted value had no such check and went to the column
+    /// through <see cref="SplitTypes"/> unread, so the moment extraction actually started working
+    /// (MCS-07) this service began answering <c>["B","G1"]</c> in a field declared as an enum —
+    /// and every driver app that decoded it strictly failed the whole response. On SCR-DA-003a
+    /// that surfaced as "Something went wrong. Please try again." after a 200.
+    /// </para>
+    /// <para>
+    /// The classes are NOT lost and are not the column's business: the raw <c>"B,G1"</c> stays on
+    /// <c>registry.document_fields</c>, which is what the extract card shows, what the officer
+    /// reviews, and what any future class-to-type mapping would be derived from.
+    /// </para>
+    /// <para>
+    /// <b>No mapping is invented here.</b> Whether a Sri Lankan class B licence means <c>sedan</c>,
+    /// <c>flex</c> or both is platform policy with a real consequence — it decides what a driver
+    /// may be dispatched — and no spec states it. Until one does, the officer decides, which is
+    /// exactly what the <c>pending</c> verdict above routes to.
+    /// </para>
+    /// </remarks>
+    private static string[]? CanonicalTypesOnly(string? value) =>
+        SplitTypes(value)?.Where(type => VehicleTypes.IsCanonical(type)).ToArray() is { Length: > 0 } canonical
+            ? canonical
+            : null;
 
     private static string Serialize(object value) => JsonSerializer.Serialize(value, MageRideJson.StorageOptions);
 
