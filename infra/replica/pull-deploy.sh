@@ -56,6 +56,13 @@ ok "the box has been deployed before (.env.replica present)"
 
 # The commit whose compose file, env layer and MIGRATIONS match the images being pulled.
 # Without this the box would pull new images and run them against the old schema.
+#
+# Δ MCS-12 — cd.yml does this ITSELF, in the ssh command, before calling this script, and then
+# leaves REPLICA_COMMIT unset. It has to: a script that moves the checkout cannot be the thing
+# that produces itself, and on the first run the box was still on a commit that predated this
+# file — `bash: …/pull-deploy.sh: No such file or directory`, exit 127, before a line of this
+# ran. The variable stays for a HAND-driven deploy, where the checkout is wherever the operator
+# left it and naming the commit is the only way to be sure.
 COMMIT="${REPLICA_COMMIT:-}"
 if [ -n "$COMMIT" ]; then
   git fetch --quiet origin || die "git fetch failed"
