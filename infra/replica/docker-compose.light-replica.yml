@@ -332,13 +332,34 @@ services:
     networks: [internal]
 
   # ===================================================================================
+  # WHERE THE SEVEN BUILT IMAGES COME FROM (Δ MCS-10)
+  #
+  # Every `image:` below reads `${REPLICA_REGISTRY:-mageride}/<name>:${REPLICA_TAG:-replica}`.
+  # UNSET, that is exactly what it was before — `mageride/app-services:replica`, built on this
+  # box by `deploy.sh`'s `docker compose build`. Nothing about the manual path changes.
+  #
+  # SET, the same compose file pulls a CI-built image instead:
+  #   REPLICA_REGISTRY=ghcr.io/ramitha-silva REPLICA_TAG=sha-<7>
+  #
+  # This is what wires the replica into cd.yml. It was never in it: cd builds the ~24 PER-SERVICE
+  # images the DOKS split needs (service-catalog.yaml §"Why per-service"), and this box runs seven
+  # COMPOSED ones — `app-services` alone carries 22 services, ocr-svc among them. The two sets are
+  # disjoint, so there was no tag here for a deploy job to move, and the only thing that ever
+  # updated this box was somebody running deploy.sh on it. That is how the replica came to be 96
+  # commits and four days behind while every `deploy(dev)` commit reported success (MCS-07).
+  #
+  # `build:` is deliberately KEPT on all seven. A pull needs a registry and a network; a box with
+  # neither still has to be able to bring the replica up from source.
+  # ===================================================================================
+
+  # ===================================================================================
   # migrate — the one-shot schema apply. Everything below waits for it to COMPLETE.
   # ===================================================================================
   migrate:
     build:
       context: ../..
       dockerfile: backend/src/MageRide.Migrations/Dockerfile
-    image: mageride/migrate:replica
+    image: ${REPLICA_REGISTRY:-mageride}/migrate:${REPLICA_TAG:-replica}
     environment:
       # Straight to :5432, not through the pooler: DbUp takes an advisory lock for the run and a
       # transaction-mode pooler can hand the next statement to a different backend.
@@ -368,7 +389,7 @@ services:
       dockerfile: infra/docker/Dockerfile.service
       args:
         SERVICE: HotPath
-    image: mageride/hot-path:replica
+    image: ${REPLICA_REGISTRY:-mageride}/hot-path:${REPLICA_TAG:-replica}
     depends_on:
       pgbouncer: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -399,7 +420,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.appservices
-    image: mageride/app-services:replica
+    image: ${REPLICA_REGISTRY:-mageride}/app-services:${REPLICA_TAG:-replica}
     environment:
       # The three clusters that are NOT in this container. Everything co-located here is pointed at
       # its own loopback port by the host itself — see backend/src/AppServices/Container7.cs.
@@ -490,7 +511,7 @@ services:
         # backend/src/Fanout/Dockerfile does not exist — docker-compose.dev.yml names it and nothing
         # ever created it. The C124 catalog builds fanout-svc from the shared template, so this does.
         SERVICE: Fanout.Api
-    image: mageride/fanout:replica
+    image: ${REPLICA_REGISTRY:-mageride}/fanout:${REPLICA_TAG:-replica}
     environment:
       # 5001, overriding Dockerfile.service's ASPNETCORE_URLS=http://+:5000. Three things already
       #name 5001 — this container's healthcheck, haproxy.replica.cfg's `fanout` backend, and the
@@ -523,7 +544,7 @@ services:
     build:
       context: ../..
       dockerfile: backend/src/TcpAdapter/Dockerfile
-    image: mageride/tcp-adapter:replica
+    image: ${REPLICA_REGISTRY:-mageride}/tcp-adapter:${REPLICA_TAG:-replica}
     ports:
       - "${REPLICA_EDGE_BIND:-0.0.0.0}:${ADAPTER_NMEA_UDP_PORT:-5026}:5026/udp"
     volumes:
@@ -618,7 +639,7 @@ services:
       args:
         PORTAL: admin
         PORT: "3001"
-    image: mageride/admin-portal:replica
+    image: ${REPLICA_REGISTRY:-mageride}/admin-portal:${REPLICA_TAG:-replica}
     environment:
       # `MAGERIDE_API_BASE_URL`, and NOT a `NEXT_PUBLIC_*` name: the portal reads this on the
       # SERVER and `portals/admin/test/fences.test.ts` fails the build if any source file reads a
@@ -649,7 +670,7 @@ services:
       args:
         PORTAL: fleet
         PORT: "3002"
-    image: mageride/fleet-portal:replica
+    image: ${REPLICA_REGISTRY:-mageride}/fleet-portal:${REPLICA_TAG:-replica}
     environment:
       # Same as admin-portal above, and for the same two reasons: server-read name (no
       # `NEXT_PUBLIC_*`, enforced by the portal's own fence test) and Container 7's co-located

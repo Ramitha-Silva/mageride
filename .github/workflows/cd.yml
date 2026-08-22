@@ -158,6 +158,124 @@ jobs:
     secrets: inherit
 
   # ===================================================================================
+  # The lightweight replica's own images (Δ MCS-10).
+  #
+  # `images` above builds the ~24 per-service images the DOKS split needs. It does NOT build
+  # the composed `app-services` / `hot-path` the single-VPS replica runs, so until now nothing
+  # in this pipeline produced an artefact that box could consume. See replica-images.yml.
+  #
+  # Parallel to `dev`/`staging` rather than behind them: those two promote a GitOps tag for a
+  # cluster that does not exist yet (their own verify step logs "there is no dev environment"),
+  # and the replica is the one environment that actually serves traffic. Gating a real deploy
+  # on two no-op ones would only mean the replica breaks when a manifest does.
+  # ===================================================================================
+  replica-images:
+    name: replica images
+    needs: [gate, images]
+    if: needs.gate.outputs.proceed == 'true'
+    uses: ./.github/workflows/replica-images.yml
+    with:
+      sha: ${{ needs.gate.outputs.sha }}
+      push: true
+    permissions:
+      contents: read
+      packages: write
+    secrets: inherit
+
+  # ===================================================================================
+  # Deliver to the Contabo replica — api.mageride.lk, the only environment on the platform
+  # that currently resolves and serves.
+  #
+  # THIS CYCLES A LIVE BOX. `infra/replica/pull-deploy.sh` pulls the CI-built images and
+  # restarts the containers; api.mageride.lk is down for the length of that restart. It does
+  # NOT build on the box and does NOT touch secrets or certificates — both are deploy.sh's,
+  # and a job that could rewrite `.env.replica` unattended could lock everyone out of the
+  # database.
+  #
+  # `continue-on-error` is deliberate and narrow: a replica that fails to come up must not
+  # retro-actively mark a delivery red whose images built and signed correctly. The job's own
+  # red X is the signal; `ready-for-production` below still reports what is on staging.
+  # ===================================================================================
+  replica:
+    name: replica (contabo)
+    needs: [gate, replica-images]
+    if: needs.gate.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    steps:
+      - name: is the replica wired up?
+        id: configured
+        # DECLINING IS NOT FAILING, the same rule `gate` above records. A fork, or this repo
+        # before the deploy key is installed, has no REPLICA_SSH_KEY — and a delivery that goes
+        # red for a secret it was never given is noise, not a finding.
+        run: |
+          if [ -z "${REPLICA_SSH_KEY:-}" ] || [ -z "${REPLICA_HOST:-}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::REPLICA_SSH_KEY / REPLICA_HOST are not set — skipping the replica deploy"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          REPLICA_SSH_KEY: ${{ secrets.REPLICA_SSH_KEY }}
+          REPLICA_HOST: ${{ secrets.REPLICA_HOST }}
+
+      - name: ssh key
+        if: steps.configured.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "$REPLICA_SSH_KEY" > ~/.ssh/replica
+          chmod 600 ~/.ssh/replica
+          # Pinned, not TOFU: `StrictHostKeyChecking=accept-new` on a runner accepts whatever
+          # answers on that IP, which is the whole of what a deploy key's protection rests on.
+          echo "$REPLICA_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+        env:
+          REPLICA_SSH_KEY: ${{ secrets.REPLICA_SSH_KEY }}
+          REPLICA_HOST_KEY: ${{ secrets.REPLICA_HOST_KEY }}
+
+      - name: pull and cycle
+        if: steps.configured.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          tag="sha-${SHA::7}"
+          echo "::notice::deploying $tag to $REPLICA_HOST"
+          remote="REPLICA_TAG='$tag' REPLICA_COMMIT='$SHA'"
+          remote="$remote REPLICA_REGISTRY='ghcr.io/$IMAGE_NAMESPACE'"
+          remote="$remote bash /root/mageride/infra/replica/pull-deploy.sh"
+          ssh -i ~/.ssh/replica -o BatchMode=yes -o ConnectTimeout=20 \
+            "$REPLICA_USER@$REPLICA_HOST" "$remote"
+        env:
+          SHA: ${{ needs.gate.outputs.sha }}
+          REPLICA_HOST: ${{ secrets.REPLICA_HOST }}
+          REPLICA_USER: ${{ vars.REPLICA_USER || 'root' }}
+          IMAGE_NAMESPACE: ${{ vars.IMAGE_NAMESPACE || 'ramitha-silva' }}
+
+      - name: summary
+        if: always() && steps.configured.outputs.configured == 'true'
+        run: |
+          {
+            echo "### replica — sha-${SHA::7}"
+            echo
+            if [ "$OUTCOME" = "success" ]; then
+              echo "api.mageride.lk is serving sha-${SHA::7}. Smoke passed."
+            else
+              echo "The replica did NOT reach sha-${SHA::7}. It is still running whatever it"
+              echo "was on — the deploy either failed to pull or failed to come up healthy."
+              echo
+              echo "To drive it by hand:"
+              echo '```bash'
+              echo "ssh root@<replica-host>"
+              echo "cd /root/mageride && REPLICA_TAG=sha-${SHA::7} bash infra/replica/pull-deploy.sh"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          SHA: ${{ needs.gate.outputs.sha }}
+          OUTCOME: ${{ job.status }}
+
+  # ===================================================================================
   # What a person needs in order to decide about production.
   # ===================================================================================
   ready-for-production:
