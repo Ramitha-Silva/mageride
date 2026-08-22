@@ -111,10 +111,40 @@ fi
 ok "Ocr__Gemini__ApiKey resolves to a real value"
 [ "$count" -gt 0 ] && note "$count other key(s) still resolve to CHANGEME (known backlog; see deploy.sh)"
 
-set -a
-# shellcheck disable=SC1090
-. "$ENV_FILE"
-set +a
+# Δ MCS-13 — READ this file, never SOURCE it.
+#
+# `. "$ENV_FILE"` hands a file this script does not own to the BASH parser. One line of the
+# replica's is `Sms__FitSmsApiToken=…|…`, and bash reads that `|` as a pipe: it runs the second
+# half of the token as a command, gets `command not found`, and `set -e` kills the deploy at
+# step 2 of 6 — exit 127, having deployed nothing. That is what the second real CD run did.
+#
+# deploy.sh survives the same line only because it is not strict at that point. It does not
+# survive it CORRECTLY: bash assigns the token up to the `|` and silently drops the rest, so
+# anything reading it through that shell gets a truncated credential. Same defect, quieter mask.
+#
+# Docker Compose does not use a shell to read an env file and neither will this. Everything after
+# the FIRST `=` is the value, verbatim, minus at most one layer of matching surrounding quotes —
+# which makes `|`, `;`, spaces, backticks and `$(…)` ordinary characters, because that is what
+# they are in a credential. The export is what the compose file's `${VAR:?}` interpolation reads.
+while IFS= read -r line || [ -n "$line" ]; do
+  case "$line" in '' | '#'*) continue ;; esac
+  case "$line" in *=*) ;; *) continue ;; esac
+
+  key=${line%%=*}
+  value=${line#*=}
+
+  # Not a shell-legal name (an indented continuation, a stray word) — skip rather than guess.
+  case "$key" in '' | *[!A-Za-z0-9_]*) continue ;; esac
+
+  # `?*` rather than `*`: a value that is a single quote character must not have that one
+  # character stripped twice and become the empty string.
+  case "$value" in
+    \"?*\") value=${value#\"}; value=${value%\"} ;;
+    \'?*\') value=${value#\'}; value=${value%\'} ;;
+  esac
+
+  export "$key=$value"
+done < "$ENV_FILE"
 
 # -------------------------------------------------------------------------------------
 bold "3/6  pull $REPLICA_REGISTRY/*:$REPLICA_TAG"
