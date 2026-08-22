@@ -31,6 +31,15 @@ ENV_FILE="$REPO_ROOT/infra/replica/.env.replica"
 export REPLICA_REGISTRY="${REPLICA_REGISTRY:-ghcr.io/ramitha-silva}"
 export REPLICA_TAG
 
+# Which optional profiles move with the deploy. `portals` by DEFAULT, and that is a
+# deliberate difference from deploy.sh, which passes no profile at all: that is why
+# admin-portal and fleet-portal on this box were five days older than the backend they
+# talk to. An immutable sha-<7> tag is only worth having if everything wears the same
+# one. Set REPLICA_PROFILES="" to leave the optional services alone.
+REPLICA_PROFILES="${REPLICA_PROFILES-portals}"
+profile_args=()
+for p in $REPLICA_PROFILES; do profile_args+=(--profile "$p"); done
+
 bold() { printf '\n\033[1m▸ %s\033[0m\n' "$1"; }
 ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; }
 note() { printf '  \033[33m!\033[0m %s\n' "$1"; }
@@ -102,7 +111,32 @@ set +a
 
 # -------------------------------------------------------------------------------------
 bold "3/6  pull $REPLICA_REGISTRY/*:$REPLICA_TAG"
-docker compose -f "$COMPOSE" --profile portals pull --quiet \
+
+# GHCR packages are PRIVATE by default even when the repository is public — an anonymous
+# `docker pull` of one answers `unauthorized`, which is what this box did before this step
+# existed. So a credential is required, and the one cd.yml sends is its own GITHUB_TOKEN:
+# it carries `packages: read`, it is scoped to this repository, and it dies with the job.
+# Nothing long-lived is stored on the box.
+#
+# Read from STDIN, not from the command line: an `ssh host "GHCR_TOKEN=... bash ..."` puts
+# the token in the remote sshd's process arguments, where `ps` can see it.
+if [ -z "${GHCR_TOKEN:-}" ] && [ ! -t 0 ]; then
+  read -r GHCR_TOKEN || true
+fi
+
+if [ -n "${GHCR_TOKEN:-}" ]; then
+  printf '%s' "$GHCR_TOKEN" \
+    | docker login "${REPLICA_REGISTRY%%/*}" -u "${GHCR_USER:-x-access-token}" --password-stdin >/dev/null \
+    || die "docker login to ${REPLICA_REGISTRY%%/*} failed"
+  # Logged out on the way out however this script ends, so a token does not outlive the run
+  # in ~/.docker/config.json.
+  trap 'docker logout "${REPLICA_REGISTRY%%/*}" >/dev/null 2>&1 || true' EXIT
+  ok "authenticated to ${REPLICA_REGISTRY%%/*}"
+else
+  note "no GHCR_TOKEN — relying on whatever credentials this box already has"
+fi
+
+docker compose -f "$COMPOSE" "${profile_args[@]}" pull --quiet \
   || die "pull failed — does $REPLICA_TAG exist in $REPLICA_REGISTRY? (replica-images.yml builds it)"
 ok "all seven images present locally at $REPLICA_TAG"
 
@@ -110,7 +144,7 @@ ok "all seven images present locally at $REPLICA_TAG"
 bold "4/6  up"
 # --no-build is the whole point: if a tag is missing we want the pull above to have failed
 # loudly, not a 20-minute build to start silently on the box serving api.mageride.lk.
-docker compose -f "$COMPOSE" --profile portals up -d --no-build --wait --wait-timeout 600 \
+docker compose -f "$COMPOSE" "${profile_args[@]}" up -d --no-build --wait --wait-timeout 600 \
   || {
     printf '\n--- container state ---\n'
     docker compose -f "$COMPOSE" ps

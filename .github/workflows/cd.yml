@@ -203,6 +203,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     continue-on-error: true
+    permissions:
+      contents: read
+      # The box authenticates to GHCR with this job's own token. Without `packages: read` the
+      # pull answers `unauthorized` — GHCR packages are private by default even from a public
+      # repository, which is exactly what the replica hit on the first attempt.
+      packages: read
     steps:
       - name: is the replica wired up?
         id: configured
@@ -243,14 +249,21 @@ jobs:
           echo "::notice::deploying $tag to $REPLICA_HOST"
           remote="REPLICA_TAG='$tag' REPLICA_COMMIT='$SHA'"
           remote="$remote REPLICA_REGISTRY='ghcr.io/$IMAGE_NAMESPACE'"
+          remote="$remote GHCR_USER='$GITHUB_ACTOR'"
           remote="$remote bash /root/mageride/infra/replica/pull-deploy.sh"
-          ssh -i ~/.ssh/replica -o BatchMode=yes -o ConnectTimeout=20 \
-            "$REPLICA_USER@$REPLICA_HOST" "$remote"
+          # The GHCR token goes over STDIN, never in the command string: everything after
+          # `ssh host` lands in the remote sshd's process arguments, where `ps` can read it.
+          # GITHUB_TOKEN carries `packages: read`, is scoped to this repository and expires
+          # with the job, so nothing long-lived is left on the box.
+          printf '%s\n' "$GHCR_TOKEN" | ssh -i ~/.ssh/replica -o BatchMode=yes \
+            -o ConnectTimeout=20 "$REPLICA_USER@$REPLICA_HOST" "$remote"
         env:
           SHA: ${{ needs.gate.outputs.sha }}
           REPLICA_HOST: ${{ secrets.REPLICA_HOST }}
           REPLICA_USER: ${{ vars.REPLICA_USER || 'root' }}
           IMAGE_NAMESPACE: ${{ vars.IMAGE_NAMESPACE || 'ramitha-silva' }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: summary
         if: always() && steps.configured.outputs.configured == 'true'
