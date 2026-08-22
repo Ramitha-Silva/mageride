@@ -60,7 +60,7 @@ struct HomeDestinationView: View {
             )
 
         case .menu:
-            MenuScreen(driverId: graph.sessions.userId, onOpen: navigator.open)
+            MenuScreen(model: graph.makeMenuModel(), onOpen: navigator.open)
 
         default:
             // Unreachable: ``DriverDestinationView`` routes exactly the four cases above here. The arm

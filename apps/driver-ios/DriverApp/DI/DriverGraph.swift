@@ -494,6 +494,13 @@ final class DriverGraph: ObservableObject {
         DriverProfileModel(identity: identity, profiles: profileSettings)
     }
 
+    /// SCR-DI-036's header (Δ MCS-24). The same two dependencies SCR-DI-029's model takes,
+    /// because it shows the same block: the tab drew a generic label, which needed nothing, and
+    /// now draws the driver, which needs both reads.
+    func makeMenuModel() -> MenuModel {
+        MenuModel(identity: identity, profiles: profileSettings)
+    }
+
     /// SCR-DI-030.
     func makeRideHistoryModel() -> RideHistoryModel {
         RideHistoryModel(identity: identity, history: history)

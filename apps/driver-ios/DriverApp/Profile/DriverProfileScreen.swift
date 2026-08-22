@@ -62,6 +62,26 @@ struct DriverProfileScreen: View {
             }
 
             Section {
+                // Δ MCS-24 — the platform id, displaced from the header and kept copyable.
+                if let userId = model.state.profile?.userId {
+                    row(
+                        titleKey: "profile_platform_id",
+                        symbolName: isCopied ? "checkmark" : "doc.on.doc",
+                        tint: MageRideColor.secondary,
+                        value: userId
+                    ) {
+                        UIPasteboard.general.string = userId
+                        isCopied = true
+                        // The tick is the acknowledgement, not a state: a checkmark that never went
+                        // back would say "copied" to a driver returning an hour later.
+                        Task {
+                            try? await Task.sleep(nanoseconds: Self.copiedTick)
+                            isCopied = false
+                        }
+                    }
+                    .textSelection(.enabled)
+                }
+
                 row(titleKey: "profile_vehicle_details", symbolName: "car.fill", tint: MageRideColor.secondary) {
                     onOpenVehicles()
                 }
@@ -121,77 +141,38 @@ struct DriverProfileScreen: View {
 
     /// The wireframe's avatar card — *"K. Fernando · DRV-22011 · ★4.8 overall"*.
     ///
-    /// Two of those three are real and one is not. The name is `UserProfile.firstName`; the id is the
-    /// driver's **platform id**, which is what SCR-DI-023 asks another driver to type. The star average
-    /// has **no read on the app-facing surface at all** — see ``DriverProfileModel`` — so it prints
-    /// ``MageRideSymbols/unknown`` rather than a number nothing computed.
+    /// **Δ MCS-24 — the platform id is gone from here and the live vehicle is in its place.** The id
+    /// is real and this is the screen a driver reads it off before another driver types it into
+    /// SCR-DI-023 — but it does not belong on the line that answers "who am I and what am I
+    /// driving", and the wireframe's own second line is the vehicle and the rating, not an
+    /// identifier. It moves to a row of its own, still copyable, because C091's handoff is explicit
+    /// that a Driver ID which can only be read aloud is a credit transfer nobody completes.
     ///
-    /// The id is copyable because C091's handoff asks for exactly that: a Driver ID that can only be
-    /// read aloud is a credit transfer nobody completes. `.textSelection` as well as the button, so a
-    /// long press works the way it does everywhere else on the platform.
+    /// The layout is ``DriverHeader``, which SCR-DI-036's Menu tab also draws.
     ///
-    /// The photo is the placeholder glyph: `UserProfile.photoUrl` is a URL and nothing in this target
-    /// loads a remote image (``CaptureTile`` deliberately never holds one either).
+    /// The star average has **no read on the app-facing surface at all** — see
+    /// ``DriverHeaderState`` — so the line carries the vehicle alone until one exists.
     private var identityCard: some View {
-        HStack(spacing: MageRideSpacing.sm) {
-            Image(systemName: "person.crop.circle.fill")
-                .font(.system(size: MageRideControl.avatarSmall))
-                .foregroundStyle(MageRideColor.onSurfaceVariant)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(model.state.profile?.firstName ?? "profile_unnamed".localised)
-                    .mageFont(.title)
-                    .foregroundStyle(MageRideColor.onSurface)
-
-                Text(
-                    "profile_id_and_rating".localisedFormat(
-                        model.state.profile?.userId ?? MageRideSymbols.unknown,
-                        MageRideSymbols.starFilled + " " + MageRideSymbols.unknown
-                    )
-                )
-                .mageFont(.label)
-                .foregroundStyle(MageRideColor.onSurfaceVariant)
-                .textSelection(.enabled)
-            }
-
-            Spacer(minLength: MageRideSpacing.xxs)
-
-            if let userId = model.state.profile?.userId {
-                Button {
-                    UIPasteboard.general.string = userId
-                    isCopied = true
-                    // The tick is the acknowledgement, not a state: a checkmark that never went back
-                    // would say "copied" to a driver returning to this screen an hour later.
-                    Task {
-                        try? await Task.sleep(nanoseconds: Self.copiedTick)
-                        isCopied = false
-                    }
-                } label: {
-                    Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
-                        .font(.footnote)
-                        .foregroundStyle(MageRideColor.primary)
-                        .frame(width: MageRideControl.minimumTapTarget, height: MageRideControl.minimumTapTarget)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text(key: "profile_copy_id"))
-            }
-
-            Button { model.open(.name) } label: {
+        DriverHeader(
+            state: DriverHeaderState(
+                name: model.state.profile?.firstName,
+                level: model.state.standing.standing?.level,
+                registration: model.state.registration,
+                // No app-facing read carries a driver's own star average — see ``DriverHeaderState``.
+                rating: nil,
+                hasPhoto: !(model.state.profile?.photoUrl ?? "").isEmpty
+            )
+        ) {
+            Button {
+                model.openSheet(.name)
+            } label: {
                 Image(systemName: "pencil")
-                    .font(.footnote)
                     .foregroundStyle(MageRideColor.primary)
-                    .frame(width: MageRideControl.minimumTapTarget, height: MageRideControl.minimumTapTarget)
-                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(Text(key: "action_edit"))
         }
     }
 
-    // MARK: - A row
-
-    /// The wireframe's `.glist .gr` — a coloured glyph tile, a label, an optional value and a chevron.
     private func row(
         titleKey: String,
         symbolName: String,

@@ -124,6 +124,8 @@
 "error_validation_failed" = "ඔබ ඇතුළත් කළ තොරතුරු පරීක්ෂා කර නැවත උත්සාහ කරන්න.";
 "error_image_too_large" = "එම පින්තූරය විශාල වැඩියි. තව ටිකක් ඈතට වී නැවත ගන්න.";
 "error_malformed_response" = "සේවාදායකයේ පිළිතුර යෙදුමට කියවිය නොහැකි විය. යෙදුම යාවත්කාලීන කරන්න, නැතහොත් නැවත නැවතත් සිදුවේ නම් සහාය අමතන්න.";
+"driver_header_no_vehicle" = "තවම වාහනයක් නැත";
+"profile_platform_id" = "ඔබේ රියදුරු හැඳුනුම";
 
 /*
   MageRide Driver — iOS · C087 driver-ios-vehicle-onboarding. සිංහල.
