@@ -247,10 +247,22 @@ jobs:
           set -euo pipefail
           tag="sha-${SHA::7}"
           echo "::notice::deploying $tag to $REPLICA_HOST"
-          remote="REPLICA_TAG='$tag' REPLICA_COMMIT='$SHA'"
-          remote="$remote REPLICA_REGISTRY='ghcr.io/$IMAGE_NAMESPACE'"
+          # THE CHECKOUT HAPPENS HERE, not inside pull-deploy.sh (Δ MCS-12).
+          #
+          # It was in the script, and the script cannot be what moves the checkout that produces
+          # it: on the very first run the box was still on a commit that predated the file, so the
+          # deploy died as `bash: …/pull-deploy.sh: No such file or directory`, exit 127, before
+          # any of its own logic ran. A bootstrap dependency, and it would come back for any box
+          # rebuilt from an older checkout.
+          #
+          # Doing it in the command string means the script that runs is ALWAYS the one belonging
+          # to the commit being deployed — including the very first time it exists.
+          remote="cd '$REPO' && git fetch --quiet origin"
+          remote="$remote && git checkout --quiet --detach '$SHA'"
+          remote="$remote && test -f infra/replica/pull-deploy.sh"
+          remote="$remote && REPLICA_TAG='$tag' REPLICA_REGISTRY='ghcr.io/$IMAGE_NAMESPACE'"
           remote="$remote GHCR_USER='$GITHUB_ACTOR'"
-          remote="$remote bash /root/mageride/infra/replica/pull-deploy.sh"
+          remote="$remote bash infra/replica/pull-deploy.sh"
           # The GHCR token goes over STDIN, never in the command string: everything after
           # `ssh host` lands in the remote sshd's process arguments, where `ps` can read it.
           # GITHUB_TOKEN carries `packages: read`, is scoped to this repository and expires
@@ -261,6 +273,7 @@ jobs:
           SHA: ${{ needs.gate.outputs.sha }}
           REPLICA_HOST: ${{ secrets.REPLICA_HOST }}
           REPLICA_USER: ${{ vars.REPLICA_USER || 'root' }}
+          REPO: ${{ vars.REPLICA_REPO_ROOT || '/root/mageride' }}
           IMAGE_NAMESPACE: ${{ vars.IMAGE_NAMESPACE || 'ramitha-silva' }}
           GITHUB_ACTOR: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
