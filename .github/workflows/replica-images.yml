@@ -1,0 +1,183 @@
+# =====================================================================================
+# The lightweight replica's composed images (Δ MCS-10).
+#
+# --- Why this workflow exists at all --------------------------------------------------
+# `images.yml` builds the ~24 PER-SERVICE images from `service-catalog.yaml`, which is the
+# DOKS shape (see that file's "Why per-service and not the co-located app-services
+# container"). The single-VPS replica runs a different set: SEVEN COMPOSED images, of which
+# `app-services` alone carries 22 services — ocr-svc among them, which is why it is built
+# from `Dockerfile.appservices` on Debian rather than the Alpine `Dockerfile.service`.
+#
+# The two sets are disjoint. GHCR held no `app-services` image at all, so there was nothing
+# for a deploy job to pull and the replica could only ever be updated by someone running
+# `infra/replica/deploy.sh` on the box. That is how it came to be 96 commits behind while
+# every `deploy(dev): sha-…` commit reported success — the symptom MCS-07 was chasing.
+#
+# --- What it actually builds ----------------------------------------------------------
+# Only TWO, because five of the seven already come out of `images.yml` byte-identically —
+# same Dockerfile, same build args, different job:
+#
+#   migrate        catalog `migrator`     backend/src/MageRide.Migrations/Dockerfile
+#   tcp-adapter    catalog `tcp-adapter`  backend/src/TcpAdapter/Dockerfile
+#   admin-portal   catalog `admin-portal` Dockerfile.portal PORTAL=admin PORT=3001
+#   fleet-portal   catalog `fleet-portal` Dockerfile.portal PORTAL=fleet PORT=3002
+#   fanout         catalog `fanout-svc`   Dockerfile.service SERVICE=Fanout.Api
+#
+# The first four already carry the name the replica compose asks for. `fanout-svc` does not,
+# so it is ALIASED below with `buildx imagetools create` — a manifest copy, no rebuild, no
+# second buildcache. Rebuilding those five under replica names would cost five full .NET
+# builds per merge to produce bytes that already exist.
+#
+# --- Tagging --------------------------------------------------------------------------
+# `sha-<7>`, the same immutable identity `images.yml` uses and the same one the replica's
+# `REPLICA_TAG` names. No `latest`, no moving `replica` tag: a rollback has to be able to
+# name the exact bytes it is going back to.
+# =====================================================================================
+
+name: replica-images
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: The full commit SHA to build. Images are tagged sha-<first 7>.
+        required: true
+        type: string
+      push:
+        description: Push. False builds only, which is what a PR wants.
+        required: false
+        default: true
+        type: boolean
+    outputs:
+      tag:
+        description: The tag the replica will be deployed at.
+        value: ${{ jobs.compose.outputs.tag }}
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit SHA to (re)build
+        required: true
+        type: string
+      push:
+        description: Push (turn off to build only)
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  # Per SHA, like images.yml: two runs building the same commit would push the same tag twice.
+  group: replica-images-${{ inputs.sha }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  # Must equal images.yml's. Same reason recorded there: the built-in GITHUB_TOKEN can write to
+  # exactly one GHCR namespace, the repository owner's.
+  IMAGE_NAMESPACE: ${{ vars.IMAGE_NAMESPACE || 'ramitha-silva' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # ===================================================================================
+  # The two images `images.yml` does not build.
+  # ===================================================================================
+  compose:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    strategy:
+      # Both are built even when one fails: a red run should say which.
+      fail-fast: false
+      matrix:
+        include:
+          # 22 co-located services (spec Container 7). Debian base — ocr-svc's OpenCvSharp
+          # native half is glibc-only and will not load under musl, so this one image cannot
+          # use Dockerfile.service.
+          - image: app-services
+            dockerfile: infra/docker/Dockerfile.appservices
+            build_arg: ""
+          # mqtt-bridge + position-processor + persistence-writer + fleet-health in one
+          # process. Dockerfile.SERVICE, not .worker: all four are Microsoft.NET.Sdk.Web
+          # hosts and need Microsoft.AspNetCore.App, which the worker base does not carry.
+          - image: hot-path
+            dockerfile: infra/docker/Dockerfile.service
+            build_arg: SERVICE=HotPath
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: the tag
+        id: tag
+        run: echo "tag=sha-${SHA::7}" >> "$GITHUB_OUTPUT"
+        env:
+          SHA: ${{ inputs.sha }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: log in to ghcr.io
+        if: inputs.push
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Context is the REPOSITORY ROOT for both templates, as with every other image here:
+      # restore needs global.json and backend/Directory.*.props from above the project dir.
+      - name: build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          build-args: ${{ matrix.build_arg }}
+          push: ${{ inputs.push }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:${{ steps.tag.outputs.tag }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:buildcache
+          cache-to: ${{ inputs.push && format('type=registry,ref={0}/{1}/{2}:buildcache,mode=max', env.REGISTRY, env.IMAGE_NAMESPACE, matrix.image) || '' }}
+          provenance: false
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ inputs.sha }}
+
+  # ===================================================================================
+  # The one name the replica asks for that images.yml publishes under a different one.
+  #
+  # A manifest copy, not a build: `fanout-svc` and the replica's `fanout` are the same
+  # Dockerfile with the same SERVICE=Fanout.Api. Copying is seconds; rebuilding is minutes
+  # and produces the same digest's worth of bytes under a second buildcache.
+  # ===================================================================================
+  alias:
+    name: fanout-svc → fanout
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: inputs.push
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@v3
+
+      - name: log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: copy the manifest
+        run: |
+          set -euo pipefail
+          tag="sha-${SHA::7}"
+          src="${REGISTRY}/${IMAGE_NAMESPACE}/fanout-svc:${tag}"
+          dst="${REGISTRY}/${IMAGE_NAMESPACE}/fanout:${tag}"
+          echo "::notice::aliasing $src → $dst"
+          docker buildx imagetools create --tag "$dst" "$src"
+        env:
+          SHA: ${{ inputs.sha }}
