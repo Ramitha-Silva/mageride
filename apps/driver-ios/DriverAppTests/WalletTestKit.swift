@@ -15,7 +15,9 @@ import MageRideShared
 /// rejected request never joins the history. A counter cannot say any of that.
 
 /// A second driver, so a self-transfer and a transfer to somebody else are different tests.
-let testHolderId = "01JHOLDER00000000000000001"
+// Crockford base32 has no `O` and no `L` — it spells them `0` and `1` — so "HOLDER" is `H01DER`
+// here. The old spelling failed `PlatformId.isValid`, which is the rule this id exists to satisfy.
+let testHolderId = "01JH01DER00000000000000001"
 
 let testTransferId = "01JTRANSFER0000000000000A"
 

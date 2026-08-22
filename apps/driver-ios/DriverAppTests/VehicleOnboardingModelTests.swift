@@ -310,10 +310,11 @@ final class VehicleOnboardingModelTests: XCTestCase {
     /// **D-37.** `409 registration-exists` is an inline error on the one field that has to change,
     /// not a screen-level message beside a form the driver cannot fix.
     func testATakenRegistrationIsAnInlineErrorRatherThanScreenCopy() async {
-        vehicles.nextFailure = apiFailure(code: "registration-exists")
-
         let model = makeModel()
         await model.load()
+        // Armed after the load: `throwIfProgrammed` is single-shot and `load()` reads first, so a
+        // failure set before it is spent on the read rather than on the `onContinue()` under test.
+        vehicles.nextFailure = apiFailure(code: "registration-exists")
         model.onRegistrationChanged("ABC-1234")
         model.onVehicleTypeChanged(RideVehicleType.sedan)
         await model.onContinue()
@@ -327,10 +328,9 @@ final class VehicleOnboardingModelTests: XCTestCase {
 
     /// Anything else is screen-level copy, resolved from the code (D-26).
     func testAnyOtherFailureIsResolvedCopy() async {
-        vehicles.nextFailure = apiFailure(code: "mode-not-allowed", status: 403)
-
         let model = makeModel()
         await model.load()
+        vehicles.nextFailure = apiFailure(code: "mode-not-allowed", status: 403)
         model.onRegistrationChanged("ABC-1234")
         model.onVehicleTypeChanged(RideVehicleType.sedan)
         await model.onContinue()

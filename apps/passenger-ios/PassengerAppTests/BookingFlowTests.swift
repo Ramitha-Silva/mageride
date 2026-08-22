@@ -223,7 +223,9 @@ final class ProxyRiderModelTests: XCTestCase {
 
     @MainActor
     private func started() -> ProxyRiderModel {
-        let model = ProxyRiderModel(draft: draft, bookings: bookings, live: live)
+        // The shipped fallback poll is ten seconds and `eventually` waits two, so a resolution that
+        // arrives by poll rather than by socket could never land inside the test.
+        let model = ProxyRiderModel(draft: draft, bookings: bookings, live: live, pollSeconds: 0.01)
         model.start()
         return model
     }

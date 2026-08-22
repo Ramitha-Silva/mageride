@@ -91,6 +91,15 @@ final class VoipCallModel: ObservableObject {
     /// The `comms.call_log` row this screen opened, for the outcome report.
     private var callId: String?
 
+    /// Whether ``start()`` has already run. Separate from ``callId``, which is only assigned once
+    /// `POST /v1/calls/start` answers: two synchronous `start()` calls both pass a `callId == nil`
+    /// guard and both place a call, and SCR-PI-015a's rule is one tap, one `comms.call_log` row.
+    private var didStart = false
+
+    /// Whether the system was ever told a call was coming up. `end` is only honest after
+    /// `startedConnecting`, and a build with no media client never gets that far.
+    private var systemToldOfCall = false
+
     private var timer: Task<Void, Never>?
 
     init(
@@ -121,7 +130,8 @@ final class VoipCallModel: ObservableObject {
     /// Called from the screen's `.task` and guarded, because SwiftUI may run `.task` again after a
     /// scene change and a second run would write a second `comms.call_log` row for one tap.
     func start() {
-        guard callId == nil, state.stage == .connecting, state.failure == nil else { return }
+        guard !didStart, state.stage == .connecting, state.failure == nil else { return }
+        didStart = true
 
         session.onSystemEnd = { [weak self] in self?.hangUp() }
         session.onSystemMute = { [weak self] muted in self?.applySystemMute(muted) }
@@ -184,7 +194,7 @@ final class VoipCallModel: ObservableObject {
         engine.leave()
         timer?.cancel()
         timer = nil
-        session.end(reason: .localEnded)
+        if systemToldOfCall { session.end(reason: .localEnded) }
 
         if stage != .failed {
             report(stage == .connected ? CallOutcome.completed : CallOutcome.cancelled)
@@ -237,6 +247,7 @@ final class VoipCallModel: ObservableObject {
             // build with no media client reports nothing at all rather than flashing a call into
             // the status bar and out again.
             session.startedConnecting(handle: state.calleeName ?? "call_driver".localised)
+            systemToldOfCall = true
 
         case .connected:
             onConnected()
@@ -275,8 +286,10 @@ final class VoipCallModel: ObservableObject {
         state.stage = .failed
         state.failure = reason
         // Before the fallback is offered, so a `tel:` dial the passenger takes is not placed over a
-        // call the system still believes is up — see ``dialDirectly()``.
-        session.end(reason: .failed)
+        // call the system still believes is up — see ``dialDirectly()``. Only if the system was told
+        // of one at all: a build with no media client fails before `.connecting`, and ending a call
+        // CallKit never heard of is the status-bar flash `onLink` says must not happen.
+        if systemToldOfCall { session.end(reason: .failed) }
         report(CallOutcome.voipFailed)
     }
 

@@ -16,7 +16,9 @@ import MageRideShared
 /// any of that.
 
 /// A second driver's passenger, so a grant and a request are about different people.
-let testPassengerId = "01JPASSENGER000000000001"
+// 26 characters, which is `_shared.yaml`'s `Ulid` minimum; the old one was 24 and `SharingModel`
+// validates it.
+let testPassengerId = "01JPASSENGER00000000000001"
 
 let testRequestId = "01JREQUEST00000000000001"
 
@@ -330,6 +332,7 @@ final class FakeRideHistoryRepository: RideHistoryRepository {
     var nextRideFailure: Error?
     var nextRatingFailure: Error?
 
+    private let recordLock = NSLock()
     private(set) var detailReads: [String] = []
     private(set) var rideReads: [String] = []
     private(set) var ratings: [(subjectId: String, passengerId: String, stars: Int, comment: String?)] = []
@@ -340,7 +343,12 @@ final class FakeRideHistoryRepository: RideHistoryRepository {
     }
 
     func detail(driverId: String, tripId: String) async throws -> TripDetail {
+        // Locked: ``RideHistoryModel/refresh()`` reads the details in a `withTaskGroup`, so this
+        // runs on several tasks at once and a bare `append` loses one of them — the test asserting
+        // that EVERY row was read then fails on whichever it lost, differently per build.
+        recordLock.lock()
         detailReads.append(tripId)
+        recordLock.unlock()
         try throwIf(&nextDetailFailure)
         guard let detail = details[tripId] else { throw CancellationError() }
         return detail

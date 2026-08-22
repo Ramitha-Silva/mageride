@@ -130,6 +130,13 @@ enum MoneyFormat {
         formatter.numberStyle = .decimal
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.maximumFractionDigits = 0
+        // Spelled out rather than left to the locale: `en_US_POSIX` is the invariant locale and
+        // groups nothing at all, so `.decimal` alone printed `Rs 1240`. Naming the separator here
+        // keeps the fixed comma this type exists to guarantee — a driver in a comma-decimal locale
+        // must not read `Rs 1,240` as one rupee and a bit.
+        formatter.usesGroupingSeparator = true
+        formatter.groupingSeparator = ","
+        formatter.groupingSize = 3
         return formatter
     }()
 }

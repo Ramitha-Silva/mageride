@@ -35,7 +35,10 @@ final class SearchLocationModelTests: XCTestCase {
         let model = await loadedModel()
 
         model.onQueryChanged("138")
-        await eventually("the lookup landed") { await MainActor.run { model.state.predictions.count } == 2 }
+        // Waits for the GEOCODER, not for a count. `loadedModel()` has already put two saved places
+        // in `predictions`, so `count == 2` was true before the debounce had even elapsed and every
+        // assertion below read the defaults instead of the search.
+        await eventually("the lookup landed") { await MainActor.run { self.places.searches.last?.text } == "138" }
 
         XCTAssertEqual(places.searches.last?.text, "138", "the digits went to the geocoder")
         XCTAssertEqual(

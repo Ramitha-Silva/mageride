@@ -75,10 +75,22 @@ final class ProxyRiderModel: ObservableObject {
     private var subscriptions: Set<AnyCancellable> = []
     private var work: [Task<Void, Never>] = []
 
-    init(draft: BookingDraft, bookings: BookingRepository, live: PassengerLiveMap) {
+    private let pollSeconds: TimeInterval
+
+    /// - Parameter pollSeconds: How often the request is re-read while it is still `Pending`.
+    ///   Injected for the same reason ``TopUpModel``'s and ``JobBoardModel``'s budgets are: the
+    ///   shipped value is ten seconds, and a test asserting what a Declined does to the screen would
+    ///   otherwise have to wait ten real ones per case.
+    init(
+        draft: BookingDraft,
+        bookings: BookingRepository,
+        live: PassengerLiveMap,
+        pollSeconds: TimeInterval = ProxyRiderModel.defaultPollSeconds
+    ) {
         self.draft = draft
         self.bookings = bookings
         self.live = live
+        self.pollSeconds = pollSeconds
         state.riderName = draft.state.riderName
         state.riderPhone = draft.state.riderPhone
     }
@@ -227,7 +239,7 @@ final class ProxyRiderModel: ObservableObject {
     /// exists for reconnect and support diagnosis"*).
     private func awaitResolution(_ requestId: String) async {
         while state.requestState == LocationRequestState.pending, !Task.isCancelled {
-            try? await Task.sleep(nanoseconds: Self.pollIntervalNanoseconds)
+            try? await Task.sleep(nanoseconds: UInt64(pollSeconds * Double(NSEC_PER_SEC)))
             guard !Task.isCancelled else { return }
             await pollOnce(requestId)
         }
@@ -262,5 +274,7 @@ final class ProxyRiderModel: ObservableObject {
     ///
     /// Ten seconds over a five-minute window is thirty reads at worst, and only for a booker whose
     /// socket is not delivering. Faster would be polling a channel that already works.
-    private static let pollIntervalNanoseconds: UInt64 = 10_000_000_000
+    /// The shipped interval. The socket is the fast path; this is the fallback that covers a
+    /// dropped connection, so it is deliberately slow.
+    static let defaultPollSeconds: TimeInterval = 10
 }

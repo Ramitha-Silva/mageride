@@ -47,7 +47,7 @@ final class WalletInputTests: XCTestCase {
 
     /// A ULID is upper-case and a UUID lower-case, so case-folding either would break the other.
     func testCaseIsNeverFolded() {
-        let mixed = "01jHoLdEr00000000000000001"
+        let mixed = "01jH01dEr00000000000000001"
         XCTAssertEqual(WalletInput.driverId(mixed), mixed)
     }
 

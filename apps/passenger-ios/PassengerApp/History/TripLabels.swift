@@ -150,7 +150,12 @@ enum TripLabels {
         let formatter = DateFormatter()
         formatter.locale = PassengerLocale.locale
         formatter.timeZone = zone
-        formatter.setLocalizedDateFormatFromTemplate("d MMM")
+        // `dateFormat`, not `setLocalizedDateFormatFromTemplate`. That call reorders the template
+        // per locale, and `PassengerLocale.locale` is built from a bare language code — `en` with no
+        // region, which ICU resolves US-first and renders `Jul 6`. Every example in this file says
+        // `17 Jun`, and D-38's business date is a Sri Lankan calendar date, so the ORDER is fixed
+        // here and only the month NAME is left to the locale.
+        formatter.dateFormat = "d MMM"
         return formatter
     }()
 }

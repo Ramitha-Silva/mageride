@@ -142,7 +142,12 @@ final class NavigationShellTests: XCTestCase {
 
     /// Every menu row goes somewhere the route table declares.
     func testEveryMenuRowResolvesToARegisteredDestination() {
+        // `staticRoutes` omits the parameterised cases deliberately — its own doc comment says so —
+        // and `privateTransport` is entered as the bare `modeBRequest(vehicleId: nil)`, whose path
+        // carries no parameter. Added here rather than to `staticRoutes`, which is the placeholder
+        // registry's key set and stays one row per drawable screen.
         let known = Set(PassengerRoute.staticRoutes.map(\.path))
+            .union([PassengerRoute.modeBRequest(vehicleId: nil).path])
         for row in PassengerMenuDestination.allCases {
             XCTAssertTrue(known.contains(row.route.path), "\(row) points at an unregistered path")
         }

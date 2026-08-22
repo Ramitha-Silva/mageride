@@ -278,10 +278,15 @@ final class ThemeTokenTests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        guard let colour = UIColor(named: name, in: bundle, compatibleWith: UITraitCollection(userInterfaceStyle: style)) else {
+        guard let dynamic = UIColor(named: name, in: bundle, compatibleWith: nil) else {
             XCTFail("no colour set named '\(name)' in the asset catalogue", file: file, line: line)
             return
         }
+        // `resolvedColor(with:)` rather than `compatibleWith:`. An asset-catalogue colour is a
+        // DYNAMIC colour: `compatibleWith:` hands back that dynamic value unresolved, which then
+        // reads against the process's own appearance — so both arms of every row were measuring the
+        // light hex and every light/dark pair silently agreed. This is the call that resolves it.
+        let colour = dynamic.resolvedColor(with: UITraitCollection(userInterfaceStyle: style))
 
         var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
         XCTAssertTrue(colour.getRed(&red, green: &green, blue: &blue, alpha: &alpha), file: file, line: line)

@@ -204,9 +204,10 @@ final class DriverProfileModelTests: XCTestCase {
     /// A language change that failed at the gateway must not silently redirect the app: the two halves
     /// answer different questions and the local one is second for a reason.
     func testALanguageSaveThatFailedDoesNotRedirectTheApp() async {
-        profiles.nextFailure = apiFailure(code: "validation-failed")
         let model = makeModel()
         await model.refresh()
+        // After the refresh: `profile()` is the first thing it reads and would spend the failure.
+        profiles.nextFailure = apiFailure(code: "validation-failed")
 
         await model.choose(language: Language.ta)
 

@@ -78,10 +78,12 @@ final class DirectionalModelTests: XCTestCase {
     /// **`403 not-online` is the server's answer to a control this screen cannot gate** — there is no
     /// presence read on `dispatch.yaml`, so the driver taps and reads copy.
     func testBeingOfflineBecomesCopyRatherThanADisabledButton() async {
-        standby.nextFailure = apiFailure(code: "not-online", status: 403)
         let model = makeModel()
         await model.refresh()
         model.choose(nugegoda)
+        // Armed after the refresh: `throwIfProgrammed` is single-shot and `refresh()` reads
+        // `directional()`, so a failure set before it is spent on the read rather than on the write.
+        standby.nextFailure = apiFailure(code: "not-online", status: 403)
         XCTAssertTrue(model.state.canSet, "the client cannot know presence, so it does not guess")
 
         await model.setDirection()
@@ -91,10 +93,10 @@ final class DirectionalModelTests: XCTestCase {
     }
 
     func testTheDailyLimitBecomesItsOwnCopy() async {
-        standby.nextFailure = apiFailure(code: "directional-limit-reached", status: 409)
         let model = makeModel()
         await model.refresh()
         model.choose(nugegoda)
+        standby.nextFailure = apiFailure(code: "directional-limit-reached", status: 409)
 
         await model.setDirection()
 
