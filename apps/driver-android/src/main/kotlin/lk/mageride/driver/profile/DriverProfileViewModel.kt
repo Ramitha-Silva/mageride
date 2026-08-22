@@ -48,6 +48,11 @@ internal enum class ProfileSheet {
  */
 internal data class DriverProfileState(
     val profile: UserProfile? = null,
+    /**
+     * The plate of the vehicle this handset is live for (Δ MCS-24), or `null` when nothing is
+     * eligible — a driver who has not onboarded one, or whose only vehicle is suspended.
+     */
+    val registration: String? = null,
     val contact: EmergencyContact? = null,
     val standing: JobStanding = JobStanding(),
     val sheet: ProfileSheet? = null,
@@ -123,6 +128,12 @@ internal class DriverProfileViewModel(private val identity: DriverIdentity, priv
             // lambda when it loses, which would re-fire this read.
             val standing = driverId?.let { id -> profiles.standing(id) }
 
+            // Δ MCS-24 — SCR-DA-029's header now names the live vehicle. Read here rather than in
+            // the composable because `liveVehicle()` also WRITES the choice back (D-03: it settles
+            // which of several eligible vehicles is the publisher), and a suspending write driven
+            // by recomposition would run again on every frame this screen redraws.
+            val live = runCatching { identity.liveVehicle().live }.getOrNull()
+
             mutableState.update {
                 it.copy(
                     loading = false,
@@ -132,6 +143,7 @@ internal class DriverProfileViewModel(private val identity: DriverIdentity, priv
                     // an account that has contacts but no primary flag set.
                     contact = contacts.firstOrNull(EmergencyContact::isPrimary) ?: contacts.firstOrNull(),
                     standing = standing ?: it.standing,
+                    registration = live?.registrationNumber ?: it.registration,
                 )
             }
         }

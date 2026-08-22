@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.EmergencyShare
@@ -37,14 +38,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lk.mageride.driver.R
 import lk.mageride.driver.onboarding.endonym
 import lk.mageride.driver.onboarding.findActivity
 import lk.mageride.driver.ui.Symbols
 import lk.mageride.driver.ui.component.DashboardBanner
+import lk.mageride.driver.ui.component.DriverHeader
+import lk.mageride.driver.ui.component.DriverHeaderState
 import lk.mageride.driver.ui.component.SectionLabel
 import lk.mageride.driver.ui.theme.ControlTokens
 import lk.mageride.driver.ui.theme.MageRideTheme
@@ -120,6 +125,22 @@ internal fun DriverProfileScreen(
             ) {
                 IdentityCard(state = state, onEdit = { viewModel.openSheet(ProfileSheet.Name) })
 
+                // Δ MCS-24 — the platform id, displaced from the header and kept.
+                //
+                // SCR-DA-023 asks another driver to type this to send credit, so it has to be
+                // readable AND copyable — an id read aloud is a transfer nobody completes. The tap
+                // copies rather than navigating, which is why it carries no chevron.
+                state.profile?.userId?.let { userId ->
+                    val clipboard = LocalClipboardManager.current
+
+                    ProfileRow(
+                        icon = Icons.Outlined.ContentCopy,
+                        label = stringResource(R.string.profile_platform_id),
+                        supporting = userId,
+                        onClick = { clipboard.setText(AnnotatedString(userId)) },
+                    )
+                }
+
                 ProfileRow(
                     icon = Icons.Outlined.DirectionsCar,
                     label = stringResource(R.string.profile_vehicle_details),
@@ -175,57 +196,34 @@ internal fun DriverProfileScreen(
 /**
  * The wireframe's avatar card — *"K. Fernando · DRV-22011 · ★4.8 overall"*.
  *
- * Two of those three are real and one is not. The name is `UserProfile.firstName`; the id is the
- * driver's **platform id**, which is what SCR-DA-023 asks another driver to type and what
- * `PlatformId` explains is not a `DRV-` code. The star average has **no read on the app-facing
- * surface at all** — see [DriverProfileViewModel]'s KDoc — so it prints [Symbols.UNKNOWN] rather
- * than a number nothing computed.
+ * **Δ MCS-24 — the platform id is gone from here and the live vehicle is in its place.** The id is
+ * real and this is the screen a driver reads it off before another driver types it into SCR-DA-023
+ * — but it does not belong on the line that answers "who am I and what am I driving", and the
+ * wireframe's own second line is the vehicle and the rating, not an identifier.
  *
- * The photo is drawn as the placeholder glyph: `UserProfile.photoUrl` is a URL and this module has
- * no image loader (`CaptureTile` deliberately never holds a bitmap either), so there is nothing
- * here that could fetch one.
+ * The id is NOT dropped. C073's handoff names this screen as the one a driver reads their own
+ * platform id off before another driver types it into SCR-DA-023, so deleting it would break a
+ * credit transfer; it moves to a row of its own, with a copy action, which is what the iOS mirror
+ * already does for the same reason.
+ *
+ * The layout is [DriverHeader], which SCR-DA-036's menu header also draws. Before this they were
+ * two independent pieces of layout for one block, and they had already drifted in opposite
+ * directions — the menu showing the app's name, this one showing an id.
  */
 @Composable
 private fun IdentityCard(state: DriverProfileState, onEdit: () -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = MageRideTheme.spacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.xs),
-    ) {
-        Surface(
-            modifier = Modifier.size(ControlTokens.AvatarSmall),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primaryContainer,
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Outlined.Person,
-                    contentDescription = null,
-                    modifier = Modifier.size(ControlTokens.RowIcon),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = state.profile?.firstName ?: stringResource(R.string.profile_unnamed),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = stringResource(
-                    R.string.profile_id_and_rating,
-                    state.profile?.userId.orEmpty(),
-                    "${Symbols.STAR_FILLED} ${Symbols.UNKNOWN}",
-                ),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        IconButton(onClick = onEdit) { EditGlyph() }
-    }
+    DriverHeader(
+        state = DriverHeaderState(
+            name = state.profile?.firstName,
+            level = state.standing.standing?.level,
+            registration = state.registration,
+            // No app-facing read carries a driver's own star average — see DriverHeaderState.
+            rating = null,
+            hasPhoto = !state.profile?.photoUrl.isNullOrBlank(),
+        ),
+        modifier = modifier.padding(vertical = MageRideTheme.spacing.xs),
+        trailing = { IconButton(onClick = onEdit) { EditGlyph() } },
+    )
 }
 
 /** The wireframe's `listrow` — an icon, a label, an optional second line and a chevron. */

@@ -654,6 +654,12 @@
     <!-- SCR-DA-029 . driver profile (US-18.3, AL-13, US-10.7). -->
     <string name="profile_title">Profile</string>
     <string name="profile_unnamed">Your name</string>
+    <!-- Δ MCS-24 — SCR-DA-029 and SCR-DA-036 both show the live vehicle. A driver with none is
+         on their way to SCR-DA-026a, so the line says so rather than sitting blank. -->
+    <string name="driver_header_no_vehicle">No vehicle yet</string>
+    <!-- Δ MCS-24 — displaced from the header. SCR-DA-023 asks another driver to type this to
+         send credit, so it stays readable and copyable rather than being dropped. -->
+    <string name="profile_platform_id">Your driver ID</string>
     <string name="profile_id_and_rating">%1$s . %2$s overall</string>
     <string name="profile_vehicle_details">Vehicle details</string>
     <string name="profile_trip_ratings">Per-trip ratings</string>
