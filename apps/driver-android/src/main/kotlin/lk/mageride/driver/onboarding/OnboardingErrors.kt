@@ -26,6 +26,18 @@ internal object OnboardingErrors {
         // advice for a photograph that will be the same size next time (Δ MCS-01).
         is MageRideError.PayloadTooLarge -> R.string.error_image_too_large
 
+        // Δ MCS-11 — the same argument as the line above, and it cost a day to work out without
+        // it. `Serialization` carries no `code`, so it fell through `forCode` to `byType`'s `else`
+        // and reached the driver as "Something went wrong. Please try again." after a **200**:
+        // registry-svc had answered `allowedVehicleTypes: ["B","G1"]` — the licence classes, in a
+        // field the contract declares as a `VehicleType` enum — and the strict decode failed the
+        // whole body. Retrying re-sends the same images and fails identically for ever.
+        //
+        // The enum stays strict on purpose. Coercing an unknown vehicle type to a default would
+        // have hidden this and told the platform a driver may drive something their licence never
+        // said, which is worse than a visible failure.
+        is MageRideError.Serialization -> R.string.error_malformed_response
+
         is MageRideError.Network, is MageRideError.Timeout, is MageRideError.CircuitOpen ->
             R.string.error_offline
 

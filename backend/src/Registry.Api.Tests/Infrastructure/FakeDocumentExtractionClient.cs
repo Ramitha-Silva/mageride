@@ -56,6 +56,28 @@ internal sealed class FakeDocumentExtractionClient : IDocumentExtractionClient
             ])
             : CleanRead(request);
 
+    /// <summary>
+    /// Reads the licence back the way the real model does: the CLASSES printed on the card
+    /// (Δ MCS-11).
+    /// </summary>
+    /// <remarks>
+    /// <see cref="CleanRead"/> answers <c>"three_wheeler,sedan"</c> — AL-09 vehicle types, which is
+    /// what registry-svc wants but NOT what a driving licence says or what
+    /// <c>GeminiPrompts</c> asks for ("the licence classes … exactly as printed"). That double kept
+    /// this suite green through the entire defect: the moment extraction started working for real
+    /// (MCS-07) the platform began answering <c>allowedVehicleTypes: ["B","G1"]</c> in a field the
+    /// contract declares as a <c>VehicleType</c> enum, and every strict client failed the response.
+    /// </remarks>
+    public void ReadsLicenceClasses(string classes = "B,G1") =>
+        Responder = request => request is { Kind: DocumentKinds.DrivingLicense, Side: DocumentSides.Back }
+            ? new DocumentExtraction(true,
+            [
+                // Confident, and unusable. Same distinction as MisreadPlateAs above: the vocabulary
+                // is the verdict, not the confidence.
+                new ExtractedField(DocumentFieldKeys.AllowedVehicleTypes, classes, Confident),
+            ])
+            : CleanRead(request);
+
     /// <summary>Reads <paramref name="kind"/> correctly but without confidence (BR-25.2's "doubtful").</summary>
     public void ReadDoubtfully(string kind) =>
         Responder = request => request.Kind != kind

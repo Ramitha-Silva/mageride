@@ -257,4 +257,60 @@ public sealed class DriverProfileSetupTests(PostgresFixture postgres)
         Assert.NotEqual(
             first.GetProperty("photoUrl").GetString(), second.GetProperty("photoUrl").GetString());
     }
+
+    /// <summary>
+    /// Δ MCS-11 — a licence class is not a vehicle type, and this route must not answer one as the
+    /// other.
+    /// </summary>
+    /// <remarks>
+    /// `registry.yaml` types `allowedVehicleTypes` as `VehicleType[]` on BOTH the request and the
+    /// 200. <c>RequireAllowedVehicleTypes</c> has always enforced that on a driver-typed value; the
+    /// EXTRACTED value went to the column through <c>SplitTypes</c> with no check at all. So once
+    /// ocr-svc actually started reading licences (MCS-07), Profile Setup answered 200 with
+    /// <c>["B","G1"]</c> in an enum-typed field and every strict client rejected the whole body —
+    /// which reached the driver as "Something went wrong. Please try again." on SCR-DA-003a.
+    /// </remarks>
+    [Fact]
+    public async Task Extracted_licence_classes_never_reach_the_vehicle_type_field()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+
+        harness.Ocr.ReadsLicenceClasses("B,G1");
+
+        var driverId = await harness.CreateDriverAsync();
+        var body = await harness.CompleteProfileSetupAsync(driverId, harness.Tokens.Driver(driverId));
+
+        // The contract's field carries only AL-09 types. "B" and "G1" are neither, so it is empty
+        // rather than wrong — this is the assertion the driver app's decode makes for real.
+        Assert.Empty(body.GetProperty("allowedVehicleTypes").EnumerateArray());
+
+        // The classes are NOT lost. The raw reading stays on the extract card and in the officer
+        // queue, which is where the evidence belongs and where a future mapping would come from.
+        var extracted = body.GetProperty("fields").EnumerateArray()
+            .Single(field => field.GetProperty("key").GetString() == "allowed_vehicle_types");
+
+        Assert.Equal("B,G1", extracted.GetProperty("value").GetString());
+
+        // And it is PENDING however sure ocr-svc was: a confident reading of a vocabulary this
+        // platform cannot act on is an officer's decision, exactly like a confident `reg_no_match`
+        // of the wrong plate.
+        Assert.Equal("pending", extracted.GetProperty("verifyStatus").GetString());
+        Assert.Equal("PENDING", body.GetProperty("status").GetString());
+    }
+
+    /// <summary>A licence whose classes DO happen to be canonical still passes them through.</summary>
+    [Fact]
+    public async Task Canonical_extracted_types_are_still_promoted_to_the_profile()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+
+        var driverId = await harness.CreateDriverAsync();
+        var body = await harness.CompleteProfileSetupAsync(driverId, harness.Tokens.Driver(driverId));
+
+        Assert.Equal(
+            new[] { "three_wheeler", "sedan" },
+            body.GetProperty("allowedVehicleTypes").EnumerateArray().Select(item => item.GetString()));
+    }
 }
