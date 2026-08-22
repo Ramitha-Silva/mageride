@@ -52,10 +52,36 @@ internal static class GeminiPrompts
         + "see. If a requested field is absent, illegible, cropped or obscured, return it with a "
         + "null value.\n";
 
+    /// <summary>
+    /// What the model is asked to say the document IS, before it reads anything off it (Δ MCS-21).
+    /// </summary>
+    /// <remarks>
+    /// The kind reaches this service as the CALLER's assertion, and it used to be stated to the
+    /// model as fact — so the model was never in a position to disagree with it. Asking for the
+    /// identification and putting it FIRST in the answer is deliberate: a model that has already
+    /// written out an insurance expiry is answering "what is this?" against its own last sentence.
+    ///
+    /// <c>unclear</c> is offered explicitly and described generously, because the safety of the
+    /// whole feature rests on the model being willing to say it rather than picking the nearest
+    /// label. Nothing is ever done on the strength of <c>unclear</c>.
+    /// </remarks>
+    private const string Classification =
+        "\n"
+        + "document_type is what the image ACTUALLY shows, chosen from exactly these:\n"
+        + "  driving_licence  a driving licence card, either side\n"
+        + "  insurance        a motor insurance certificate or cover note\n"
+        + "  revenue_licence  a vehicle revenue licence (road-tax disc or certificate)\n"
+        + "  vehicle_photo    a photograph of a vehicle itself, or of its number plate\n"
+        + "  other            a document, but none of the above\n"
+        + "  unclear          too blurred, dark, cropped or partial to identify with confidence\n"
+        + "Answer what you SEE, not what you are told below. If you are not sure, answer unclear — "
+        + "that is a normal answer and it is preferred to a guess.\n";
+
     private const string Body =
         "\n"
         + "Return ONLY JSON of the form "
-        + "{\"fields\":[{\"key\":\"...\",\"value\":\"...\"|null,\"confidence\":0.0-1.0}]}.\n"
+        + "{\"document_type\":\"...\","
+        + "\"fields\":[{\"key\":\"...\",\"value\":\"...\"|null,\"confidence\":0.0-1.0}]}.\n"
         + "Include exactly one entry for every key listed below and no others.\n"
         + "\n"
         + "confidence is how clearly THAT FIELD'S OWN CHARACTERS are legible in the image:\n"
@@ -78,8 +104,12 @@ internal static class GeminiPrompts
     {
         var keys = DocumentFieldKeys.AcceptedFor(kind, side);
 
-        return Opening + (redacted ? RedactedNotice : UnredactedNotice) + Body
-            + "\n" + Describe(kind, side) + "\n\nKeys to return:\n"
+        return Opening + (redacted ? RedactedNotice : UnredactedNotice) + Body + Classification
+            // Δ MCS-21 — "expects this to be", not "this is". The sentence that follows is the
+            // caller's claim, and the model has just been asked to judge it; asserting it as fact
+            // is what made `document_type` an unanswerable question.
+            + "\nThe caller expects the following. Say what you actually see, not this:\n"
+            + Describe(kind, side) + "\n\nKeys to return:\n"
             + string.Join("\n", keys.Select(key => $"  {key} — {Explain(key)}"));
     }
 
@@ -90,9 +120,13 @@ internal static class GeminiPrompts
         // whichever one nothing reads back.
         (DocumentKinds.DrivingLicense, DocumentSides.Back) =>
             "This is the REVERSE of a Sri Lankan driving licence. It carries the table of licence "
-            + $"classes ({string.Join(", ", FieldValues.LicenceClasses)}) the holder is entitled to drive.",
+            + $"classes ({string.Join(", ", FieldValues.LicenceClasses)}) the holder is entitled to drive. "
+            + "The table has one row per class: column 9 is the class, column 10 its date of issue "
+            + "and column 11 its date of expiry (Δ MCS-20).",
         (DocumentKinds.DrivingLicense, _) =>
-            "This is the FRONT of a Sri Lankan driving licence.",
+            "This is the FRONT of a Sri Lankan driving licence. The date printed as 4a is the date "
+            + "of ISSUE. The date of expiry is NOT on this side — it is column 11 of the class "
+            + "table on the reverse, and is not asked for here (Δ MCS-20).",
         (DocumentKinds.Insurance, _) =>
             "This is a Sri Lankan motor insurance certificate or cover note.",
         (DocumentKinds.RevenueLicense, _) =>
@@ -108,7 +142,21 @@ internal static class GeminiPrompts
     private static string Explain(string key) => key switch
     {
         DocumentFieldKeys.LicenceNo => "the licence number printed on the card",
-        DocumentFieldKeys.LicenceExpiry => "the date of expiry of the licence",
+        // Δ MCS-20 — WHICH date, and which of the table rows. "the date of expiry of the licence"
+        // gave the model no anchor at all on a card that prints several dates, and it confidently
+        // returned `4a` — the date of ISSUE — which then became registry.documents.expires_at and
+        // the input to the E-03 suspension sweep.
+        //
+        // EARLIEST across the classes, and that is a decision rather than a reading: each class row
+        // carries its own expiry, so a licence is only wholly valid until the FIRST of them lapses.
+        // Taking the latest would keep the platform trusting a licence whose class B had already
+        // expired because its class G1 had not.
+        DocumentFieldKeys.LicenceExpiry =>
+            "the date of expiry, from COLUMN 11 of the class table on the reverse. Each row of that "
+            + "table is one licence class with its own date of issue (column 10) and date of expiry "
+            + "(column 11). If the rows carry different expiry dates, return the EARLIEST of them. "
+            + "Do NOT return the date printed as 4a on the front of the card — that is the date of "
+            + "ISSUE, not the expiry",
         // Deliberately not "expect null": that read as an instruction rather than as a warning, and
         // it is only ever true on the redacted path, which the notice above already states (MCS-07).
         DocumentFieldKeys.NicNo => "the holder's national identity card number",

@@ -305,6 +305,16 @@ private fun CropOverlay(
     modifier: Modifier = Modifier,
 ) {
     val current by rememberUpdatedState(quad)
+
+    // Δ MCS-22 — the CALLBACK gets the same protection the quad already had, and the asymmetry
+    // between the two was a trap rather than a bug. `pointerInput(Unit)` below never restarts, so
+    // the block captures whatever `onCornerDragged` instance existed when the node was created and
+    // holds it for the node's life. It is harmless today only by accident: every instance is bound
+    // to the same view model, because `koinViewModel()` returns one per destination. Hoist this
+    // callback, or move the view model up a level, and the handles freeze for real — which is
+    // indistinguishable from the defect this file was just fixed for.
+    val onDrag by rememberUpdatedState(onCornerDragged)
+
     var active by remember { mutableStateOf<CropCorner?>(null) }
 
     Canvas(
@@ -318,7 +328,7 @@ private fun CropOverlay(
                     onDrag = { change, _ ->
                         change.consume()
                         active?.let { corner ->
-                            onCornerDragged(
+                            onDrag(
                                 corner,
                                 QuadPoint(change.position.x / size.width, change.position.y / size.height),
                             )
@@ -392,18 +402,40 @@ private fun hintFor(state: DocumentScannerState): Int = when {
     else -> R.string.capture_hint_shoot
 }
 
-/** The corner nearest [touch], or `null` when the touch landed on none of them. */
-private fun nearestCorner(quad: CropQuad, touch: Offset, frame: IntSize): CropCorner? {
-    val reach = frame.width * HANDLE_REACH
-    return CropCorner.entries
-        .map { corner ->
+/**
+ * The corner nearest [touch]. Never `null` (Δ MCS-22).
+ *
+ * **This function is why the handles were dead on the licence BACK and alive on the front.**
+ *
+ * It used to filter to corners within `frame.width * HANDLE_REACH` and answer `null` when the
+ * touch-down landed near none — and [CropOverlay]'s `onDrag` reads `active?.let { … }` AFTER
+ * `change.consume()`. So a touch-down that missed the reach did not fall through to the parent, and
+ * did not start a drag either: every move event for the whole gesture was swallowed in silence. No
+ * state change, no redraw, no haptic. Lift, press again, same. That is exactly "the corners do not
+ * drag", and it was the only path in this screen that produces it with the handles still drawn.
+ *
+ * There is no per-target branch anywhere in this file, which is what made the front/back asymmetry
+ * look impossible. It is not the target — it is the PROPOSAL. `DocumentEdgeDetector` reads the
+ * reverse of a licence, which is a dense class table running edge to edge, and proposes a quad much
+ * closer to the frame border than the sparser front does. `CropQuad.DEFAULT` is inset precisely so
+ * "every handle can be reached" (its own KDoc), and the detector's output was never held to that
+ * rule — so the back's corners could sit a few percent from the edge, under the system
+ * back-gesture strip, outside a reach that is itself a fraction of a frame width.
+ *
+ * A drag now always grabs the closest corner, and there is no reach test left to fail. This
+ * overlay has exactly one gesture — there is no pan, no pinch and nothing else a touch could have
+ * been meant for — so a drag the driver started is unambiguously a drag of the nearest handle.
+ * That also retires a second latent trap: `HANDLE_REACH` was a fraction of a frame width, and this
+ * screen declares no orientation, so in landscape the fixed 3:4 frame narrows to roughly 40% of
+ * its portrait width and took the reach down with it — below the 48 dp Material minimum, on the
+ * axis where a thumb is least precise.
+ */
+private fun nearestCorner(quad: CropQuad, touch: Offset, frame: IntSize): CropCorner =
+    CropCorner.entries
+        .minBy { corner ->
             val point = quad.corner(corner)
-            corner to (Offset(point.x * frame.width, point.y * frame.height) - touch).getDistance()
+            (Offset(point.x * frame.width, point.y * frame.height) - touch).getDistance()
         }
-        .filter { (_, distance) -> distance <= reach }
-        .minByOrNull { (_, distance) -> distance }
-        ?.first
-}
 
 /** The wireframe's `capbar` — `Retake · ◉ · Use photo ›`. */
 @Composable
@@ -497,4 +529,3 @@ private const val SCRIM_ALPHA = 0.55f
 private const val GRID_ALPHA = 0.4f
 private const val THIRD = 1f / 3f
 private const val TWO_THIRDS = 2f / 3f
-private const val HANDLE_REACH = 0.14f

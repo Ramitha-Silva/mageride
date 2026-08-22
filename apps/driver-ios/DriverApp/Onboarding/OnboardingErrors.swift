@@ -29,6 +29,16 @@ enum OnboardingErrors {
         case is MageRideErrorRateLimited:
             return "error_otp_rate_limited"
 
+        // Δ MCS-23 — the same branch Android carries, and iOS was missing it.
+        //
+        // `Serialization` overrides `code` to nil, so it fell to `key(for:)` and came out
+        // `error_generic` — "Something went wrong. Please try again." That is the message a driver
+        // stared at through MCS-15, while retrying re-sent the same images to the same defect: a
+        // malformed body is a platform bug and it will be the same shape next time. Same argument
+        // as PayloadTooLarge above.
+        case is MageRideErrorSerialization:
+            return "error_malformed_response"
+
         default:
             return key(for: failure.code)
         }

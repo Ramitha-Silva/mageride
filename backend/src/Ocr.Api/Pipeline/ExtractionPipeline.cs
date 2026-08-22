@@ -103,7 +103,8 @@ public sealed class ExtractionPipeline : IExtractionPipeline
 
         if (raw is null)
         {
-            return await PersistAsync(request, [], ExtractionEngines.None, outbound: null, cancellationToken);
+            return await PersistAsync(
+                request, [], ExtractionEngines.None, DocumentTypes.Unclear, outbound: null, cancellationToken);
         }
 
         // One read, two consumers: the mask boxes (ADD §12.5) and the fallback fields (D6' §7.5).
@@ -132,10 +133,11 @@ public sealed class ExtractionPipeline : IExtractionPipeline
 
         var fields = await ReadFieldsAsync(request, page, outbound, cancellationToken);
 
-        return await PersistAsync(request, fields.Fields, fields.Engine, outbound, cancellationToken);
+        return await PersistAsync(
+            request, fields.Fields, fields.Engine, fields.DocumentType, outbound, cancellationToken);
     }
 
-    private async Task<(IReadOnlyList<ExtractedField> Fields, string Engine)> ReadFieldsAsync(
+    private async Task<(IReadOnlyList<ExtractedField> Fields, string Engine, string DocumentType)> ReadFieldsAsync(
         ExtractionRequest request,
         OcrPage page,
         OutboundDocument outbound,
@@ -169,15 +171,20 @@ public sealed class ExtractionPipeline : IExtractionPipeline
             // fallback.
             if (await _gemini.ExtractAsync(outbound, request, cancellationToken) is { Fields.Count: > 0 } extraction)
             {
-                return (extraction.Fields, ExtractionEngines.Gemini);
+                return (extraction.Fields, ExtractionEngines.Gemini, extraction.DocumentType);
             }
         }
 
         var fallback = _fallback.Extract(page, request.Kind, request.Side);
 
+        // Δ MCS-21 — the fallback carries `unclear`, always. There is no classifier on the on-prem
+        // path and one must NOT be faked out of keywords: a document reaching Tesseract is already
+        // one where the model was unavailable or refused, and inventing a type judgement from the
+        // same page that produced the fields would be the least reliable input in the service
+        // deciding the most consequential thing about it.
         return fallback.Count == 0
-            ? ([], ExtractionEngines.None)
-            : (fallback, ExtractionEngines.Tesseract);
+            ? ([], ExtractionEngines.None, DocumentTypes.Unclear)
+            : (fallback, ExtractionEngines.Tesseract, DocumentTypes.Unclear);
     }
 
     /// <summary>
@@ -207,10 +214,11 @@ public sealed class ExtractionPipeline : IExtractionPipeline
         ExtractionRequest request,
         IReadOnlyList<ExtractedField> read,
         string engine,
+        string documentType,
         OutboundDocument? outbound,
         CancellationToken cancellationToken)
     {
-        var fields = Complete(request, read);
+        var fields = Complete(request, read, documentType);
 
         var redaction = outbound?.Redaction;
 
@@ -271,13 +279,43 @@ public sealed class ExtractionPipeline : IExtractionPipeline
     /// (D5' §14.1a), and a row for every required key nothing returned — with a null value, so the
     /// officer queue shows "the insurance expiry could not be read" as something to fill.
     /// </remarks>
-    private IReadOnlyList<ExtractedField> Complete(ExtractionRequest request, IReadOnlyList<ExtractedField> read)
+    private IReadOnlyList<ExtractedField> Complete(
+        ExtractionRequest request, IReadOnlyList<ExtractedField> read, string documentType)
     {
         var side = DocumentSides.Normalise(request.Side);
         var threshold = _options.ConfidenceThreshold;
 
+        // Δ MCS-21 — the model positively identified this as a DIFFERENT document from the one the
+        // caller claimed.
+        //
+        // Implemented as CONFIDENCE SUPPRESSION rather than by stamping `pending`, and that is not
+        // a stylistic choice: registry-svc deliberately discards this service's `verifyStatus` and
+        // re-derives its own from the confidence alone (`OcrDocumentExtractionClient`, and the
+        // reason is recorded there). A `VerifyStatus.Pending` set here would change this service's
+        // own row and NOTHING about `registry.document_fields`, the step verdict or AL-27's
+        // auto-approval — a feature that reads as working and does nothing.
+        //
+        // A null confidence is the one value that crosses that seam: `DeriveVerifyStatus` treats it
+        // exactly like a below-threshold one, so both services reach `pending` by the same rule.
+        //
+        // The VALUE is kept. The officer has to see what was actually read to judge it, and a
+        // document that is the wrong kind is precisely the case where the read matters most.
+        var contradicted = DocumentTypes.Contradicts(documentType, request.Kind);
+
+        if (contradicted)
+        {
+            _logger.LogWarning(
+                "Upload {UploadId} was submitted as {Claimed} and the model identified it as {Reported}. "
+                + "Every field is returned without a confidence, so registry-svc marks them pending and a "
+                + "Verification Officer sees the document (Δ MCS-21).",
+                request.UploadId,
+                request.Kind,
+                documentType);
+        }
+
         var fields = read
             .Where(field => field.Key != DocumentFieldKeys.RegNoMatch)
+            .Select(field => contradicted ? field with { Confidence = null } : field)
             .Select(field => FieldVerdicts.Judge(field, threshold))
             .ToList();
 
