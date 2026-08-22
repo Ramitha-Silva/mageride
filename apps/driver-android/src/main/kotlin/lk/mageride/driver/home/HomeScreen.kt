@@ -356,8 +356,14 @@ internal fun homeMapNaturalHeight(viewport: Dp, banners: Dp, sheet: Dp): Dp = wh
  *
  * A deliberate deviation from `specs/wireframes/driver_android.html`, asked for from a handset: at
  * `flex:1` on a real screen the map is a band roughly a quarter of the viewport, which is too
- * little of it to read as a map. Doubling it costs the sheet its place on the first screenful,
+ * little of it to read as a map. Enlarging it costs the sheet its place on the first screenful,
  * which is what the surrounding scroll is for — and is why this belongs in a micro-change-set
  * against §SCR-DA-010 rather than being a number quietly different from the spec.
+ *
+ * **Δ MCS-24 — 1.5, down from 2.0: a 25% reduction, asked for from the same handset.** Doubled, the
+ * map pushed the standby sheet entirely off the first screenful, so the toggle a driver opens this
+ * screen to press was below the fold. One and a half still reads as a map and leaves the sheet's
+ * top edge visible, which is what makes the scroll discoverable rather than something to find out
+ * about.
  */
-private const val MAP_HEIGHT_MULTIPLIER = 2f
+private const val MAP_HEIGHT_MULTIPLIER = 1.5f

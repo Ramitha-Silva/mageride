@@ -175,57 +175,30 @@ internal fun DriverProfileScreen(
 /**
  * The wireframe's avatar card — *"K. Fernando · DRV-22011 · ★4.8 overall"*.
  *
- * Two of those three are real and one is not. The name is `UserProfile.firstName`; the id is the
- * driver's **platform id**, which is what SCR-DA-023 asks another driver to type and what
- * `PlatformId` explains is not a `DRV-` code. The star average has **no read on the app-facing
- * surface at all** — see [DriverProfileViewModel]'s KDoc — so it prints [Symbols.UNKNOWN] rather
- * than a number nothing computed.
+ * **Δ MCS-24 — the platform id is gone from here and the live vehicle is in its place.** The id is
+ * real and this is the screen a driver reads it off before another driver types it into SCR-DA-023
+ * — but it does not belong on the line that answers "who am I and what am I driving", and the
+ * wireframe's own second line is the vehicle and the rating, not an identifier. The id keeps its
+ * own row further down the screen.
  *
- * The photo is drawn as the placeholder glyph: `UserProfile.photoUrl` is a URL and this module has
- * no image loader (`CaptureTile` deliberately never holds a bitmap either), so there is nothing
- * here that could fetch one.
+ * The layout is [DriverHeader], which SCR-DA-036's menu header also draws. Before this they were
+ * two independent pieces of layout for one block, and they had already drifted in opposite
+ * directions — the menu showing the app's name, this one showing an id.
  */
 @Composable
 private fun IdentityCard(state: DriverProfileState, onEdit: () -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = MageRideTheme.spacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.xs),
-    ) {
-        Surface(
-            modifier = Modifier.size(ControlTokens.AvatarSmall),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primaryContainer,
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Outlined.Person,
-                    contentDescription = null,
-                    modifier = Modifier.size(ControlTokens.RowIcon),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = state.profile?.firstName ?: stringResource(R.string.profile_unnamed),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = stringResource(
-                    R.string.profile_id_and_rating,
-                    state.profile?.userId.orEmpty(),
-                    "${Symbols.STAR_FILLED} ${Symbols.UNKNOWN}",
-                ),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        IconButton(onClick = onEdit) { EditGlyph() }
-    }
+    DriverHeader(
+        state = DriverHeaderState(
+            name = state.profile?.firstName,
+            level = state.standing.standing?.level,
+            registration = state.registration,
+            // No app-facing read carries a driver's own star average — see DriverHeaderState.
+            rating = null,
+            hasPhoto = !state.profile?.photoUrl.isNullOrBlank(),
+        ),
+        modifier = modifier.padding(vertical = MageRideTheme.spacing.xs),
+        trailing = { IconButton(onClick = onEdit) { EditGlyph() } },
+    )
 }
 
 /** The wireframe's `listrow` — an icon, a label, an optional second line and a chevron. */

@@ -43,6 +43,7 @@ import lk.mageride.driver.onboarding.OnboardingPreferences
 import lk.mageride.driver.onboarding.OnboardingRepository
 import lk.mageride.driver.onboarding.ProfileSetupViewModel
 import lk.mageride.driver.onboarding.SplashViewModel
+import lk.mageride.driver.menu.MenuViewModel
 import lk.mageride.driver.profile.DriverProfileViewModel
 import lk.mageride.driver.profile.ProfileRepository
 import lk.mageride.driver.push.PushRouter
@@ -379,6 +380,11 @@ private fun Module.trackerAndProfileBindings() {
     viewModel { TrackerPairingViewModel(identity = get(), trackers = get(), publisher = get()) }
     viewModel { SharingViewModel(identity = get(), sharing = get()) }
     viewModel { DriverProfileViewModel(identity = get(), profiles = get()) }
+
+    // Δ MCS-24 — SCR-DA-036's header. It takes the same two dependencies SCR-DA-029's does,
+    // because it shows the same block: the drawer used to draw the app's name, which needed
+    // nothing, and now draws the driver's, which needs both reads.
+    viewModel { MenuViewModel(identity = get(), profiles = get()) }
     viewModel { RideHistoryViewModel(identity = get(), history = get()) }
 
     commsSafetySupportBindings()

@@ -595,6 +595,7 @@
     <!-- SCR-DA-029 . ஓட்டுநர் சுயவிவரம். -->
     <string name="profile_title">சுயவிவரம்</string>
     <string name="profile_unnamed">உங்கள் பெயர்</string>
+    <string name="driver_header_no_vehicle">இன்னும் வாகனம் இல்லை</string>
     <string name="profile_id_and_rating">%1$s . %2$s ஒட்டுமொத்தம்</string>
     <string name="profile_vehicle_details">வாகன விவரங்கள்</string>
     <string name="profile_trip_ratings">பயணவாரி மதிப்பீடுகள்</string>
