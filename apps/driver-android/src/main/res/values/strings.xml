@@ -79,7 +79,7 @@
     <!-- Δ MCS-11. A response that does not match the contract is a PLATFORM bug, and it will
          fail identically for ever — so "try again" is wrong advice, exactly as it is for
          error_image_too_large above. Updating, or reporting it, is the only thing that helps. -->
-    <string name="error_malformed_response">The app could not read the server's reply. Update the app, or contact support if it keeps happening.</string>
+    <string name="error_malformed_response">The app could not read the reply from the server. Update the app, or contact support if this keeps happening.</string>
 
     <!-- ==========================================================================
          C068 · SCR-DA-001…003a + 007 — first run.
