@@ -23,10 +23,8 @@ import lk.mageride.driver.ui.component.DriverHeaderState
  * are static, so the header fills in behind them and a failure leaves it on its defaults rather
  * than putting an error over a list of links that all still work.
  */
-internal class MenuViewModel(
-    private val identity: DriverIdentity,
-    private val profiles: ProfileRepository,
-) : ViewModel() {
+internal class MenuViewModel(private val identity: DriverIdentity, private val profiles: ProfileRepository) :
+    ViewModel() {
 
     private val mutableState = MutableStateFlow(DriverHeaderState())
 

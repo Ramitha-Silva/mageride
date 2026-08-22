@@ -18,12 +18,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
-import java.util.Locale
 import lk.mageride.driver.R
 import lk.mageride.driver.home.DashboardLabels
 import lk.mageride.driver.ui.Symbols
 import lk.mageride.driver.ui.theme.ControlTokens
 import lk.mageride.driver.ui.theme.MageRideTheme
+import java.util.Locale
 
 /**
  * Who the driver is, as both SCR-DA-029 and SCR-DA-036 show it (Δ MCS-24).

@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.EmergencyShare
@@ -38,6 +39,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lk.mageride.driver.R
@@ -120,6 +123,22 @@ internal fun DriverProfileScreen(
             ) {
                 IdentityCard(state = state, onEdit = { viewModel.openSheet(ProfileSheet.Name) })
 
+                // Δ MCS-24 — the platform id, displaced from the header and kept.
+                //
+                // SCR-DA-023 asks another driver to type this to send credit, so it has to be
+                // readable AND copyable — an id read aloud is a transfer nobody completes. The tap
+                // copies rather than navigating, which is why it carries no chevron.
+                state.profile?.userId?.let { userId ->
+                    val clipboard = LocalClipboardManager.current
+
+                    ProfileRow(
+                        icon = Icons.Outlined.ContentCopy,
+                        label = stringResource(R.string.profile_platform_id),
+                        supporting = userId,
+                        onClick = { clipboard.setText(AnnotatedString(userId)) },
+                    )
+                }
+
                 ProfileRow(
                     icon = Icons.Outlined.DirectionsCar,
                     label = stringResource(R.string.profile_vehicle_details),
@@ -178,8 +197,12 @@ internal fun DriverProfileScreen(
  * **Δ MCS-24 — the platform id is gone from here and the live vehicle is in its place.** The id is
  * real and this is the screen a driver reads it off before another driver types it into SCR-DA-023
  * — but it does not belong on the line that answers "who am I and what am I driving", and the
- * wireframe's own second line is the vehicle and the rating, not an identifier. The id keeps its
- * own row further down the screen.
+ * wireframe's own second line is the vehicle and the rating, not an identifier.
+ *
+ * The id is NOT dropped. C073's handoff names this screen as the one a driver reads their own
+ * platform id off before another driver types it into SCR-DA-023, so deleting it would break a
+ * credit transfer; it moves to a row of its own, with a copy action, which is what the iOS mirror
+ * already does for the same reason.
  *
  * The layout is [DriverHeader], which SCR-DA-036's menu header also draws. Before this they were
  * two independent pieces of layout for one block, and they had already drifted in opposite

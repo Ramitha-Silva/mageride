@@ -597,6 +597,7 @@
     <string name="profile_title">පැතිකඩ</string>
     <string name="profile_unnamed">ඔබේ නම</string>
     <string name="driver_header_no_vehicle">තවම වාහනයක් නැත</string>
+    <string name="profile_platform_id">ඔබේ රියදුරු හැඳුනුම</string>
     <string name="profile_id_and_rating">%1$s . %2$s සමස්තය</string>
     <string name="profile_vehicle_details">වාහන විස්තර</string>
     <string name="profile_trip_ratings">ගමන් අනුව ශ්‍රේණිගත කිරීම්</string>

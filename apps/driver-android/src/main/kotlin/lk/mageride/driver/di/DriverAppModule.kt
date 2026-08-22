@@ -31,6 +31,7 @@ import lk.mageride.driver.location.AndroidDriverLocationSource
 import lk.mageride.driver.location.AndroidPositionPublisher
 import lk.mageride.driver.location.DriverLocationSource
 import lk.mageride.driver.location.PositionPublisher
+import lk.mageride.driver.menu.MenuViewModel
 import lk.mageride.driver.notifications.LocalNotificationInbox
 import lk.mageride.driver.notifications.NotificationInbox
 import lk.mageride.driver.notifications.NotificationsViewModel
@@ -43,7 +44,6 @@ import lk.mageride.driver.onboarding.OnboardingPreferences
 import lk.mageride.driver.onboarding.OnboardingRepository
 import lk.mageride.driver.onboarding.ProfileSetupViewModel
 import lk.mageride.driver.onboarding.SplashViewModel
-import lk.mageride.driver.menu.MenuViewModel
 import lk.mageride.driver.profile.DriverProfileViewModel
 import lk.mageride.driver.profile.ProfileRepository
 import lk.mageride.driver.push.PushRouter
