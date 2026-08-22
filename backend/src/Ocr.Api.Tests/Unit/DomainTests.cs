@@ -1,4 +1,5 @@
 using MageRide.Ocr.Domain;
+using MageRide.Ocr.Gemini;
 using MageRide.Ocr.Pipeline;
 
 namespace MageRide.Ocr.Tests.Unit;
@@ -127,6 +128,46 @@ public sealed class FieldValueTests
         // between a driver's licence and what they are allowed to drive.
         Assert.Equal("A1,B,C1", FieldValues.NormaliseVehicleClasses("A1,B,C1"));
         Assert.DoesNotContain("three_wheeler", FieldValues.NormaliseVehicleClasses("A1,B,C1")!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Δ MCS-17 — a model answering in a sentence does not become four licence classes.
+    /// </summary>
+    /// <remarks>
+    /// The filter used to be a SHAPE — ASCII-alphanumeric, four characters or fewer — which
+    /// describes a licence class and also most short English words. <c>"Class B and G1 only"</c> is
+    /// a reasonable thing for a model to say and normalised to <c>B,AND,G1,ONLY</c>, which was then
+    /// written to <c>docs.extractions</c> as an auto-verified reading and shown to a Verification
+    /// Officer as the value to confirm.
+    /// </remarks>
+    [Theory]
+    [InlineData("Class B and G1 only", "B,G1")]
+    [InlineData("CLASSES: A1 B", "A1,B")]
+    [InlineData("B, G1", "B,G1")]
+    public void Prose_around_the_classes_is_dropped_rather_than_read_as_classes(string printed, string expected) =>
+        Assert.Equal(expected, FieldValues.NormaliseVehicleClasses(printed));
+
+    /// <summary>A value with no licence class in it at all is unread, not an empty string.</summary>
+    [Fact]
+    public void Text_with_no_licence_class_in_it_yields_none() =>
+        Assert.Null(FieldValues.NormaliseVehicleClasses("see reverse"));
+
+    /// <summary>
+    /// Δ MCS-17 — the prompt's class table and the normaliser's filter are one list.
+    /// </summary>
+    /// <remarks>
+    /// Written twice they drift, and the copy that drifts is whichever one nothing reads back: a
+    /// class added to the prompt but not the filter is extracted and then silently discarded.
+    /// </remarks>
+    [Fact]
+    public void The_reverse_prompt_names_exactly_the_classes_the_normaliser_accepts()
+    {
+        var prompt = GeminiPrompts.For(DocumentKinds.DrivingLicense, DocumentSides.Back, redacted: false);
+
+        // The WHOLE list, in order, as one run of text. Asserting each class separately would pass
+        // on the letter "A" appearing anywhere in an English sentence — which is the same shape of
+        // tautology that let VerifyStatus ship (MCS-15).
+        Assert.Contains(string.Join(", ", FieldValues.LicenceClasses), prompt, StringComparison.Ordinal);
     }
 }
 

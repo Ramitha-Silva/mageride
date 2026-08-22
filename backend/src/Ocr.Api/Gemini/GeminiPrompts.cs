@@ -85,9 +85,12 @@ internal static class GeminiPrompts
 
     private static string Describe(string kind, string? side) => (kind, side) switch
     {
+        // Δ MCS-17 — the alphabet comes from FieldValues.LicenceClasses, which is also what the
+        // normaliser filters against. Written twice, the two drift, and the copy that drifts is
+        // whichever one nothing reads back.
         (DocumentKinds.DrivingLicense, DocumentSides.Back) =>
             "This is the REVERSE of a Sri Lankan driving licence. It carries the table of licence "
-            + "classes (A1, A, B1, B, C1, C, CE, D1, D, DE, G1, G, J) the holder is entitled to drive.",
+            + $"classes ({string.Join(", ", FieldValues.LicenceClasses)}) the holder is entitled to drive.",
         (DocumentKinds.DrivingLicense, _) =>
             "This is the FRONT of a Sri Lankan driving licence.",
         (DocumentKinds.Insurance, _) =>

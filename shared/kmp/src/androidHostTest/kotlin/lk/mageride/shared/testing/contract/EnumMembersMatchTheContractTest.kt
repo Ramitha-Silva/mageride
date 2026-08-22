@@ -7,6 +7,7 @@ import lk.mageride.shared.data.models.RideVehicleType
 import lk.mageride.shared.data.models.Role
 import lk.mageride.shared.data.models.VehicleType
 import lk.mageride.shared.data.models.VerifyStatus
+import lk.mageride.shared.data.models.trip.SessionEndReason
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -54,21 +55,32 @@ import kotlin.test.fail
 class EnumMembersMatchTheContractTest {
 
     /**
-     * Kotlin enum → (contract document, `components/schemas` name it decodes).
+     * Kotlin enum → (contract document, JSON pointer to the schema node that declares it).
      *
      * Deliberately explicit rather than derived from the class name. [VehicleType] and
      * [RideVehicleType] are different schemas with overlapping members, and a convention that
      * guessed would pair one with the other and still be green — which is the failure mode this
      * test exists to end.
      *
-     * **Not covered, because no contract declares them as named schemas:** `DocumentKind` and
-     * `Language`. Both are decoded from wire fields and neither has a `components/schemas` entry to
-     * compare against, so they carry exactly the risk this test was written for and there is
-     * nothing here to assert against. That is a gap in the contracts rather than in this test, and
-     * it is worth a micro-change-set.
+     * The pointer is deliberately a full path rather than a bare schema name: not every wire enum
+     * is a named component. [SessionEndReason] is declared INLINE on one property, and inline is
+     * exactly where drift hides longest — nothing indexes it, so nothing notices it. It is how
+     * `ignition_off` stayed missing while `SessionService` emitted it on the most ordinary way a
+     * Mode A/B session ends.
+     *
+     * **Not covered, because no contract declares them anywhere:** `DocumentKind` and `Language`.
+     * Both are decoded from wire fields and neither appears in any contract, as a component or
+     * inline, so there is nothing to assert against. That is a gap in the contracts rather than in
+     * this test, and it is worth a micro-change-set.
      */
     private val checked: List<Checked> = listOf(
         Checked("VerifyStatus", SHARED, "VerifyStatus", VerifyStatus.entries.map { it.wire }),
+        Checked(
+            kotlinName = "SessionEndReason",
+            contract = "trip-state",
+            schema = "Session/properties/endReason",
+            members = SessionEndReason.entries.map { it.wire },
+        ),
         Checked("FieldSource", SHARED, "FieldSource", FieldSource.entries.map { it.wire }),
         Checked("VehicleType", SHARED, "VehicleType", VehicleType.entries.map { it.wire }),
         Checked("RideVehicleType", SHARED, "RideVehicleType", RideVehicleType.entries.map { it.wire }),
@@ -137,6 +149,7 @@ class EnumMembersMatchTheContractTest {
     private data class Checked(
         val kotlinName: String,
         val contract: String,
+        /** Pointer under `components/schemas`, e.g. `VerifyStatus` or `Session/properties/endReason`. */
         val schema: String,
         val members: List<String>,
     ) {

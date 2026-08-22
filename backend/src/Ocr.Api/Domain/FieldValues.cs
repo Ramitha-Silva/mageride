@@ -79,15 +79,56 @@ public static class FieldValues
     }
 
     /// <summary>
-    /// The vehicle classes a licence permits, as the comma-separated list AL-29 stores.
+    /// The classes a Sri Lankan driving licence prints, and the only tokens
+    /// <see cref="NormaliseVehicleClasses"/> keeps (Δ MCS-17).
     /// </summary>
     /// <remarks>
-    /// <b>Sri Lankan licence classes are not MageRide vehicle types</b> — the reverse of a licence
-    /// carries <c>A1</c>, <c>B</c>, <c>C1</c>, <c>G1</c> and the rest, and <c>registry.vehicles</c>
-    /// speaks <c>three_wheeler</c>/<c>sedan</c>. Mapping between them is a rule no spec in this
-    /// build states, so the classes are stored verbatim and the mapping is left to whoever writes
-    /// the screen that needs it (raised in the C054 handoff). What normalisation does here is
-    /// spacing and separators, so <c>A1 , B ,C1</c> and <c>A1/B/C1</c> compare equal.
+    /// <para>
+    /// <b>The same list the reverse-side prompt shows the model</b>, shared rather than written
+    /// twice on purpose: two copies of an alphabet drift, and the copy that drifts is whichever one
+    /// nothing reads back.
+    /// </para>
+    /// <para>
+    /// An ORDERED array rather than a set, because it is interpolated into that prompt and a hash
+    /// set's enumeration order is not contractual. A prompt whose wording varies between processes
+    /// is a model that can answer differently for the same document, which is the one thing a
+    /// zero-temperature transcription is configured to avoid.
+    /// </para>
+    /// <para>
+    /// <b>Sri Lankan licence classes are not MageRide vehicle types.</b> The reverse of a licence
+    /// carries <c>A1</c>, <c>B</c>, <c>C1</c>, <c>G1</c> and the rest; <c>registry.vehicles</c>
+    /// speaks <c>three_wheeler</c>/<c>sedan</c>. No spec in this build maps one to the other, so the
+    /// classes are stored verbatim — inventing a mapping would put an unstated rule between a
+    /// driver's licence and what they may drive (C054 handoff).
+    /// </para>
+    /// </remarks>
+    public static readonly IReadOnlyList<string> LicenceClasses =
+    [
+        "A1", "A", "B1", "B", "C1", "C", "CE", "D1", "D", "DE", "G1", "G", "J",
+    ];
+
+    /// <summary>
+    /// The licence classes in <paramref name="text"/> as the comma-separated list AL-29 stores, or
+    /// <see langword="null"/> when it holds none.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Normalisation is spacing and separators, so <c>A1 , B ,C1</c> and <c>A1/B/C1</c> compare
+    /// equal.
+    /// </para>
+    /// <para>
+    /// <b>Δ MCS-17 — filtered against <see cref="LicenceClasses"/>, not against a shape.</b> It used
+    /// to keep any ASCII-alphanumeric token of four characters or fewer, which describes a licence
+    /// class and also most short English words. A model answering <c>"Class B and G1 only"</c> — a
+    /// reasonable thing for it to say — normalised to <c>B,AND,G1,ONLY</c> and was written to
+    /// <c>docs.extractions</c> as an auto-verified reading. registry-svc's MCS-11 clause keeps that
+    /// out of the driver's own column, but the officer is still shown prose to confirm.
+    /// </para>
+    /// <para>
+    /// A token that is not a class is DROPPED rather than failing the field: a licence prints its
+    /// classes in a table with headings, and refusing the whole value because a heading came along
+    /// would lose the classes that were read correctly.
+    /// </para>
     /// </remarks>
     public static string? NormaliseVehicleClasses(string? text)
     {
@@ -99,7 +140,7 @@ public static class FieldValues
         var classes = text
             .Split([',', '/', ';', '|', ' ', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries)
             .Select(part => part.Trim().Trim('.').ToUpperInvariant())
-            .Where(part => part.Length is > 0 and <= 4 && part.All(char.IsAsciiLetterOrDigit))
+            .Where(part => LicenceClasses.Contains(part))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
