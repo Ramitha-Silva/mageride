@@ -351,8 +351,8 @@ final class TopUpModel: ObservableObject {
     /// cancelled the read, not failed it, and a `CancellationError` rendered as copy would put an
     /// error banner on a screen nobody is looking at.
     private func poll(_ pending: PendingTopUp) async throws {
-        var waited: TimeInterval = 0
-        while waited < pendingWindowSeconds {
+        var remaining = pollBudget
+        while remaining > 0 {
             if Task.isCancelled { return }
             let topup = try await topUps.topUpState(topupId: pending.topupId)
             if topup.state != TopupState.pending {
@@ -361,9 +361,28 @@ final class TopUpModel: ObservableObject {
             }
             try? await Task.sleep(nanoseconds: UInt64(pollSeconds * Double(NSEC_PER_SEC)))
             if Task.isCancelled { return }
-            waited += pollSeconds
+            remaining -= 1
         }
         state.pending = PendingTopUp(topupId: pending.topupId, amountMinor: pending.amountMinor, hasTimedOut: true)
+    }
+
+    /// ``pendingWindowSeconds`` as a number of reads.
+    ///
+    /// **Counted in polls rather than accumulated from ``pollSeconds``** — the argument
+    /// ``JobBoardModel/awaitPosition()`` makes for its own budget, and for the same reason. Both
+    /// values are injected, and every test in this class sets the interval to 0 so the suite does
+    /// not spend ninety real seconds proving a ninety-second rule. Decrementing the window *by that
+    /// interval* then subtracted nothing, `waited < pendingWindowSeconds` never went false, and the
+    /// two tests that hold a session `Pending` to the end of the window hung for the life of the
+    /// process — a full `xcodebuild … test` on this scheme never terminated.
+    ///
+    /// For any non-zero interval this is exactly ``pendingWindowSeconds``, because the reads and the
+    /// sleeps are then the same value; the shipped 3 s against D6' §7.1's 90 s window is 30 reads.
+    /// Zero is the one interval with no read count of its own, so the count falls back to the
+    /// shipped one while the sleeps stay instant.
+    private var pollBudget: Int {
+        let step = pollSeconds > 0 ? pollSeconds : TopUpModel.defaultPollSeconds
+        return Int((pendingWindowSeconds / step).rounded(.up))
     }
 
     private func settle(_ topup: Topup, pending: PendingTopUp) {
