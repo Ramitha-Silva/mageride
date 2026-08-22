@@ -32,6 +32,10 @@ enum ProfileSheet: String, Identifiable {
 struct DriverProfileState {
 
     var profile: UserProfile?
+
+    /// The plate of the vehicle this handset is live for (Δ MCS-24), or `nil` when nothing is
+    /// eligible — a driver who has not onboarded one, or whose only vehicle is suspended.
+    var registration: String?
     var contact: EmergencyContact?
     var standing = JobStanding()
     var sheet: ProfileSheet?
@@ -132,6 +136,12 @@ final class DriverProfileModel: ObservableObject {
             state.contact = contacts.first(where: \.isPrimary) ?? contacts.first
             if let driverId = identity.driverId {
                 state.standing = await profiles.standing(driverId: driverId)
+
+                // Δ MCS-24 — SCR-DI-029's header names the live vehicle. Read here rather than in
+                // the view because `liveVehicle()` also WRITES the choice back (D-03: it settles
+                // which of several eligible vehicles is the publisher), and a call driven by a
+                // redraw would run again on every frame this screen draws.
+                state.registration = (try? await identity.liveVehicle().live)?.registrationNumber
             }
         } catch {
             state.errorKey = OnboardingErrors.messageKey(for: error)

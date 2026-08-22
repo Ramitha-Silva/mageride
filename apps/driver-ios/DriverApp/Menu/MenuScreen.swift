@@ -22,8 +22,16 @@ import SwiftUI
 @MainActor
 struct MenuScreen: View {
 
-    let driverId: String?
-    let onOpen: (DriverRoute) -> Void
+    @StateObject private var model: MenuModel
+    private let onOpen: (DriverRoute) -> Void
+
+    /// `@autoclosure` and `_model =`, the same shape SCR-DI-029 uses: a `@StateObject` must be
+    /// assigned through its wrapper, and building the model eagerly at the call site would
+    /// construct one on every parent redraw and throw it away.
+    init(model: @autoclosure @escaping () -> MenuModel, onOpen: @escaping (DriverRoute) -> Void) {
+        _model = StateObject(wrappedValue: model())
+        self.onOpen = onOpen
+    }
 
     var body: some View {
         List {
@@ -39,6 +47,7 @@ struct MenuScreen: View {
                 }
             }
         }
+        .task { await model.load() }
         .listStyle(.insetGrouped)
         .navigationTitle(Text(key: "nav_menu"))
         .background(MageRideColor.background)
@@ -46,37 +55,20 @@ struct MenuScreen: View {
 
     /// The wireframe's driver card.
     ///
-    /// It draws a name, an `L3` badge, a `DRV-22011` id and `★4.8`. **The rating has no app-facing
-    /// read** (see ``HomeScreen``'s status bar) and the display name is the profile group's own read
-    /// (C092, SCR-DI-029), which this component does not own. What is left is the driver's own platform
-    /// id, which the session already holds and which SCR-DI-029 is where a driver reads. A wrong name
-    /// is worse than none and an invented rating is worse still; the card carries what is true.
+    /// **Δ MCS-24 — the DRIVER, not a label.** It drew `menu_driver` above the platform id, and the
+    /// reason was recorded and was a good one: this component did not own the profile read, so *"a
+    /// wrong name is worse than none and an invented rating is worse still"*. That reasoning
+    /// survives — the rating is drawn only if one exists, and none does — but the premise does not.
+    /// ``MenuModel`` owns the read now.
+    ///
+    /// The layout is ``DriverHeader``, which SCR-DI-029 also draws. Before this they were two
+    /// independent pieces of layout for one block, and they had drifted in the same direction: both
+    /// showed an identifier where the wireframe draws the vehicle.
     private var driverCard: some View {
-        HStack(spacing: MageRideSpacing.sm) {
-            Image(systemName: "person.crop.circle.fill")
-                .font(.system(size: MageRideControl.avatarSmall))
-                .foregroundStyle(MageRideColor.onSurfaceVariant)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(key: "menu_driver")
-                    .mageFont(.title)
-                    .foregroundStyle(MageRideColor.onSurface)
-                Text(driverId ?? MageRideSymbols.unknown)
-                    .mageFont(.label)
-                    .foregroundStyle(MageRideColor.onSurfaceVariant)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(MageRideSpacing.sm)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            MageRideColor.surfaceVariant,
-            in: RoundedRectangle(cornerRadius: MageRideRadius.md, style: .continuous)
-        )
-        .accessibilityElement(children: .combine)
+        DriverHeader(state: model.header)
+            .padding(MageRideSpacing.sm)
     }
 
-    /// One `.glist .gr` row: a coloured glyph tile, the label, and the chevron.
     private func row(_ destination: MenuDestination) -> some View {
         Button { onOpen(destination.route) } label: {
             HStack(spacing: MageRideSpacing.sm) {

@@ -1,19 +1,14 @@
 package lk.mageride.driver.menu
 
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
@@ -22,13 +17,16 @@ import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
-import lk.mageride.driver.R
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lk.mageride.driver.nav.DriverRoute
+import lk.mageride.driver.ui.component.DriverHeader
 import lk.mageride.driver.ui.theme.ControlTokens
 import lk.mageride.driver.ui.theme.MageRideTheme
+import org.koin.androidx.compose.koinViewModel
 
 /**
  * **SCR-DA-036 · the menu drawer.**
@@ -39,17 +37,58 @@ import lk.mageride.driver.ui.theme.MageRideTheme
  * **AL-31 is why it is a tab rather than a corner affordance.** *"The dashboard has NO top-left
  * hamburger; navigation is the bottom-nav Menu tab"*, and `DriverTab.MenuTab` is a peer of Home. So
  * this destination **is** the drawer: the sheet is drawn at its documented width against a scrim,
- * and the scrim takes the driver back where they came from — which is exactly what "scrim tap /
- * swipe-left closes" means once the drawer is a destination rather than an overlay.
+ * and the scrim takes the driver back where they came from.
  *
- * @param onClose The scrim tap. Goes back rather than to Home: a driver who opened Menu from the
- *   Wallet tab expects to return to the Wallet tab.
+ * **Δ MCS-24 — both halves of "scrim tap / swipe-left closes" are wired now.** Only the tap was. On
+ * a sheet pinned to the left edge, dragging it leftward is the gesture a driver reaches for first,
+ * and it did nothing at all — no movement, no rubber-band, no hint that the tap was the way out.
+ *
+ * **Δ MCS-24 — the header is the DRIVER, not the app.** It printed `app_name`, and the reason was
+ * recorded and was a good one: this component did not own the profile read, so *"a wrong name is
+ * worse than none, and inventing a rating would be worse still"*. That reasoning survives — the
+ * rating is still drawn only if one exists, and none does — but the premise does not.
+ * [MenuViewModel] owns the read now, so the name, the level and the live vehicle's plate are this
+ * screen's to show. What the header must never do is guess, and it does not.
+ *
+ * @param onClose The scrim tap, and now the swipe. Goes back rather than to Home: a driver who
+ *   opened Menu from the Wallet tab expects to return to the Wallet tab.
  */
 @Composable
 internal fun MenuScreen(onOpen: (DriverRoute) -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
+    val viewModel: MenuViewModel = koinViewModel()
+    val header by viewModel.header.collectAsStateWithLifecycle()
+
     Row(modifier = modifier.fillMaxSize()) {
-        ModalDrawerSheet(modifier = Modifier.width(ControlTokens.DrawerWidth)) {
-            MenuHeader()
+        ModalDrawerSheet(
+            modifier = Modifier
+                .width(ControlTokens.DrawerWidth)
+                // The whole gesture is accumulated and judged on RELEASE rather than acted on per
+                // event, so a drag that wanders left and comes back does not close: a driver who
+                // starts a swipe and changes their mind keeps their menu.
+                .pointerInput(Unit) {
+                    var travelled = 0f
+
+                    detectHorizontalDragGestures(
+                        onDragStart = { travelled = 0f },
+                        onDragCancel = { travelled = 0f },
+                        onDragEnd = {
+                            if (travelled <= -CLOSE_SWIPE_FRACTION * size.width) onClose()
+                            travelled = 0f
+                        },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            travelled += dragAmount
+                        },
+                    )
+                },
+        ) {
+            DriverHeader(
+                state = header,
+                modifier = Modifier.padding(
+                    horizontal = MageRideTheme.spacing.md,
+                    vertical = MageRideTheme.spacing.sm,
+                ),
+            )
 
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -80,44 +119,14 @@ internal fun MenuScreen(onOpen: (DriverRoute) -> Unit, onClose: () -> Unit, modi
 }
 
 /**
- * The drawer's `primaryContainer` header.
+ * How far left the sheet must be dragged before releasing closes it (Δ MCS-24).
  *
- * The wireframe prints a name, an `L3` badge, a `DRV-22011` id and `★4.8`. **The rating has no
- * app-facing read** (see `HomeScreen`'s KDoc) and the driver id and display name come from the
- * profile group's own read (C073, SCR-DA-029), which this component does not own. The header is
- * therefore the avatar and the label the shell already has — a wrong name is worse than none, and
- * inventing a rating would be worse still. Recorded in the C070 handoff.
+ * A fraction of the sheet rather than a fixed distance: the drawer is [ControlTokens.DrawerWidth]
+ * wide on every handset, so a third of it is a third of the same control everywhere. Low enough to
+ * be a flick, high enough that a horizontal wobble during a vertical scroll of the rows below does
+ * not dismiss the screen.
  */
-@Composable
-private fun MenuHeader(modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(MageRideTheme.spacing.md),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.xs),
-    ) {
-        Surface(
-            modifier = Modifier.size(ControlTokens.AvatarSmall),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primaryContainer,
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Outlined.Person,
-                    contentDescription = null,
-                    modifier = Modifier.size(ControlTokens.RowIcon),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-        }
-        Text(
-            text = stringResource(R.string.app_name),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-    }
-}
+private const val CLOSE_SWIPE_FRACTION = 0.33f
 
 /** D2' §0.2's scrim opacity — the same figure the offline map overlay uses. */
 private const val SCRIM_ALPHA = 0.45f

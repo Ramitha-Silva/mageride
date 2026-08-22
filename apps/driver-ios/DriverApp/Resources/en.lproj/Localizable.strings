@@ -156,6 +156,8 @@
 "error_validation_failed" = "Check what you entered and try again.";
 "error_image_too_large" = "That image is too large. Take it again from a little further back.";
 "error_malformed_response" = "The app could not read the reply from the server. Update the app, or contact support if this keeps happening.";
+"driver_header_no_vehicle" = "No vehicle yet";
+"profile_platform_id" = "Your driver ID";
 
 /*
   MageRide Driver — iOS · C087 driver-ios-vehicle-onboarding. English, the development region.
