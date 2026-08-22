@@ -297,7 +297,15 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
         allowedVehicleTypes: List<VehicleType>?,
         licenceNo: String?,
         licenceExpiry: String?,
-    ): UpsertDriverProfileResponse = transport.apiPut(SERVICE, "upsertDriverProfile", "/v1/drivers/profile") {
+    ): UpsertDriverProfileResponse = transport.apiPut(
+        SERVICE,
+        "upsertDriverProfile",
+        "/v1/drivers/profile",
+        // Δ MCS-14 — NOT the 15-second API budget. This call extracts both sides of the licence
+        // synchronously before it answers, and registry-svc is allowed 35 s per document, so the
+        // client was giving up less than half way through work the server went on to finish.
+        requestTimeout = transport.config.timeouts.documentUploadTimeout,
+    ) {
         multipartBody {
             textPart("driverName", driverName)
             capturedDocumentPart("photo", photo)
@@ -358,7 +366,14 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
         file: CapturedDocument?,
         fileBack: CapturedDocument?,
         corrections: OnboardingCorrections?,
-    ): SaveOnboardingStepResponse = transport.apiPut(SERVICE, "saveVehicleOnboardingStep", stepPath(vehicleId, step)) {
+    ): SaveOnboardingStepResponse = transport.apiPut(
+        SERVICE,
+        "saveVehicleOnboardingStep",
+        stepPath(vehicleId, step),
+        // Δ MCS-14 — same reason as the profile upload above: this arm carries the bytes, so the
+        // response waits on the extraction rather than on a stored id.
+        requestTimeout = transport.config.timeouts.documentUploadTimeout,
+    ) {
         multipartBody {
             textPart("registrationNumber", registrationNumber)
             textPart("vehicleType", vehicleType?.wire)

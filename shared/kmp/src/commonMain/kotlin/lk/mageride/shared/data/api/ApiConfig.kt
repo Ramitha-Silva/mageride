@@ -34,14 +34,31 @@ public enum class ApiLogLevel {
  * gateway and gets the API budget. [paymentRequestTimeout] exists because a redirect-issuing
  * payment initiation is the one app-facing call that legitimately waits on the provider.
  *
+ * [documentUploadTimeout] is the second such exception, and Δ MCS-14 added it for the same
+ * reason the first one exists — the sentence above ("from the app every route is behind the
+ * gateway and gets the API budget") is not true of a route that waits on Gemini INSIDE the
+ * request. `PUT /v1/drivers/profile` uploads three images and then extracts BOTH sides of the
+ * licence synchronously before it answers, and registry-svc's own `Registry__OcrTimeout` is
+ * **35 s per document**. So the server is permitted more than twice what the client was willing
+ * to wait, and SCR-DA/DI-003a failed at fifteen seconds while the extraction it was waiting for
+ * was still succeeding — Gemini answering 200 in 1.3 s per call, on the other side of a socket
+ * the handset had already abandoned. The edge logged it as `400 … CD--` with `Tr=-1`: the
+ * client aborted, so there was no response to record.
+ *
  * @property requestTimeout Whole-call deadline for an ordinary route.
  * @property paymentRequestTimeout Whole-call deadline for a payment initiation or top-up.
+ * @property documentUploadTimeout Whole-call deadline for an onboarding upload whose response
+ *   waits on OCR — Profile Setup and the Mode-C wizard's document steps. Longer than the two
+ *   35-second `Registry__OcrTimeout` budgets it can spend, because a deadline shorter than the
+ *   server's own is a client that gives up on work that then completes anyway: the images are
+ *   stored, the profile is written, and the driver is told it failed.
  * @property connectTimeout TCP/TLS connect deadline.
  * @property socketTimeout Idle deadline between two reads.
  */
 public data class ApiTimeouts(
     val requestTimeout: Duration = 15.seconds,
     val paymentRequestTimeout: Duration = 90.seconds,
+    val documentUploadTimeout: Duration = 90.seconds,
     val connectTimeout: Duration = 10.seconds,
     val socketTimeout: Duration = 15.seconds,
 )
