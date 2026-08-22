@@ -234,8 +234,14 @@ public static class DocumentFieldKeys
         {
             // The Sri Lankan licence carries its classes on the reverse (AL-29), so which fields
             // are expected depends on which side was scanned.
-            (DocumentKinds.DrivingLicense, DocumentSides.Back) => [AllowedVehicleTypes],
-            (DocumentKinds.DrivingLicense, _) => [LicenceNo, LicenceExpiry],
+            //
+            // Δ MCS-20 — LicenceExpiry moved FRONT -> BACK, and this table MUST match ocr-svc's
+            // `DocumentVocabulary`. Changing one and not the other does not error: the key simply
+            // stops being accepted on the side it now arrives on, and the field goes permanently
+            // null-and-pending in the officer queue. The front's `4a` is the date of ISSUE; the
+            // expiry is column 11 of the class table on the reverse.
+            (DocumentKinds.DrivingLicense, DocumentSides.Back) => [AllowedVehicleTypes, LicenceExpiry],
+            (DocumentKinds.DrivingLicense, _) => [LicenceNo],
             (DocumentKinds.Insurance, _) => [InsuranceExpiry],
             (DocumentKinds.RevenueLicense, _) => [RevenueNo, RevenueExpiry],
             (DocumentKinds.Registration, _) => [RegNoMatch],
@@ -255,8 +261,9 @@ public static class DocumentFieldKeys
     public static IReadOnlyList<string> AcceptedFor(string documentKind, string? side) =>
         (documentKind, side) switch
         {
-            (DocumentKinds.DrivingLicense, DocumentSides.Back) => [AllowedVehicleTypes],
-            (DocumentKinds.DrivingLicense, _) => [LicenceNo, LicenceExpiry, NicNo],
+            // Δ MCS-20 — expiry is a BACK field; see RequiredFor above.
+            (DocumentKinds.DrivingLicense, DocumentSides.Back) => [AllowedVehicleTypes, LicenceExpiry],
+            (DocumentKinds.DrivingLicense, _) => [LicenceNo, NicNo],
             (DocumentKinds.Insurance, _) => [InsuranceExpiry, InsurancePolicyNo, Insurer],
             (DocumentKinds.RevenueLicense, _) => [RevenueNo, RevenueExpiry],
             (DocumentKinds.Registration, _) => [RegNoMatch, PlateText],

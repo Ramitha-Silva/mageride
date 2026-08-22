@@ -98,8 +98,14 @@ public static class DocumentFieldKeys
     {
         // A Sri Lankan licence carries its classes on the reverse (AL-29), so which fields are
         // expected depends on which side was scanned.
-        (DocumentKinds.DrivingLicense, DocumentSides.Back) => [AllowedVehicleTypes],
-        (DocumentKinds.DrivingLicense, _) => [LicenceNo, LicenceExpiry],
+        //
+        // Δ MCS-20 — LicenceExpiry moved FRONT -> BACK. The front's `4a` is the date of ISSUE; the
+        // date of expiry is column 11 of the class table on the reverse. Asking the front for "the
+        // date of expiry" got the issue date returned confidently, and that value becomes
+        // `registry.documents.expires_at` and the input to the E-03 suspension sweep — so it was
+        // not a label being wrong, it was the document lifecycle being wrong.
+        (DocumentKinds.DrivingLicense, DocumentSides.Back) => [AllowedVehicleTypes, LicenceExpiry],
+        (DocumentKinds.DrivingLicense, _) => [LicenceNo],
         (DocumentKinds.Insurance, _) => [InsuranceExpiry],
         (DocumentKinds.RevenueLicense, _) => [RevenueNo, RevenueExpiry],
         (DocumentKinds.Registration, _) => [RegNoMatch],
@@ -110,8 +116,9 @@ public static class DocumentFieldKeys
     /// <summary>Every field this kind and side can carry — the required ones plus the extras.</summary>
     public static IReadOnlyList<string> AcceptedFor(string kind, string? side) => (kind, side) switch
     {
-        (DocumentKinds.DrivingLicense, DocumentSides.Back) => [AllowedVehicleTypes],
-        (DocumentKinds.DrivingLicense, _) => [LicenceNo, LicenceExpiry, NicNo],
+        // Δ MCS-20 — expiry is a BACK field; see RequiredFor above.
+        (DocumentKinds.DrivingLicense, DocumentSides.Back) => [AllowedVehicleTypes, LicenceExpiry],
+        (DocumentKinds.DrivingLicense, _) => [LicenceNo, NicNo],
         (DocumentKinds.Insurance, _) => [InsuranceExpiry, InsurancePolicyNo, Insurer],
         (DocumentKinds.RevenueLicense, _) => [RevenueNo, RevenueExpiry],
         (DocumentKinds.Registration, _) => [RegNoMatch, PlateText],
@@ -125,6 +132,116 @@ public static class DocumentFieldKeys
 }
 
 /// <summary>The <c>registry.document_fields.source</c> CHECK — who produced the value (AL-29).</summary>
+/// <summary>
+/// What the model says the document actually IS, as opposed to what the caller claimed
+/// (Δ MCS-21).
+/// </summary>
+/// <remarks>
+/// <para>
+/// Until now nothing in this service validated document TYPE at all: the kind arrived as an
+/// assertion from registry-svc and was injected into the prompt as fact — "This is a Sri Lankan
+/// motor insurance certificate" — so the model was never in a position to disagree. A driver
+/// photographing their revenue licence at the insurance step got a confident set of nulls and
+/// nothing anywhere could say why.
+/// </para>
+/// <para>
+/// A CLOSED set, because an open one cannot be reasoned about: anything the model says that is
+/// not one of these reduces to <see cref="Unclear"/>, which is never acted on.
+/// </para>
+/// </remarks>
+public static class DocumentTypes
+{
+    public const string DrivingLicence = "driving_licence";
+    public const string Insurance = "insurance";
+    public const string RevenueLicence = "revenue_licence";
+    public const string VehiclePhoto = "vehicle_photo";
+
+    /// <summary>A document, but none of the four. Honest, and on its own never a contradiction.</summary>
+    public const string Other = "other";
+
+    /// <summary>Too blurred, too dark or too partial to say. The default for every unknown.</summary>
+    public const string Unclear = "unclear";
+
+    /// <summary>The values the prompt offers and the response schema constrains.</summary>
+    public static readonly IReadOnlyList<string> All =
+        [DrivingLicence, Insurance, RevenueLicence, VehiclePhoto, Other, Unclear];
+
+    /// <summary>
+    /// The reported type, or <see cref="Unclear"/> for anything absent or unrecognised.
+    /// </summary>
+    /// <remarks>
+    /// Every "no information" case collapses here — a missing member, an empty string, a
+    /// synonym the model preferred, a value from a future version of this list. Reducing them
+    /// to <c>unclear</c> rather than to "mismatch" is the whole safety property: this feature
+    /// may only ever act on a POSITIVE identification.
+    /// </remarks>
+    public static string Reduce(string? reported)
+    {
+        if (string.IsNullOrWhiteSpace(reported))
+        {
+            return Unclear;
+        }
+
+        var trimmed = reported.Trim().ToLowerInvariant().Replace(' ', '_');
+
+        return All.Contains(trimmed, StringComparer.Ordinal) ? trimmed : Unclear;
+    }
+
+    /// <summary>The <see cref="DocumentKinds"/> value a reported type corresponds to.</summary>
+    public static string? KindOf(string reported) => reported switch
+    {
+        DrivingLicence => DocumentKinds.DrivingLicense,
+        Insurance => DocumentKinds.Insurance,
+        RevenueLicence => DocumentKinds.RevenueLicense,
+        VehiclePhoto => DocumentKinds.Registration,
+        _ => null,
+    };
+
+    /// <summary>
+    /// Whether the model POSITIVELY identified this as a different document from the one the
+    /// caller claimed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// False for <see cref="Unclear"/>, for an absent answer and for anything unrecognised. The
+    /// asymmetry is deliberate and is already priced into the platform: a MISSED mismatch costs
+    /// a Verification Officer one glance at a document they were opening anyway, because queue
+    /// membership is "has a pending field" and a wrong document almost always has one. A FALSE
+    /// mismatch costs a legitimate driver AL-27's auto-approval, adds a review that would not
+    /// otherwise happen, and does it with no reason attached to anything the driver or the
+    /// support agent can see.
+    /// </para>
+    /// <para>
+    /// <b><see cref="Other"/> never contradicts a vehicle photo.</b> Step 4/4 of the Mode-C
+    /// wizard posts a photograph of a car, and a photograph of a car is a *document* only by
+    /// courtesy — <c>other</c> is the honest answer for one. That cell is the highest
+    /// false-positive risk in the whole matrix, so it is excluded by construction rather than
+    /// by tuning.
+    /// </para>
+    /// </remarks>
+    public static bool Contradicts(string? reported, string claimedKind)
+    {
+        var reduced = Reduce(reported);
+
+        if (reduced == Unclear)
+        {
+            return false;
+        }
+
+        // `other` is "a document, but not one of the four". On a vehicle photo that is correct
+        // rather than contradictory; elsewhere it is not enough to act on either, because it
+        // names nothing.
+        if (reduced == Other)
+        {
+            return false;
+        }
+
+        var identified = KindOf(reduced);
+
+        return identified is not null && !string.Equals(identified, claimedKind, StringComparison.Ordinal);
+    }
+}
+
 public static class FieldSources
 {
     /// <summary>Extracted here. Everything this service emits is <c>ai</c>.</summary>

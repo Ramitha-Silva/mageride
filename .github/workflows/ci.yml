@@ -434,6 +434,23 @@ jobs:
             echo "::notice::':shared' has no build script yet (C011) — wave-1 verify skipped"
           fi
           if [ -f apps/driver-android/build.gradle.kts ]; then
+            # Δ MCS-19 — the app modules' UNIT TESTS, which this leg has never run.
+            #
+            # It assembled both apps and tested only `:shared`, so every test under
+            # apps/*-android/src/test was written, committed and never executed by CI — 347 of
+            # them in the driver app alone. `assembleRelease` compiles them not at all: a test
+            # source set is not on the release compile path, so even a test that no longer
+            # COMPILES was invisible here.
+            #
+            # Found by building the APK by hand after MCS-15: one test failed immediately, and it
+            # was a deliberate assertion (OnboardingErrorsTest) contradicting a fix that had
+            # already been merged green. The tests that hold the driver-facing error copy, the
+            # Profile Setup view model and the trilingual string rule were all in that blind spot.
+            #
+            # Before assembleRelease, so a red test stops the build rather than producing an APK
+            # nobody should install.
+            ./gradlew --no-daemon \
+              :apps:driver-android:testDebugUnitTest :apps:passenger-android:testDebugUnitTest
             ./gradlew --no-daemon :apps:driver-android:assembleRelease :apps:passenger-android:assembleRelease
           else
             echo "::notice::the Android app modules have no build scripts yet (C067/C076)"

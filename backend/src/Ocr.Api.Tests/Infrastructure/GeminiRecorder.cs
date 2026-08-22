@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
+using MageRide.Ocr.Domain;
 using MageRide.Ocr.Gemini;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
@@ -58,7 +59,20 @@ internal sealed class GeminiRecorder : IAsyncDisposable
 
     /// <summary>Answers with these fields, whatever the document was.</summary>
     public void Answer(params (string Key, string? Value, decimal? Confidence)[] fields) =>
-        Responder = _ => (HttpStatusCode.OK, Envelope(fields));
+        Responder = call => (HttpStatusCode.OK, Envelope(fields, DocumentTypeFor(call.Prompt)));
+
+    /// <summary>
+    /// Answers with these fields while identifying the document as <paramref name="documentType"/>
+    /// (Δ MCS-21).
+    /// </summary>
+    /// <remarks>
+    /// The double answers for ANY model and used to answer for any document too — it echoed back
+    /// whatever the prompt asked for, so it agreed with the caller's claim by construction. That
+    /// made a type MISMATCH unreproducible: the one case the feature exists for was the one case
+    /// no test could express.
+    /// </remarks>
+    public void AnswerAs(string documentType, params (string Key, string? Value, decimal? Confidence)[] fields) =>
+        Responder = _ => (HttpStatusCode.OK, Envelope(fields, documentType));
 
     public static async Task<GeminiRecorder> StartAsync()
     {
@@ -157,8 +171,49 @@ internal sealed class GeminiRecorder : IAsyncDisposable
             fields.Add((key, ValueFor(key), 0.96m));
         }
 
-        return Envelope([.. fields]);
+        return Envelope([.. fields], DocumentTypeFor(call.Prompt));
     }
+
+    /// <summary>
+    /// The document type a clean read reports: whatever the prompt says the caller expects
+    /// (Δ MCS-21).
+    /// </summary>
+    /// <remarks>
+    /// Read off the prompt rather than hard-coded, so the default stays "the model agrees" for
+    /// every kind without this double carrying its own copy of the kind list. A mismatch is asked
+    /// for explicitly through <see cref="AnswerAs"/>, which is the only way a test should get one.
+    /// </remarks>
+    private static string DocumentTypeFor(string prompt)
+    {
+        // ONLY the caller's claim, never the whole prompt. Δ MCS-21 added a block listing every
+        // document type the model may answer with — so "driving licence" now appears in EVERY
+        // prompt, and matching against the whole thing classified an insurance certificate as a
+        // licence, contradicted it, and turned four green tests red. The claim is the one line
+        // after this marker.
+        var marker = prompt.IndexOf(GeminiPrompts.ClaimMarker, StringComparison.Ordinal);
+        var claim = marker < 0 ? prompt : prompt[(marker + GeminiPrompts.ClaimMarker.Length)..];
+
+        if (claim.Contains("driving licence", StringComparison.OrdinalIgnoreCase))
+        {
+            return DocumentTypes.DrivingLicence;
+        }
+
+        if (claim.Contains("insurance", StringComparison.OrdinalIgnoreCase))
+        {
+            return DocumentTypes.Insurance;
+        }
+
+        if (claim.Contains("revenue licence", StringComparison.OrdinalIgnoreCase))
+        {
+            return DocumentTypes.RevenueLicence;
+        }
+
+        return claim.Contains("photograph", StringComparison.OrdinalIgnoreCase)
+            ? DocumentTypes.VehiclePhoto
+            : DocumentTypes.Unclear;
+    }
+
+
 
     private static string? ValueFor(string key) => key switch
     {
@@ -181,10 +236,12 @@ internal sealed class GeminiRecorder : IAsyncDisposable
         _ => null,
     };
 
-    private static string Envelope((string Key, string? Value, decimal? Confidence)[] fields)
+    private static string Envelope(
+        (string Key, string? Value, decimal? Confidence)[] fields, string documentType)
     {
         var payload = new
         {
+            document_type = documentType,
             fields = fields.Select(field => new { key = field.Key, value = field.Value, confidence = field.Confidence }),
         };
 

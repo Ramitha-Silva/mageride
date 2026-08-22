@@ -10,7 +10,12 @@ using Microsoft.Extensions.Options;
 namespace MageRide.Ocr.Gemini;
 
 /// <summary>What the model returned for one document, before any verdict is applied to it.</summary>
-public sealed record GeminiExtraction(IReadOnlyList<ExtractedField> Fields);
+/// <param name="DocumentType">
+/// What the model said the image ACTUALLY shows, already reduced to <see cref="DocumentTypes"/>'s
+/// closed set (Δ MCS-21). <c>unclear</c> whenever it was absent, unrecognised or unreadable — the
+/// three cases that carry no information and are never acted on.
+/// </param>
+public sealed record GeminiExtraction(IReadOnlyList<ExtractedField> Fields, string DocumentType);
 
 /// <summary>
 /// D6' §7.5's primary path: Gemini Flash, on the redacted image where there is one.
@@ -134,10 +139,44 @@ public sealed class GeminiFieldExtractor
             ])],
             // Zero temperature: this is a transcription, and a model free to vary is a model that
             // returns a different expiry for the same certificate on a retry.
-            new GeminiGenerationConfig(0, "application/json", _options.Gemini.MaxOutputTokens));
+            new GeminiGenerationConfig(
+                0,
+                "application/json",
+                _options.Gemini.MaxOutputTokens,
+                ResponseSchema));
 
         return JsonSerializer.Serialize(payload, GeminiJson.Options);
     }
+
+    /// <summary>
+    /// The shape the model must answer in (Δ MCS-21).
+    /// </summary>
+    /// <remarks>
+    /// Static: the field LIST varies per document kind, but the schema deliberately does not
+    /// constrain which keys appear — the prompt names them and
+    /// <see cref="GeminiFieldExtractor"/> already drops anything unasked-for. What this pins is the
+    /// one thing prose could not: that <c>document_type</c> is present and is one of the closed
+    /// set, so "the model could not tell" and "the model ignored the instruction" stop being the
+    /// same null.
+    /// </remarks>
+    private static readonly GeminiSchema ResponseSchema = new(
+        "object",
+        Properties: new Dictionary<string, GeminiSchema>(StringComparer.Ordinal)
+        {
+            ["document_type"] = new("string", Enum: DocumentTypes.All),
+            ["fields"] = new(
+                "array",
+                Items: new(
+                    "object",
+                    Properties: new Dictionary<string, GeminiSchema>(StringComparer.Ordinal)
+                    {
+                        ["key"] = new("string"),
+                        ["value"] = new("string"),
+                        ["confidence"] = new("number"),
+                    },
+                    Required: ["key"])),
+        },
+        Required: ["document_type", "fields"]);
 
     private GeminiExtraction? Parse(string body, ExtractionRequest request)
     {
@@ -204,7 +243,7 @@ public sealed class GeminiFieldExtractor
                 Clamp(field.Confidence)))
             .ToArray();
 
-        return new GeminiExtraction(extracted);
+        return new GeminiExtraction(extracted, DocumentTypes.Reduce(fields.DocumentType));
     }
 
     /// <summary>
@@ -275,7 +314,27 @@ internal sealed record GeminiPart(string? Text, GeminiInlineData? InlineData);
 
 internal sealed record GeminiInlineData(string MimeType, string Data);
 
-internal sealed record GeminiGenerationConfig(double Temperature, string ResponseMimeType, int MaxOutputTokens);
+/// <param name="ResponseSchema">
+/// Δ MCS-21 — the shape is now CONSTRAINED rather than requested in prose.
+///
+/// Without it, a model that ignored the instruction and returned only <c>fields</c> is
+/// indistinguishable from one that looked at the document and could not say — both arrive as a null
+/// <c>document_type</c>. Both reduce to <c>unclear</c> and neither is acted on, so nothing unsafe
+/// happens either way; but the feature would then silently never fire and nothing would say so.
+/// </param>
+internal sealed record GeminiGenerationConfig(
+    double Temperature,
+    string ResponseMimeType,
+    int MaxOutputTokens,
+    GeminiSchema? ResponseSchema = null);
+
+/// <summary>A Gemini <c>responseSchema</c> node — the OpenAPI subset the API accepts.</summary>
+internal sealed record GeminiSchema(
+    string Type,
+    IReadOnlyDictionary<string, GeminiSchema>? Properties = null,
+    GeminiSchema? Items = null,
+    IReadOnlyList<string>? Enum = null,
+    IReadOnlyList<string>? Required = null);
 
 internal sealed record GeminiResponse(IReadOnlyList<GeminiCandidate>? Candidates);
 
@@ -298,6 +357,14 @@ internal sealed record GeminiContentResponse(IReadOnlyList<GeminiPartResponse>? 
 
 internal sealed record GeminiPartResponse(string? Text);
 
-internal sealed record GeminiFields(IReadOnlyList<GeminiField>? Fields);
+/// <param name="DocumentType">
+/// What the model says the image actually shows (Δ MCS-21). Constrained by the response schema to
+/// <see cref="DocumentTypes.All"/>, and reduced to <c>unclear</c> by <see cref="DocumentTypes.Reduce"/>
+/// if it arrives absent or as anything else — a missing classification and a wrong one are the same
+/// "no information", and neither is ever acted on.
+/// </param>
+internal sealed record GeminiFields(
+    [property: JsonPropertyName("document_type")] string? DocumentType,
+    IReadOnlyList<GeminiField>? Fields);
 
 internal sealed record GeminiField(string? Key, string? Value, double? Confidence);

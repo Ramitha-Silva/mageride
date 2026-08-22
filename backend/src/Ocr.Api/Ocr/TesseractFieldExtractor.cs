@@ -75,7 +75,14 @@ public sealed class TesseractFieldExtractor
         DocumentFieldKeys.PlateText =>
             Found(PlateNumbers.Read(text), lines, DocumentFieldKeys.PlateText),
 
-        DocumentFieldKeys.LicenceExpiry => Date(lines, ExpiryLabels),
+        // Δ MCS-20 — the licence expiry does NOT fall back to "the latest date on the page".
+        // It is now read from the BACK, whose class table prints an issue date (column 10) AND an
+        // expiry date (column 11) on every row. This engine has no layout model — that is why its
+        // confidence is capped below the auto-verify threshold — so it cannot tell the two columns
+        // apart, and "the latest date" is as likely to be a later class's issue date as the answer.
+        // Unlabelled, it returns nothing, the field reads unread, and an officer fills it in. That
+        // is the outcome C054 already prefers to a confident guess.
+        DocumentFieldKeys.LicenceExpiry => Date(lines, ExpiryLabels, fallbackToLatest: false),
         DocumentFieldKeys.InsuranceExpiry => Date(lines, ExpiryLabels),
         DocumentFieldKeys.RevenueExpiry => Date(lines, ExpiryLabels),
         DocumentFieldKeys.PermitExpiry => Date(lines, ExpiryLabels),
@@ -91,19 +98,34 @@ public sealed class TesseractFieldExtractor
         _ => (null, 0m),
     };
 
+    // Δ MCS-20 — "4b" is gone. It is a FRONT-side field number, and on a Sri Lankan licence the
+    // front carries the date of ISSUE (4a); the expiry is column 11 of the reverse. Left in, it was
+    // an anchor pointing at the wrong side of the wrong document.
     private static readonly string[] ExpiryLabels =
-        ["expiry", "expires", "expire", "valid to", "valid till", "valid until", "date of expiry", "4b"];
+        ["expiry", "expires", "expire", "valid to", "valid till", "valid until", "date of expiry"];
 
     /// <summary>
-    /// The date nearest an expiry label, or — failing that — the latest date on the page.
+    /// The date nearest an expiry label, or — when <paramref name="fallbackToLatest"/> — the latest
+    /// date on the page.
     /// </summary>
     /// <remarks>
-    /// The fallback is deliberate and is why the ceiling above exists. A document that prints an
+    /// <para>
+    /// The fallback is deliberate and is why the ceiling above exists. A certificate that prints an
     /// issue date and an expiry date and labels neither in a way this recognises still yields the
     /// later of the two, which is right far more often than it is wrong; a Verification Officer
     /// confirms it either way, and returning nothing would have made the same officer type it.
+    /// </para>
+    /// <para>
+    /// <b>Δ MCS-20 — the driving licence opts OUT of that fallback.</b> "The two dates on this
+    /// document are an issue date and an expiry date" is what makes taking the later one sound;
+    /// the licence reverse prints a TABLE with one issue and one expiry per class, so the latest
+    /// date on the page is as likely to be a later class's issue date as it is the answer. And the
+    /// answer wanted is the EARLIEST expiry across the classes, which no ordering over undifferent-
+    /// iated dates can produce. Unlabelled, it returns nothing and the officer fills it in.
+    /// </para>
     /// </remarks>
-    private static (string? Value, decimal Confidence) Date(IReadOnlyList<OcrLine> lines, string[] labels)
+    private static (string? Value, decimal Confidence) Date(
+        IReadOnlyList<OcrLine> lines, string[] labels, bool fallbackToLatest = true)
     {
         foreach (var line in lines)
         {
@@ -124,6 +146,11 @@ public sealed class TesseractFieldExtractor
             {
                 return (below, Math.Min(line.Confidence, next.Confidence));
             }
+        }
+
+        if (!fallbackToLatest)
+        {
+            return (null, 0m);
         }
 
         var latest = lines

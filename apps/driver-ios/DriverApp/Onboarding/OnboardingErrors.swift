@@ -30,6 +30,27 @@ enum OnboardingErrors {
             return "error_otp_rate_limited"
 
         default:
+            // Δ MCS-23 — the branch Android carries, and iOS was missing it.
+            //
+            // `Serialization` overrides `code` to nil, so it fell straight to `key(for:)` and came
+            // out `error_generic` — "Something went wrong. Please try again." That is the message a
+            // driver stared at through MCS-15 while retrying re-sent the same images to the same
+            // defect. A malformed body is a platform bug and it will be the same shape next time;
+            // same argument as `PayloadTooLarge` above.
+            //
+            // **Matched on the class NAME, not with `case is`, and that is not a shortcut.**
+            // `MageRideErrorSerialization` does not exist in Swift: Kotlin/Native renames the type
+            // on export because `kotlinx-serialization` is an `api` dependency of this framework
+            // and the symbol collides. Its siblings on this switch — Network, Timeout,
+            // CircuitOpen, PayloadTooLarge — export unmangled and are matched normally. The
+            // mangled spelling can only be read off a framework built on macOS, which this
+            // repository's build host cannot do, so naming it here would be a guess costing a full
+            // CI cycle per attempt. The Kotlin class name is stable whatever the ObjC exporter
+            // does with it.
+            if String(describing: type(of: failure)).contains("Serialization") {
+                return "error_malformed_response"
+            }
+
             return key(for: failure.code)
         }
     }

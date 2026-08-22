@@ -65,10 +65,28 @@ class OnboardingErrorsTest {
         assertEquals(R.string.error_offline, OnboardingErrors.messageFor(MageRideError.Network(IOException())))
         assertEquals(R.string.error_offline, OnboardingErrors.messageFor(MageRideError.Timeout(IOException())))
 
-        // A malformed 2xx body is a contract violation the driver can do nothing about, and
-        // "try again in a moment" would be a promise this app cannot keep — the body will be the
-        // same shape next time. It keeps the generic message on purpose.
-        assertEquals(R.string.error_generic, OnboardingErrors.messageFor(MageRideError.Serialization(IOException())))
+        // Δ MCS-15 — `Serialization` has its own copy now, and this assertion is REVERSED.
+        //
+        // It used to expect `error_generic`, and the reason recorded beside it was that "'try
+        // again in a moment' would be a promise this app cannot keep — the body will be the same
+        // shape next time". That reasoning is right and it argued against its own assertion:
+        // `error_generic` IS "Something went wrong. Please try again." The test asked for a message
+        // that does not promise a retry and then pinned the one that does.
+        //
+        // It cost a real driver a day. When registry-svc started returning `auto_verified` — a
+        // member the KMP `VerifyStatus` enum did not have — SCR-DA-003a showed "Something went
+        // wrong. Please try again." over an HTTP 200, and retrying re-sent the same images to the
+        // same defect for as long as anyone was willing to keep tapping.
+        //
+        // `error_malformed_response` says what the comment always meant: the app could not read the
+        // reply, update it or contact support. Same argument as `PayloadTooLarge` one branch above.
+        assertEquals(
+            R.string.error_malformed_response,
+            OnboardingErrors.messageFor(MageRideError.Serialization(IOException())),
+        )
+
+        // An unexpected throwable is still the generic message: nothing is known about it, so
+        // there is nothing better to say.
         assertEquals(R.string.error_generic, OnboardingErrors.messageFor(IllegalStateException("boom")))
     }
 

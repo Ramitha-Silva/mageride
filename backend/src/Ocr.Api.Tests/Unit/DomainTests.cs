@@ -301,3 +301,101 @@ public sealed class DocumentVocabularyTests
             DocumentFieldKeys.NicNo, DocumentFieldKeys.RequiredFor(DocumentKinds.DrivingLicense, null));
     }
 }
+
+/// <summary>
+/// Δ MCS-21 — whether the model positively identified a DIFFERENT document from the claimed one.
+/// </summary>
+/// <remarks>
+/// The asymmetry these tests pin is the whole feature: a MISSED mismatch costs an officer one
+/// glance at a document they were opening anyway, and a FALSE one costs a legitimate driver AL-27's
+/// auto-approval with no reason attached to anything they or a support agent can see. So every
+/// "no information" case must answer false.
+/// </remarks>
+public sealed class DocumentTypeTests
+{
+    [Theory]
+    [InlineData("insurance", DocumentKinds.DrivingLicense)]
+    [InlineData("driving_licence", DocumentKinds.Insurance)]
+    [InlineData("revenue_licence", DocumentKinds.Insurance)]
+    [InlineData("driving_licence", DocumentKinds.RevenueLicense)]
+    public void A_positive_identification_of_another_kind_contradicts(string reported, string claimed) =>
+        Assert.True(DocumentTypes.Contradicts(reported, claimed));
+
+    [Theory]
+    [InlineData("driving_licence", DocumentKinds.DrivingLicense)]
+    [InlineData("insurance", DocumentKinds.Insurance)]
+    [InlineData("revenue_licence", DocumentKinds.RevenueLicense)]
+    [InlineData("vehicle_photo", DocumentKinds.Registration)]
+    public void The_document_it_was_claimed_to_be_never_contradicts(string reported, string claimed) =>
+        Assert.False(DocumentTypes.Contradicts(reported, claimed));
+
+    [Theory]
+    // Every one of these is "no information", and acting on any of them would block a driver on a
+    // document nothing actually identified.
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("unclear")]
+    [InlineData("passport")]              // not in the closed set
+    [InlineData("DRIVING LICENCE MAYBE")] // not in the closed set either
+    public void Nothing_unknown_or_unclear_ever_contradicts(string? reported) =>
+        Assert.False(DocumentTypes.Contradicts(reported, DocumentKinds.Insurance));
+
+    [Fact]
+    public void Other_never_contradicts_a_vehicle_photo()
+    {
+        // Step 4/4 posts a photograph of a car, and a photograph of a car is a document only by
+        // courtesy — `other` is the honest answer for one. This is the highest false-positive cell
+        // in the matrix and it is excluded by construction rather than by tuning.
+        Assert.False(DocumentTypes.Contradicts("other", DocumentKinds.Registration));
+
+        // And `other` names nothing, so it is not enough to act on anywhere else either.
+        Assert.False(DocumentTypes.Contradicts("other", DocumentKinds.Insurance));
+    }
+
+    [Theory]
+    [InlineData("Insurance", "insurance")]
+    [InlineData("  revenue_licence  ", "revenue_licence")]
+    [InlineData("vehicle photo", "vehicle_photo")]
+    [InlineData("something else", "unclear")]
+    [InlineData(null, "unclear")]
+    public void Reduce_collapses_everything_it_does_not_recognise_to_unclear(string? reported, string expected) =>
+        Assert.Equal(expected, DocumentTypes.Reduce(reported));
+}
+
+/// <summary>Δ MCS-20 — the licence expiry is a BACK field, on both services' tables.</summary>
+public sealed class LicenceExpirySideTests
+{
+    [Fact]
+    public void The_expiry_is_required_and_accepted_on_the_back()
+    {
+        Assert.Contains(
+            DocumentFieldKeys.LicenceExpiry,
+            DocumentFieldKeys.RequiredFor(DocumentKinds.DrivingLicense, DocumentSides.Back));
+        Assert.Contains(
+            DocumentFieldKeys.LicenceExpiry,
+            DocumentFieldKeys.AcceptedFor(DocumentKinds.DrivingLicense, DocumentSides.Back));
+    }
+
+    [Fact]
+    public void The_expiry_is_not_asked_of_the_front()
+    {
+        // 4a on the front is the date of ISSUE. Asking the front for "the date of expiry" is what
+        // returned it, and that value becomes registry.documents.expires_at and the input to E-03.
+        Assert.DoesNotContain(
+            DocumentFieldKeys.LicenceExpiry,
+            DocumentFieldKeys.RequiredFor(DocumentKinds.DrivingLicense, DocumentSides.Front));
+        Assert.DoesNotContain(
+            DocumentFieldKeys.LicenceExpiry,
+            DocumentFieldKeys.AcceptedFor(DocumentKinds.DrivingLicense, DocumentSides.Front));
+    }
+
+    [Fact]
+    public void The_back_prompt_names_column_11_and_asks_for_the_earliest()
+    {
+        var prompt = GeminiPrompts.For(DocumentKinds.DrivingLicense, DocumentSides.Back, redacted: false);
+
+        Assert.Contains("column 11", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("EARLIEST", prompt, StringComparison.Ordinal);
+    }
+}

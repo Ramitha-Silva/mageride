@@ -105,14 +105,19 @@ internal sealed class FakeDocumentExtractionClient : IDocumentExtractionClient
 
         return (request.Kind, request.Side) switch
         {
+            // Δ MCS-20 — the EXPIRY IS ON THE BACK, with the classes.
+            //
+            // `4a` on the front is the date of ISSUE; the expiry is column 11 of the class table on
+            // the reverse. This double answered it on the front, which is where registry-svc used to
+            // ask for it — so it agreed with the defect and three tests passed on the wrong layout.
             (DocumentKinds.DrivingLicense, DocumentSides.Back) => new DocumentExtraction(true,
             [
                 new ExtractedField(DocumentFieldKeys.AllowedVehicleTypes, "three_wheeler,sedan", Confident),
+                new ExtractedField(DocumentFieldKeys.LicenceExpiry, Date(DateTimeOffset.UtcNow.AddYears(5)), Confident),
             ]),
             (DocumentKinds.DrivingLicense, _) => new DocumentExtraction(true,
             [
                 new ExtractedField(DocumentFieldKeys.LicenceNo, "B1234567", Confident),
-                new ExtractedField(DocumentFieldKeys.LicenceExpiry, Date(DateTimeOffset.UtcNow.AddYears(5)), Confident),
                 new ExtractedField(DocumentFieldKeys.NicNo, "199012345678", Confident),
             ]),
             (DocumentKinds.Insurance, _) => new DocumentExtraction(true,
