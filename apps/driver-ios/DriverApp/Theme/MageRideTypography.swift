@@ -70,8 +70,9 @@ enum MageRideTextRole: String, CaseIterable {
     var cssWeight: Int {
         switch self {
         case .display, .headline: return 700
-        case .title, .subtitle, .label: return 600
-        case .bodyEmphasis: return 500
+        case .title, .subtitle: return 600
+        // `label` is 500, not 600 — D2 §A's "Label / tag" row. It sat with the 600s.
+        case .bodyEmphasis, .label: return 500
         case .body, .bodySmall, .caption: return 400
         }
     }

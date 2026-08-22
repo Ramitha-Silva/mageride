@@ -135,10 +135,19 @@ final class PassengerLiveMapTests: XCTestCase {
         await eventually("first join") { await self.transport.cells(of: self.joinMethod) != nil }
         await transport.clearSent()
 
+        // Each fix is let land BEFORE the clock moves again. `onPosition` hands the point to an
+        // actor in a detached `Task` and the hysteresis reads `now()` inside it, so advancing the
+        // clock straight after the call lets all three run at the final time — where the Borella
+        // crossing is 70 s past its 30 s hold and legitimately churns the groups. The rule under
+        // test is what happens when the passenger returns INSIDE the window.
         clock.advance(seconds: 5)
         live.onPosition(LiveFixtures.borella)     // held
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
         clock.advance(seconds: 5)
         live.onPosition(LiveFixtures.colombo)     // back — the held crossing is moot
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
         clock.advance(seconds: 60)
         live.refreshCells()
         try? await Task.sleep(nanoseconds: 150_000_000)

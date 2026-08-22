@@ -56,8 +56,16 @@ enum VehicleToken: String, CaseIterable {
         case .motorbike: return "bicycle"
         case .threeWheeler: return "box.truck.fill"
         case .flex, .sedan: return "car.fill"
-        case .miniVan, .van: return "van.fill"
-        case .truck, .miniTruck: return "truck.box.fill"
+        // **Neither of these is the spec's name, and both need a D2 §0.2 micro-change-set.**
+        // `van.fill` has never been an SF Symbol in any release, so this drew nothing at all;
+        // `bus.fill` (iOS 14) is the closest silhouette Apple ships for D2's `airport_shuttle`,
+        // which is the same fallback `threeWheeler` above already takes.
+        case .miniVan, .van: return "bus.fill"
+        // `truck.box.fill` is iOS **17** and this app's floor is 16.0, so it drew nothing on the
+        // floor — and no test could see it, because they run on a current simulator where it
+        // resolves. `box.truck.fill` is the iOS 16 spelling, and is the one this type's own doc
+        // comment names.
+        case .truck, .miniTruck: return "box.truck.fill"
         case .privateHire: return "shippingbox.fill"
         }
     }

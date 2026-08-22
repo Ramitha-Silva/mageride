@@ -212,8 +212,12 @@ final class LoginModel: ObservableObject {
     private func apply(_ challenge: LoginChallenge) {
         state.attemptsRemaining = challenge.attemptsRemaining
         countdown?.cancel()
-        // `Task { }` started from a `@MainActor` context runs on the main actor, so the assignment
-        // below needs no hop of its own.
+        // Seeded HERE, before the ticker, and not only inside it. A `Task` started from a
+        // `@MainActor` context is scheduled rather than run, so between `apply` returning and the
+        // first tick `resendInSeconds` was still 0 — which makes `canResend` true and lets a resend
+        // reach the gateway inside the cooldown the challenge just declared. The loop below then
+        // re-reads the same clock every second, which is what survives a backgrounded screen.
+        state.resendInSeconds = max(0, Int(challenge.resendAllowedAt.timeIntervalSinceNow.rounded(.up)))
         countdown = Task { [weak self] in
             while !Task.isCancelled {
                 let remaining = Int(challenge.resendAllowedAt.timeIntervalSinceNow.rounded(.up))

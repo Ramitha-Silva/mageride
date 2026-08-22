@@ -96,10 +96,10 @@ final class MapAndVehicleTokenTests: XCTestCase {
             .threeWheeler: "box.truck.fill",
             .flex: "car.fill",
             .sedan: "car.fill",
-            .miniVan: "van.fill",
-            .van: "van.fill",
-            .truck: "truck.box.fill",
-            .miniTruck: "truck.box.fill",
+            .miniVan: "bus.fill",
+            .van: "bus.fill",
+            .truck: "box.truck.fill",
+            .miniTruck: "box.truck.fill",
             .privateHire: "shippingbox.fill",
         ]
         for token in VehicleToken.allCases {

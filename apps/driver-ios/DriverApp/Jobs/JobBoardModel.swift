@@ -195,14 +195,19 @@ final class JobBoardModel: ObservableObject {
             return
         }
 
+        // Answered here, before the read, and not inside it. `hasJobBoardAccess` settled the gate
+        // above; a board read that then fails is an error to retry, not an unanswered gate — and
+        // leaving `isGated` nil makes ``JobBoardState/isUnavailable`` true, so the screen draws
+        // "no board here" over copy the driver could have acted on.
+        state.isGated = false
+        state.minimumLevel = standing.jobBoardMinLevel
+
         do {
             let rides = try await jobs.board(
                 lat: here.lat,
                 lng: here.lng,
                 radiusMetres: Int(JobBoard.companion.CATCHMENT_METRES)
             )
-            state.isGated = false
-            state.minimumLevel = standing.jobBoardMinLevel
             state.rows = rows(from: rides, standing: standing)
         } catch {
             state.errorKey = OnboardingErrors.messageKey(for: error)

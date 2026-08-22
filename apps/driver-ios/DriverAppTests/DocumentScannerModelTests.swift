@@ -156,6 +156,10 @@ final class DocumentScannerModelTests: XCTestCase {
             makeModel(for: .revenueLicence).state.titleText,
             "capture_title".localisedFormat("capture_target_revenue_licence".localised)
         )
+        // A fresh coordinator, as `setUp` builds one: `captures` is shared by both `makeModel` calls
+        // here and the first one opened a target on it, so "nothing pending" has to be made true
+        // rather than assumed.
+        captures = DocumentCaptureCoordinator()
         XCTAssertEqual(makeModel(for: nil).state.titleText, "capture_title_generic".localised)
     }
 

@@ -72,6 +72,9 @@ final class ProfileSetupModelTests: XCTestCase {
     }
 
     func testTheNameIsTheOneRequiredField() async {
+        // The shared fixture ships a name and this screen is the FIRST profile, where there is not
+        // one yet — so the precondition is set rather than assumed.
+        profiles.profile = Fixtures.profile(firstName: nil)
         let model = model()
         await model.load()
 

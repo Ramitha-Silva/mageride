@@ -39,6 +39,8 @@ final class FakeBookingRepository: BookingRepository, @unchecked Sendable {
     var created = BookingFixtures.createdRequest()
     var locationRequest = BookingFixtures.locationRequest(state: LocationRequestState.pending)
 
+    private let estimateLock = NSLock()
+
     /// Every call, in order — several rules here are about *what was sent* rather than about state.
     private(set) var estimatedTypes: [RideVehicleType] = []
     private(set) var requested: [RideRequest] = []
@@ -71,7 +73,12 @@ final class FakeBookingRepository: BookingRepository, @unchecked Sendable {
         vehicleType: RideVehicleType,
         kind: FareEstimateKind
     ) async throws -> FareEstimateResponse {
+        // Locked: ``RideBookingModel`` quotes every tier in a `withTaskGroup`, so this runs on six
+        // tasks at once. `@unchecked Sendable` on this class is a promise a bare `append` does not
+        // keep — the unsynchronised mutation was corrupting memory and crashing the test with SIGSEGV.
+        estimateLock.lock()
         estimatedTypes.append(vehicleType)
+        estimateLock.unlock()
         if let estimateFailure { throw estimateFailure }
         return FareEstimateResponse(
             fareEstimateToken: estimateToken,
