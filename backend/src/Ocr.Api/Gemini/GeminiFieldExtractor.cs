@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -237,10 +236,21 @@ public sealed class GeminiFieldExtractor
     /// A confidence outside 0–1, or absent, reads as none — which is treated exactly like a
     /// below-threshold one.
     /// </summary>
+    /// <remarks>
+    /// <b>Δ MCS-17 — TRUNCATED to three places, not rounded to them.</b> This used to round-trip
+    /// through <c>ToString("0.###")</c>, which rounds half away from zero: a model that reported
+    /// <c>0.7996</c> — having been told by <see cref="GeminiPrompts"/> that below 0.8 means "a
+    /// human should check it" — arrived as <c>0.8m</c> and cleared a <c>0.80</c> threshold it had
+    /// explicitly declined to meet. The number is the ONLY input to the auto-verify decision
+    /// (<c>FieldVerdicts.IsPending</c>, and registry-svc's <c>DeriveVerifyStatus</c> re-derives the
+    /// same rule), so rounding it upward across the boundary silently converts an officer review
+    /// into a trusted value. Truncation can only ever move a value further from auto-verified,
+    /// which is the safe direction for a number nothing measures.
+    /// </remarks>
     private static decimal? Clamp(double? confidence) =>
         confidence is null || double.IsNaN(confidence.Value) || confidence is < 0 or > 1
             ? null
-            : decimal.Parse(confidence.Value.ToString("0.###", CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
+            : Math.Floor((decimal)confidence.Value * 1000m) / 1000m;
 }
 
 /// <summary>
@@ -269,7 +279,20 @@ internal sealed record GeminiGenerationConfig(double Temperature, string Respons
 
 internal sealed record GeminiResponse(IReadOnlyList<GeminiCandidate>? Candidates);
 
-internal sealed record GeminiCandidate(GeminiContentResponse? Content, string? FinishReason);
+/// <param name="FinishReason">
+/// Why the model stopped — <c>STOP</c>, <c>MAX_TOKENS</c>, <c>SAFETY</c>, …
+///
+/// <b>Δ MCS-17 — the explicit name is load-bearing.</b> <see cref="GeminiJson.Options"/> sets
+/// <c>SnakeCaseLower</c>, so System.Text.Json looked for <c>finish_reason</c>; Google emits proto3
+/// lowerCamelCase <c>finishReason</c>, and <c>PropertyNameCaseInsensitive</c> bridges case, never an
+/// underscore. So this was ALWAYS null, and the diagnostic at the one place an empty extraction is
+/// reported logged <c>"none"</c> every time — making a truncated answer (<c>MAX_TOKENS</c>, and the
+/// budget is 2048 with no thinking budget set), a blocked one (<c>SAFETY</c>) and a genuinely empty
+/// one indistinguishable. All three fall through to Tesseract identically and silently.
+/// </param>
+internal sealed record GeminiCandidate(
+    GeminiContentResponse? Content,
+    [property: JsonPropertyName("finishReason")] string? FinishReason);
 
 internal sealed record GeminiContentResponse(IReadOnlyList<GeminiPartResponse>? Parts);
 

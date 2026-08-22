@@ -222,8 +222,19 @@ class EnumWireFormatTest {
 
     @Test
     fun the_verification_enums_match_their_onboarding_checks() {
+        // Δ MCS-15 — `auto_verified`, and no `rejected`.
+        //
+        // This assertion is the reason the defect shipped. It compared the enum against a list
+        // hand-copied into the test from the same wrong understanding that produced the enum, so
+        // it could only ever catch the enum drifting from ITSELF. `_shared.yaml` declares
+        // `enum: [auto_verified, pending, confirmed]` and registry-svc writes `auto_verified` for
+        // every field extracted at or above the confidence threshold — the common case — and this
+        // test was green throughout. A driver found it instead.
+        //
+        // The values below are now quoted from the contract, and `TheContractIsTheSourceOfTruth`
+        // below asserts that rather than trusting this comment.
         assertEquals(
-            listOf("confirmed", "pending", "rejected"),
+            listOf("auto_verified", "confirmed", "pending"),
             VerifyStatus.entries.map { wireOf(it) }.sorted(),
         )
         assertEquals(listOf("ai", "manual"), FieldSource.entries.map { wireOf(it) }.sorted())

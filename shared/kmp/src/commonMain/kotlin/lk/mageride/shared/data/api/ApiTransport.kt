@@ -63,7 +63,17 @@ internal suspend fun ApiTransport.apiRequest(
     header(MageRideHeaders.APP_VERSION, config.appVersion)
     header(MageRideHeaders.PLATFORM, config.platform.wire)
     config.userAgent?.let { header(HttpHeaders.UserAgent, it) }
-    requestTimeout?.let { deadline -> timeout { requestTimeoutMillis = deadline.inWholeMilliseconds } }
+    // Δ MCS-14 — the SOCKET deadline moves with the request deadline, and raising one without the
+    // other is the same failure with a different name. `socketTimeout` is the idle gap between two
+    // reads: while the server is running OCR, or waiting on a payment provider, the connection is
+    // silent by definition, so a 90-second call whose socket may go quiet for only 15 would still
+    // be killed at 15 — just by a different plugin. Both are the whole-call deadline here.
+    requestTimeout?.let { deadline ->
+        timeout {
+            requestTimeoutMillis = deadline.inWholeMilliseconds
+            socketTimeoutMillis = deadline.inWholeMilliseconds
+        }
+    }
     configure()
 }
 
@@ -119,12 +129,29 @@ internal suspend fun ApiTransport.apiPostExempt(
     configure = configure,
 )
 
+/**
+ * `PUT`.
+ *
+ * [requestTimeout] overrides the API budget for the call, exactly as [apiPost]'s does. Δ MCS-14
+ * added it because the two multipart onboarding arms are `PUT`s: they carry the image bytes and
+ * their response waits on the OCR extraction, so 15 seconds is shorter than the server's own
+ * deadline for the same work. Until then only `POST` could say so, which is why the profile
+ * upload could not.
+ */
 internal suspend fun ApiTransport.apiPut(
     service: ApiService,
     operationId: String,
     path: String,
+    requestTimeout: Duration? = null,
     configure: HttpRequestBuilder.() -> Unit = {},
-): HttpResponse = apiRequest(service, operationId, HttpMethod.Put, path, configure = configure)
+): HttpResponse = apiRequest(
+    service = service,
+    operationId = operationId,
+    method = HttpMethod.Put,
+    path = path,
+    requestTimeout = requestTimeout,
+    configure = configure,
+)
 
 internal suspend fun ApiTransport.apiDelete(
     service: ApiService,

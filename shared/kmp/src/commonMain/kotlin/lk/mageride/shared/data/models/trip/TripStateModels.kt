@@ -67,9 +67,32 @@ public enum class SessionEndReason(public val wire: String) {
 
     @SerialName("mqtt_offline")
     MQTT_OFFLINE("mqtt_offline"),
+
+    /**
+     * ACC off on a tracker-equipped vehicle (US-3.22/3.23, AL-32).
+     *
+     * **Δ MCS-16 — this and [ADMIN] were missing, and this one is emitted on an ordinary day.**
+     * `SessionService.CloseOnIgnitionOff` writes it (`EndReasons.IgnitionOff`) whenever a tracker
+     * reports the ignition going off, so every Mode A/B session that ends the way most of them end
+     * returned a body neither app could decode — the same defect as MCS-15's `auto_verified`,
+     * one contract along, and still armed.
+     */
+    @SerialName("ignition_off")
+    IGNITION_OFF("ignition_off"),
+
+    /** A support force-end. */
+    @SerialName("admin")
+    ADMIN("admin"),
     ;
 
-    /** Whether a durable timer or the broker ended the session rather than the driver (US-5.10). */
+    /**
+     * Whether a durable timer, the broker, the tracker or support ended the session rather than
+     * the driver (US-5.10).
+     *
+     * Still `!= DRIVER_ENDED` with the two added members, and deliberately so: a driver who
+     * pressed End Journey meant it, and every other reason is the platform deciding on their
+     * behalf — which is exactly what the restart grace exists to let them correct.
+     */
     public val isAutomatic: Boolean get() = this != DRIVER_ENDED
 }
 
