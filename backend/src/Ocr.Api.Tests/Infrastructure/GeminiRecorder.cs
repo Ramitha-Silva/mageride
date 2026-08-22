@@ -190,8 +190,8 @@ internal sealed class GeminiRecorder : IAsyncDisposable
         // prompt, and matching against the whole thing classified an insurance certificate as a
         // licence, contradicted it, and turned four green tests red. The claim is the one line
         // after this marker.
-        var marker = prompt.IndexOf(ClaimMarker, StringComparison.Ordinal);
-        var claim = marker < 0 ? prompt : prompt[(marker + ClaimMarker.Length)..];
+        var marker = prompt.IndexOf(GeminiPrompts.ClaimMarker, StringComparison.Ordinal);
+        var claim = marker < 0 ? prompt : prompt[(marker + GeminiPrompts.ClaimMarker.Length)..];
 
         if (claim.Contains("driving licence", StringComparison.OrdinalIgnoreCase))
         {
@@ -213,8 +213,7 @@ internal sealed class GeminiRecorder : IAsyncDisposable
             : DocumentTypes.Unclear;
     }
 
-    /// <summary>The line <see cref="GeminiPrompts"/> puts the caller's claim on (Δ MCS-21).</summary>
-    private const string ClaimMarker = "Say what you actually see:";
+
 
     private static string? ValueFor(string key) => key switch
     {

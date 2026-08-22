@@ -53,6 +53,19 @@ internal static class GeminiPrompts
         + "null value.\n";
 
     /// <summary>
+    /// The sentence separating the model's own judgement from the caller's claim (Δ MCS-21).
+    /// </summary>
+    /// <remarks>
+    /// A shared constant because the test double has to find it to know what the caller claimed.
+    /// The two were written separately and drifted by one comma, and that is not a small error
+    /// here: the double's fallback when it cannot find the marker is the WHOLE prompt, which since
+    /// this change lists every document type — so every document classified as a driving licence,
+    /// every non-licence was contradicted, and three green tests went red on a feature that was
+    /// working.
+    /// </remarks>
+    internal const string ClaimMarker = "Say what you actually see";
+
+    /// <summary>
     /// What the model is asked to say the document IS, before it reads anything off it (Δ MCS-21).
     /// </summary>
     /// <remarks>
@@ -108,7 +121,7 @@ internal static class GeminiPrompts
             // Δ MCS-21 — "expects this to be", not "this is". The sentence that follows is the
             // caller's claim, and the model has just been asked to judge it; asserting it as fact
             // is what made `document_type` an unanswerable question.
-            + "\nThe caller expects the following. Say what you actually see, not this:\n"
+            + $"\nThe caller expects the following. {ClaimMarker}, not this:\n"
             + Describe(kind, side) + "\n\nKeys to return:\n"
             + string.Join("\n", keys.Select(key => $"  {key} — {Explain(key)}"));
     }
