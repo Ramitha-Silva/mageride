@@ -26,37 +26,6 @@ import lk.mageride.driver.ui.theme.MageRideTheme
 import java.util.Locale
 
 /**
- * Who the driver is, as both SCR-DA-029 and SCR-DA-036 show it (Δ MCS-24).
- *
- * @property name The driver's own name. `null` renders the "not set yet" copy rather than a blank.
- * @property level Driver Level 1–3 (D5' §4.2). `null` while the read is in flight.
- * @property registration The plate of the vehicle this handset is live for (D-03), or `null` when
- *   nothing is eligible — a driver who has not onboarded one, or whose only vehicle is suspended.
- * @property rating The star average out of 5.
- *
- *   **Always `null` today, and that is a spec gap rather than an omission.** No app-facing read
- *   carries a driver's own average: `GET /v1/users/me` has no such field, `GET /v1/drivers/{id}/level`
- *   answers points and not stars, `trips.ratings` has no aggregate read, and the only place a
- *   driver `rating` appears anywhere on the surface is `RideDetail.driver.rating` — the number a
- *   *passenger* is shown about the driver of *their* ride. C070's menu header and C074's profile
- *   card each reached that conclusion independently and each drew an em dash. This carries the
- *   parameter so that the day a read exists, one type gains a value and both screens show it.
- * @property hasPhoto Whether the driver has uploaded one.
- *
- *   The avatar is a glyph either way. `UserProfile.photoUrl` is a URL and this module has no image
- *   loader — no Coil, no Glide, nothing in the catalogue — so there is nothing here that could
- *   fetch it. Drawing the glyph is the honest state; a grey circle that never resolves would look
- *   like a failed load rather than a feature that is not built.
- */
-internal data class DriverHeaderState(
-    val name: String? = null,
-    val level: Int? = null,
-    val registration: String? = null,
-    val rating: Double? = null,
-    val hasPhoto: Boolean = false,
-)
-
-/**
  * The avatar, the name and level, and the vehicle and rating line.
  *
  * **One composable for two screens, deliberately.** The wireframes draw the same block at the top
@@ -130,6 +99,37 @@ internal fun DriverHeader(
         trailing?.invoke()
     }
 }
+
+/**
+ * Who the driver is, as both SCR-DA-029 and SCR-DA-036 show it (Δ MCS-24).
+ *
+ * @property name The driver's own name. `null` renders the "not set yet" copy rather than a blank.
+ * @property level Driver Level 1–3 (D5' §4.2). `null` while the read is in flight.
+ * @property registration The plate of the vehicle this handset is live for (D-03), or `null` when
+ *   nothing is eligible — a driver who has not onboarded one, or whose only vehicle is suspended.
+ * @property rating The star average out of 5.
+ *
+ *   **Always `null` today, and that is a spec gap rather than an omission.** No app-facing read
+ *   carries a driver's own average: `GET /v1/users/me` has no such field, `GET /v1/drivers/{id}/level`
+ *   answers points and not stars, `trips.ratings` has no aggregate read, and the only place a
+ *   driver `rating` appears anywhere on the surface is `RideDetail.driver.rating` — the number a
+ *   *passenger* is shown about the driver of *their* ride. C070's menu header and C074's profile
+ *   card each reached that conclusion independently and each drew an em dash. This carries the
+ *   parameter so that the day a read exists, one type gains a value and both screens show it.
+ * @property hasPhoto Whether the driver has uploaded one.
+ *
+ *   The avatar is a glyph either way. `UserProfile.photoUrl` is a URL and this module has no image
+ *   loader — no Coil, no Glide, nothing in the catalogue — so there is nothing here that could
+ *   fetch it. Drawing the glyph is the honest state; a grey circle that never resolves would look
+ *   like a failed load rather than a feature that is not built.
+ */
+internal data class DriverHeaderState(
+    val name: String? = null,
+    val level: Int? = null,
+    val registration: String? = null,
+    val rating: Double? = null,
+    val hasPhoto: Boolean = false,
+)
 
 /**
  * The plate and the rating, joined by the separator the rest of this app uses.
