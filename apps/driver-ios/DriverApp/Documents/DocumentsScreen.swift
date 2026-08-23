@@ -30,7 +30,7 @@ struct DocumentsScreen: View {
                 if model.offline {
                     // A note rather than an error: the documents below are still the right ones to
                     // show, and this screen's whole purpose is the case where there is no network.
-                    NoticeCard(accent: MageRideColor.secondary) {
+                    NoticeCard(symbolName: "wifi.slash", accent: MageRideColor.secondary) {
                         Text("documents_offline".localised)
                             .mageFont(.label)
                     }
@@ -76,7 +76,7 @@ private struct DocumentCard: View {
                     .foregroundStyle(MageRideColor.onSurfaceVariant)
             }
 
-            if let image = UIImage(data: nsDataOf(bytes: document.bytes) as Data) {
+            if let image = UIImage(data: IosBytesKt.nsDataOf(bytes: document.bytes) as Data) {
                 Image(uiImage: image)
                     .resizable()
                     // Fit, not fill: a document is read, and cropping one to a tidy rectangle is how

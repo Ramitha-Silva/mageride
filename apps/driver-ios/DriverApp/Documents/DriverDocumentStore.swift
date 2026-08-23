@@ -37,7 +37,7 @@ final class ApiDriverDocumentStore: DriverDocumentStore {
     func cached() async -> [CachedDocumentImage] {
         guard let cache = await cache() else { return [] }
 
-        return cache.all(now: nowTimestamp())
+        return cache.all(now: IosInstantKt.nowTimestamp())
     }
 
     func refresh() async throws -> [CachedDocumentImage] {
@@ -54,7 +54,7 @@ final class ApiDriverDocumentStore: DriverDocumentStore {
     }
 
     func sweep() async {
-        await cache()?.forgetExpired(now: nowTimestamp())
+        await cache()?.forgetExpired(now: IosInstantKt.nowTimestamp())
     }
 
     private func fetchIfMissing(_ document: DriverDocument) async {
@@ -91,7 +91,7 @@ final class ApiDriverDocumentStore: DriverDocumentStore {
                 contentType: documentContentType,
                 bytes: bytes,
                 version: version),
-            now: nowTimestamp())
+            now: IosInstantKt.nowTimestamp())
     }
 
     private func cache() async -> DocumentImageCache? {
@@ -99,7 +99,7 @@ final class ApiDriverDocumentStore: DriverDocumentStore {
 
         // `documentImageCacheOf`, not the constructor: `DocumentImageCache` takes a Kotlin
         // `Duration`, which Swift cannot make — see that helper's own remarks.
-        return documentImageCacheOf(db: db, retentionMillis: documentRetention)
+        return IosDocumentImageCacheKt.documentImageCacheOf(db: db, retentionMillis: documentRetention)
     }
 }
 

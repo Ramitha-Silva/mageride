@@ -111,7 +111,7 @@ final class ApiProfileRepository: ProfileRepository {
             name: name,
             level: level.map { KotlinInt(int: $0) },
             registration: registration,
-            at: nowTimestamp())
+            at: IosInstantKt.nowTimestamp())
     }
 
     /// **Bytes rather than a URL, which is the whole point of §3.16.** The signed link carries an
@@ -122,14 +122,14 @@ final class ApiProfileRepository: ProfileRepository {
         let cache = await cache()
 
         guard let link = (try? await registry.getDriverProfile())?.photoUrl else {
-            return cache?.read(driverId: driverId).photoBytes.map { nsDataOf(bytes: $0) as Data }
+            return cache?.read(driverId: driverId).photoBytes.map { IosBytesKt.nsDataOf(bytes: $0) as Data }
         }
 
         let query = signedLinkParameters(link)
         let version = query["v"]
 
         if let cache, !cache.needsPhoto(driverId: driverId, version: version) {
-            return cache.read(driverId: driverId).photoBytes.map { nsDataOf(bytes: $0) as Data }
+            return cache.read(driverId: driverId).photoBytes.map { IosBytesKt.nsDataOf(bytes: $0) as Data }
         }
 
         guard let expires = query["expires"].flatMap(Int64.init),
@@ -138,9 +138,9 @@ final class ApiProfileRepository: ProfileRepository {
                   driverId: driverId, version: version ?? "", expires: expires, signature: signature)
         else { return nil }
 
-        cache?.writePhoto(driverId: driverId, version: version, bytes: bytes, at: nowTimestamp())
+        cache?.writePhoto(driverId: driverId, version: version, bytes: bytes, at: IosInstantKt.nowTimestamp())
 
-        return nsDataOf(bytes: bytes) as Data
+        return IosBytesKt.nsDataOf(bytes: bytes) as Data
     }
 
     private func cache() async -> DriverProfileCache? {

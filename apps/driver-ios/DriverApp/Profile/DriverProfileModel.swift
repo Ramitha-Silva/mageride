@@ -141,7 +141,7 @@ final class DriverProfileModel: ObservableObject {
 
         // A read that has already answered outranks the cache.
         state.registration = state.registration ?? cached.registration
-        state.photo = state.photo ?? cached.photoBytes.map { nsDataOf(bytes: $0) as Data }
+        state.photo = state.photo ?? cached.photoBytes.map { IosBytesKt.nsDataOf(bytes: $0) as Data }
     }
 
     func refresh() async {

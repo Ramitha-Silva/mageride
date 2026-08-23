@@ -42,7 +42,7 @@ final class MenuModel: ObservableObject {
             level: header.level ?? cached.level?.int32Value,
             registration: header.registration ?? cached.registration,
             rating: header.rating,
-            photo: header.photo ?? cached.photoBytes.map { nsDataOf(bytes: $0) as Data })
+            photo: header.photo ?? cached.photoBytes.map { IosBytesKt.nsDataOf(bytes: $0) as Data })
     }
 
     func load() async {
