@@ -1,0 +1,18 @@
+-- Schema 3 -> 4 (Δ MCS-28). Adds mobile_db_schema.md §3.17 `document_images`.
+--
+-- A plain CREATE TABLE: nothing is migrated because nothing existed. The table is a cache and an
+-- empty one is correct — the first document read after the upgrade fills it, and until then the
+-- screens behave exactly as they did before.
+CREATE TABLE document_images (
+    document_id  TEXT NOT NULL PRIMARY KEY,
+    vehicle_id   TEXT,
+    kind         TEXT NOT NULL,
+    side         TEXT,
+    content_type TEXT NOT NULL,
+    bytes        BLOB NOT NULL,
+    version      TEXT,
+    cached_at    INTEGER NOT NULL,
+    expires_at   INTEGER NOT NULL
+);
+CREATE INDEX ix_document_images_expiry ON document_images(expires_at);
+CREATE INDEX ix_document_images_vehicle ON document_images(vehicle_id);

@@ -2,6 +2,7 @@ using System.Text.Json;
 using MageRide.Registry.Configuration;
 using MageRide.Registry.Domain;
 using MageRide.Registry.Onboarding;
+using MageRide.Registry.Persistence;
 using MageRide.Registry.Vehicles;
 using MageRide.Shared.Auth;
 using MageRide.Shared.Errors;
