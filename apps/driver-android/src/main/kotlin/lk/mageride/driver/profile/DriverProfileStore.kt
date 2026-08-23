@@ -42,10 +42,8 @@ internal interface DriverProfileStore {
  * An interface in front of it because a view model's `init` reaches it, and a unit test of that
  * view model has no business opening an encrypted SQLite file to find out what the header drew.
  */
-internal class DbDriverProfileStore(
-    private val registry: RegistryApi,
-    private val database: DriverDatabase,
-) : DriverProfileStore {
+internal class DbDriverProfileStore(private val registry: RegistryApi, private val database: DriverDatabase) :
+    DriverProfileStore {
 
     override suspend fun cached(driverId: Ulid): CachedDriverProfile = onCache { it.read(driverId.toString()) }
 
@@ -115,8 +113,7 @@ internal class DbDriverProfileStore(
  * apart again. Deliberately tolerant: a link missing a parameter yields a map missing a key, and
  * the caller answers that by not fetching rather than by throwing at a driver.
  */
-internal fun signedLinkParameters(url: String): Map<String, String> =
-    url.substringAfter('?', "")
-        .split('&')
-        .filter { it.contains('=') }
-        .associate { it.substringBefore('=') to it.substringAfter('=') }
+internal fun signedLinkParameters(url: String): Map<String, String> = url.substringAfter('?', "")
+    .split('&')
+    .filter { it.contains('=') }
+    .associate { it.substringBefore('=') to it.substringAfter('=') }
