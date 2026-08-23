@@ -132,8 +132,6 @@
     <string name="map_recentre">மையப்படுத்து</string>
     <string name="map_content_description">வரைபடம்</string>
 
-    <string name="route_placeholder_title">இன்னும் உருவாக்கப்படவில்லை</string>
-    <string name="route_placeholder_body">%1$s அதன் திரைக் குழுவுடன் வழங்கப்படும்.</string>
 
     <!-- C069 · SCR-DA-004…004c, 005, 006, 026/026a — Mode C வாகனப் பதிவு. -->
 

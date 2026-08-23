@@ -133,8 +133,6 @@
     <string name="map_recentre">නැවත මධ්‍යගත කරන්න</string>
     <string name="map_content_description">සිතියම</string>
 
-    <string name="route_placeholder_title">තවම සාදා නැත</string>
-    <string name="route_placeholder_body">%1$s එහි තිර කාණ්ඩය සමඟ ලැබේ.</string>
 
     <!-- C069 · SCR-DA-004…004c, 005, 006, 026/026a — මාදිලි C වාහන ලියාපදිංචිය. -->
 

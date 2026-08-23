@@ -172,8 +172,6 @@
 
     <!-- A route the shell knows about whose screen group has not landed. Trilingual because it
          renders on a real device during wave 4a, same as anything else. -->
-    <string name="route_placeholder_title">Not built yet</string>
-    <string name="route_placeholder_body">%1$s arrives with its screen group.</string>
 
     <!-- ==========================================================================
          C069 · SCR-DA-004…004c, 005, 006, 026/026a — Mode-C vehicle onboarding.
