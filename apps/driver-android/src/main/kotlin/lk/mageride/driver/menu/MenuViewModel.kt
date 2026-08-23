@@ -105,11 +105,17 @@ internal class MenuViewModel(
                     )
                 }
 
+                // Δ MCS-29 — a degraded read must not ERASE what the cache just drew. Each of
+                // these three comes from its own call: `profiles.standing` swallows its failures by
+                // design and answers an empty standing, and a driver with no live vehicle has no
+                // plate at all. Assigning those nulls straight in meant the drawer painted the
+                // driver's name and level off disk and then blanked them a moment later, which is
+                // worse than never having painted them.
                 mutableState.update {
                     it.copy(
-                        name = profile.firstName,
-                        level = standing?.standing?.level,
-                        registration = live?.registrationNumber,
+                        name = profile.firstName ?: it.name,
+                        level = standing?.standing?.level ?: it.level,
+                        registration = live?.registrationNumber ?: it.registration,
                         // No app-facing read carries a driver's own star average. See
                         // `DriverHeaderState` for the four places it is not.
                         rating = null,

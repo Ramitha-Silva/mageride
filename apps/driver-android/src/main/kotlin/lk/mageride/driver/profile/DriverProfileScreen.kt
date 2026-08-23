@@ -224,8 +224,10 @@ internal fun DriverProfileScreen(
 private fun IdentityCard(state: DriverProfileState, onEdit: () -> Unit, modifier: Modifier = Modifier) {
     DriverHeader(
         state = DriverHeaderState(
-            name = state.profile?.firstName,
-            level = state.standing.standing?.level,
+            // Δ MCS-29 — the cache is the fallback, not the source: a read that has answered wins,
+            // and until one does the driver sees the name this handset already knew.
+            name = state.profile?.firstName ?: state.cachedName,
+            level = state.standing.standing?.level ?: state.cachedLevel,
             registration = state.registration,
             // No app-facing read carries a driver's own star average — see DriverHeaderState.
             rating = null,
