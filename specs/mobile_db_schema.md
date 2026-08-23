@@ -60,6 +60,23 @@ even when Driver + Passenger are both installed (single-active-device is **per a
 - The database file SHOULD be encrypted at rest with **SQLCipher** (Android) / **SQLCipher or GRDB
   encryption** (iOS); the key is wrapped by the hardware keystore.
 - On logout / `403 device-revoked` (AL-08) / PDPA erasure: **wipe the whole DB file** and Keystore entries.
+- **Identity-document images MAY be cached on the device (Δ MCS-28), and only under all five of the
+  conditions below.** SCR-DA/DI-029 shows a driver their own driving licence and SCR-DA/DI-026 the
+  documents of a vehicle they onboarded; both are things a driver is entitled to look at, and both
+  are useless at a roadside with no signal — which is exactly where a driver is asked for them. The
+  images are also, unavoidably, an NIC and a licence number in a photograph.
+  1. **The driver's OWN documents only.** Never a passenger's, never another driver's, never a
+     vehicle this driver does not own or is not assigned to. The server enforces this; the device
+     stores only what it was given.
+  2. **Encrypted at rest**, by the same SQLCipher/GRDB key as the rest of the file. That is not an
+     extra measure here — it is the reason this is permissible at all.
+  3. **Bounded lifetime.** A cached image expires locally after `documents.retention` (below) and is
+     swept by the same retention pass as everything else in §4. NFR-28 governs the *server's* copy;
+     this is a shorter, device-local bound on a copy that exists for convenience.
+  4. **Wiped with the database** on logout, device-revoke and PDPA erasure — which §0.4 already
+     requires of the whole file, and which is why no separate erasure path is needed.
+  5. **Never exported.** No share sheet, no `ACTION_SEND`, no file written outside the app sandbox.
+     A driver who needs to send a licence to somebody has the original on their phone already.
 
 ### 0.5 Common column idioms
 
@@ -727,6 +744,39 @@ CREATE TABLE driver_profile (
   photo_bytes   BLOB,                                          -- the avatar itself, so it paints offline
   synced_at     INTEGER
 );
+```
+
+### 3.17 `document_images` — the driver's own documents, for a roadside with no signal (Δ MCS-28)
+
+> **Why this exists.** SCR-DA/DI-029 shows a driver their own driving licence and SCR-DA/DI-026 the
+> documents of a vehicle they onboarded. Until MCS-28 neither screen could: `VehicleDocument` carries
+> `docId`, `kind`, `status` and `expiresAt` and **no URL at all**, so the app knew a licence expired
+> in March and could not show it. The bytes now come from `getDriverDocument`, and they are kept
+> because the moment a driver is asked for a document is the moment they are least likely to have a
+> connection.
+>
+> **This is the §0.4 identity-document exception, and it inherits all five of its conditions** — own
+> documents only, encrypted at rest, bounded lifetime, wiped with the file, never exported. Read
+> that clause before adding a column or a caller here.
+>
+> `document_id` is `registry.documents.id`, so a row is a specific version of a specific document: a
+> renewed insurance certificate is a new id and a new row, and the old one falls out with the sweep
+> rather than being overwritten in place.
+
+```sql
+CREATE TABLE document_images (
+  document_id  TEXT PRIMARY KEY,                               -- registry.documents.id
+  vehicle_id   TEXT,                                           -- NULL for the driving licence (D-03)
+  kind         TEXT NOT NULL,                                  -- mirrors documents.kind (§3.14)
+  side         TEXT,                                           -- 'front' | 'back', NULL where a kind has one image
+  content_type TEXT NOT NULL,
+  bytes        BLOB NOT NULL,
+  version      TEXT,                                           -- the signed link's `v` — which image this is
+  cached_at    INTEGER NOT NULL,
+  expires_at   INTEGER NOT NULL                                -- §0.4 condition 3; swept by §4
+);
+CREATE INDEX ix_document_images_expiry ON document_images(expires_at);
+CREATE INDEX ix_document_images_vehicle ON document_images(vehicle_id);
 ```
 
 ---
