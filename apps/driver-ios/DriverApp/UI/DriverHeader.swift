@@ -17,13 +17,20 @@ import SwiftUI
 ///     ride. Four components have now reached that conclusion independently and each drew an em
 ///     dash. This carries the parameter so the day a read exists, one type gains a value and both
 ///     screens show it.
+///   - photoUrl: The driver's own photograph, absolute and ready to load (Δ MCS-25).
+///
+///     **registry-svc's, not `GET /v1/users/me`'s.** This was a `hasPhoto` flag fed from
+///     `UserProfile.photoUrl`, which is `nil` for every driver who onboarded in this app: Profile
+///     Setup writes `registry.driver_profiles` and never touches `iam.users` (D3'
+///     §`getDriverProfile`). `nil` draws the glyph — before the read answers, and for a driver
+///     whose photo PDPA erasure has cleared.
 struct DriverHeaderState {
 
     var name: String?
     var level: Int32?
     var registration: String?
     var rating: Double?
-    var hasPhoto = false
+    var photoUrl: String?
 }
 
 /// The avatar, the name and level, and the vehicle and rating line.
@@ -45,9 +52,32 @@ struct DriverHeader<Trailing: View>: View {
 
     var body: some View {
         HStack(spacing: MageRideSpacing.sm) {
-            Image(systemName: "person.crop.circle.fill")
-                .font(.system(size: MageRideControl.avatarSmall))
-                .foregroundStyle(MageRideColor.onSurfaceVariant)
+            // The glyph is drawn underneath and the photograph over it, so it is also what shows
+            // while the load is in flight and what is left if it fails. `AsyncImage`'s phase-based
+            // form would give explicit placeholder and failure branches; this needs neither,
+            // because the right thing to draw in both is the thing already there.
+            ZStack {
+                Image(systemName: "person.crop.circle.fill")
+                    .font(.system(size: MageRideControl.avatarSmall))
+                    .foregroundStyle(MageRideColor.onSurfaceVariant)
+
+                if let photoUrl = state.photoUrl, let url = URL(string: photoUrl) {
+                    AsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            // The stored photograph is whatever shape the handset camera took and
+                            // the wireframe's avatar is a circle. Fill rather than fit, or a
+                            // portrait is letterboxed into a disc with the face in a band across it.
+                            .scaledToFill()
+                    } placeholder: {
+                        // Deliberately nothing: the glyph underneath is the placeholder.
+                        Color.clear
+                    }
+                    .frame(width: MageRideControl.avatarSmall, height: MageRideControl.avatarSmall)
+                    .clipShape(Circle())
+                }
+            }
+            .frame(width: MageRideControl.avatarSmall, height: MageRideControl.avatarSmall)
 
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: MageRideSpacing.xxs) {

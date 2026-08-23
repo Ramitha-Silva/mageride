@@ -160,7 +160,7 @@ struct DriverProfileScreen: View {
                 registration: model.state.registration,
                 // No app-facing read carries a driver's own star average — see ``DriverHeaderState``.
                 rating: nil,
-                hasPhoto: !(model.state.profile?.photoUrl ?? "").isEmpty
+                photoUrl: model.state.photoUrl
             )
         ) {
             Button {

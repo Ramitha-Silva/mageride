@@ -204,6 +204,8 @@ class SosViewModelTest {
                     jobs = JobsRepository(dispatch = api.dispatch),
                     sessions = signedInSessions(backend),
                     preferences = FakeOnboardingPreferences(),
+                    registry = api.registry,
+                    gatewayOrigin = "https://api.test",
                 ),
                 location = location,
             ),

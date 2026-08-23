@@ -20,6 +20,19 @@ protocol ProfileRepository: AnyObject {
     /// `GET /v1/users/me` — name, photo, language and the notification switch map.
     func profile() async throws -> UserProfile
 
+    /// `GET /v1/drivers/profile` — the driver's own photograph, absolute and ready to load
+    /// (Δ MCS-25).
+    ///
+    /// **Not ``profile()``'s `photoUrl`.** That is `iam.users.photo_url`, and D3'
+    /// §`getDriverProfile` records that Profile Setup *"writes `registry.driver_profiles` and never
+    /// touches `iam.users`"* — so for a driver who onboarded in this app it is always `nil`, and the
+    /// avatar it fed was never going to render whatever loader was put behind it.
+    ///
+    /// Non-throwing, like ``standing(driverId:)``: a header with no picture is a header, and an
+    /// error banner over a working screen because an avatar did not load would be worse than the
+    /// glyph.
+    func driverPhotoUrl() async -> String?
+
     /// `GET /v1/me/emergency-contacts` — who D-33's SOS SMS goes to (AL-13).
     func emergencyContacts() async throws -> [EmergencyContact]
 
@@ -68,12 +81,29 @@ final class ApiProfileRepository: ProfileRepository {
     private let jobs: JobsRepository
     private let sessions: DriverSessions
     private let preferences: OnboardingPreferences
+    private let registry: RegistryApi
+    private let gatewayOrigin: String
 
-    init(iam: IamApi, jobs: JobsRepository, sessions: DriverSessions, preferences: OnboardingPreferences) {
+    init(
+        iam: IamApi,
+        jobs: JobsRepository,
+        sessions: DriverSessions,
+        preferences: OnboardingPreferences,
+        registry: RegistryApi,
+        gatewayOrigin: String
+    ) {
         self.iam = iam
         self.jobs = jobs
         self.sessions = sessions
         self.preferences = preferences
+        self.registry = registry
+        self.gatewayOrigin = gatewayOrigin
+    }
+
+    func driverPhotoUrl() async -> String? {
+        let profile = try? await registry.getDriverProfile()
+
+        return absoluteUrl(gatewayOrigin: gatewayOrigin, path: profile?.photoUrl)
     }
 
     func profile() async throws -> UserProfile {
@@ -144,4 +174,28 @@ final class ApiProfileRepository: ProfileRepository {
     func logOut() async {
         await sessions.logOut()
     }
+}
+
+/// Joins the gateway origin to a path a service handed back (Δ MCS-25).
+///
+/// Internal rather than private so `AbsoluteUrlTests` can hold the joining rules — the slashes are
+/// the kind of thing that works against one deployment and breaks against the next.
+///
+/// An **absolute** URL is returned untouched. registry-svc answers a relative path today, but D-36
+/// lets the same operation redirect to a presigned bucket URL, and a caller that blindly prefixed
+/// the origin would turn that into a 404 against the gateway.
+func absoluteUrl(gatewayOrigin: String, path: String?) -> String? {
+    let trimmed = (path ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+    guard !trimmed.isEmpty else { return nil }
+
+    if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") { return trimmed }
+
+    var origin = gatewayOrigin
+    while origin.hasSuffix("/") { origin.removeLast() }
+
+    var relative = trimmed
+    while relative.hasPrefix("/") { relative.removeFirst() }
+
+    return "\(origin)/\(relative)"
 }

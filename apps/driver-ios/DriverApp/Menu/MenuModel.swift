@@ -30,6 +30,7 @@ final class MenuModel: ObservableObject {
         // it; an error banner over eight working links would be worse than the blank.
         let profile = try? await profiles.profile()
         let live = try? await identity.liveVehicle().live
+        let photoUrl = await profiles.driverPhotoUrl()
 
         var standing: JobStanding?
         if let driverId = identity.driverId {
@@ -43,7 +44,8 @@ final class MenuModel: ObservableObject {
             // No app-facing read carries a driver's own star average. See ``DriverHeaderState``
             // for the four places it is not.
             rating: nil,
-            hasPhoto: !(profile?.photoUrl ?? "").isEmpty
+            // registry-svc's, not `GET /v1/users/me`'s — see ``ProfileRepository/driverPhotoUrl()``.
+            photoUrl: photoUrl
         )
     }
 }

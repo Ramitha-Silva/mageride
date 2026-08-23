@@ -36,6 +36,12 @@ struct DriverProfileState {
     /// The plate of the vehicle this handset is live for (Δ MCS-24), or `nil` when nothing is
     /// eligible — a driver who has not onboarded one, or whose only vehicle is suspended.
     var registration: String?
+
+    /// The driver's own photograph, absolute and ready to load (Δ MCS-25).
+    ///
+    /// Not ``profile``'s `photoUrl`: that is `iam.users.photo_url`, which Profile Setup never
+    /// writes. See ``ProfileRepository/driverPhotoUrl()``.
+    var photoUrl: String?
     var contact: EmergencyContact?
     var standing = JobStanding()
     var sheet: ProfileSheet?
@@ -142,6 +148,10 @@ final class DriverProfileModel: ObservableObject {
                 // which of several eligible vehicles is the publisher), and a call driven by a
                 // redraw would run again on every frame this screen draws.
                 state.registration = (try? await identity.liveVehicle().live)?.registrationNumber
+
+                // Δ MCS-25. Non-throwing on its own, like the read behind it: a gateway that
+                // answered the profile but not this one should cost the avatar, not the screen.
+                state.photoUrl = await profiles.driverPhotoUrl()
             }
         } catch {
             state.errorKey = OnboardingErrors.messageKey(for: error)

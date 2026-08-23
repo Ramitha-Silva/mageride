@@ -231,6 +231,8 @@ class DriverProfileViewModelTest {
                     jobs = JobsRepository(dispatch = api.dispatch),
                     sessions = sessions,
                     preferences = preferences,
+                    registry = api.registry,
+                    gatewayOrigin = "https://api.test",
                 ),
             ),
         )

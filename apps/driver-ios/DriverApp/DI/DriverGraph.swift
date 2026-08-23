@@ -339,7 +339,12 @@ final class DriverGraph: ObservableObject {
             iam: shared.api.iam,
             jobs: jobs,
             sessions: sessions,
-            preferences: preferences
+            preferences: preferences,
+            // Δ MCS-25 — the avatar comes from registry-svc, because Profile Setup writes
+            // `registry.driver_profiles` and never `iam.users`, so the photo on `GET /v1/users/me`
+            // is nil for every driver who onboarded in this app.
+            registry: shared.api.registry,
+            gatewayOrigin: environment.apiBaseUrl
         )
         self.history = ApiRideHistoryRepository(
             query: shared.api.query,

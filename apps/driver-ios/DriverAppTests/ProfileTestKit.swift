@@ -255,6 +255,9 @@ final class FakeProfileRepository: ProfileRepository {
     var contacts: [EmergencyContact] = []
     var jobStanding = JobStanding()
     var language: Language? = Language.si
+
+    /// Δ MCS-25 — what `GET /v1/drivers/profile` carries, already resolved. `nil` draws the glyph.
+    var driverPhoto: String?
     var nextFailure: Error?
 
     private(set) var profileReads = 0
@@ -276,6 +279,9 @@ final class FakeProfileRepository: ProfileRepository {
     }
 
     func standing(driverId: String) async -> JobStanding { jobStanding }
+
+    /// Non-throwing, like the protocol: a photo that would not load never fails a screen.
+    func driverPhotoUrl() async -> String? { driverPhoto }
 
     func saveName(_ name: String) async throws -> UserProfile {
         savedNames.append(name)
