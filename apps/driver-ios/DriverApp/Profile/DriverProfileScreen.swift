@@ -130,7 +130,11 @@ struct DriverProfileScreen: View {
         .listStyle(.insetGrouped)
         .navigationTitle(Text(key: "profile_title"))
         .navigationBarTitleDisplayMode(.large)
-        .task { await model.refresh() }
+        .task {
+            // Δ MCS-27 — the cache first, so the header opens on a name; the reads refresh behind it.
+            await model.paintFromCache()
+            await model.refresh()
+        }
         .refreshable { await model.refresh() }
         .sheet(item: Binding(get: { model.state.sheet }, set: { if $0 == nil { model.dismissSheet() } })) { sheet in
             ProfileEditorSheet(sheet: sheet, model: model)
@@ -160,7 +164,7 @@ struct DriverProfileScreen: View {
                 registration: model.state.registration,
                 // No app-facing read carries a driver's own star average — see ``DriverHeaderState``.
                 rating: nil,
-                photoUrl: model.state.photoUrl
+                photo: model.state.photo
             )
         ) {
             Button {

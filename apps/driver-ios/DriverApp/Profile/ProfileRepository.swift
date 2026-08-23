@@ -20,18 +20,6 @@ protocol ProfileRepository: AnyObject {
     /// `GET /v1/users/me` — name, photo, language and the notification switch map.
     func profile() async throws -> UserProfile
 
-    /// `GET /v1/drivers/profile` — the driver's own photograph, absolute and ready to load
-    /// (Δ MCS-25).
-    ///
-    /// **Not ``profile()``'s `photoUrl`.** That is `iam.users.photo_url`, and D3'
-    /// §`getDriverProfile` records that Profile Setup *"writes `registry.driver_profiles` and never
-    /// touches `iam.users`"* — so for a driver who onboarded in this app it is always `nil`, and the
-    /// avatar it fed was never going to render whatever loader was put behind it.
-    ///
-    /// Non-throwing, like ``standing(driverId:)``: a header with no picture is a header, and an
-    /// error banner over a working screen because an avatar did not load would be worse than the
-    /// glyph.
-    func driverPhotoUrl() async -> String?
 
     /// What the headers should draw right now, before a single call has answered (§3.16, Δ MCS-27).
     func cachedProfile(driverId: String) async -> CachedDriverProfile?
@@ -91,7 +79,6 @@ final class ApiProfileRepository: ProfileRepository {
     private let sessions: DriverSessions
     private let preferences: OnboardingPreferences
     private let registry: RegistryApi
-    private let gatewayOrigin: String
     private let databases: DriverDatabase
 
     init(
@@ -100,7 +87,6 @@ final class ApiProfileRepository: ProfileRepository {
         sessions: DriverSessions,
         preferences: OnboardingPreferences,
         registry: RegistryApi,
-        gatewayOrigin: String,
         databases: DriverDatabase
     ) {
         self.iam = iam
@@ -108,7 +94,6 @@ final class ApiProfileRepository: ProfileRepository {
         self.sessions = sessions
         self.preferences = preferences
         self.registry = registry
-        self.gatewayOrigin = gatewayOrigin
         self.databases = databases
     }
 
@@ -126,7 +111,7 @@ final class ApiProfileRepository: ProfileRepository {
             name: name,
             level: level.map { KotlinInt(int: $0) },
             registration: registration,
-            at: nowInstant())
+            at: nowTimestamp())
     }
 
     /// **Bytes rather than a URL, which is the whole point of §3.16.** The signed link carries an
@@ -137,14 +122,14 @@ final class ApiProfileRepository: ProfileRepository {
         let cache = await cache()
 
         guard let link = (try? await registry.getDriverProfile())?.photoUrl else {
-            return cache?.read(driverId: driverId).photoBytes.map(dataOf)
+            return cache?.read(driverId: driverId).photoBytes.map { nsDataOf(bytes: $0) as Data }
         }
 
         let query = signedLinkParameters(link)
         let version = query["v"]
 
         if let cache, !cache.needsPhoto(driverId: driverId, version: version) {
-            return cache.read(driverId: driverId).photoBytes.map(dataOf)
+            return cache.read(driverId: driverId).photoBytes.map { nsDataOf(bytes: $0) as Data }
         }
 
         guard let expires = query["expires"].flatMap(Int64.init),
@@ -153,21 +138,15 @@ final class ApiProfileRepository: ProfileRepository {
                   driverId: driverId, version: version ?? "", expires: expires, signature: signature)
         else { return nil }
 
-        cache?.writePhoto(driverId: driverId, version: version, bytes: bytes, at: nowInstant())
+        cache?.writePhoto(driverId: driverId, version: version, bytes: bytes, at: nowTimestamp())
 
-        return dataOf(bytes)
+        return nsDataOf(bytes: bytes) as Data
     }
 
     private func cache() async -> DriverProfileCache? {
         guard let db = await databases.get() else { return nil }
 
         return DriverProfileCache(db: db)
-    }
-
-    func driverPhotoUrl() async -> String? {
-        let profile = try? await registry.getDriverProfile()
-
-        return absoluteUrl(gatewayOrigin: gatewayOrigin, path: profile?.photoUrl)
     }
 
     func profile() async throws -> UserProfile {
@@ -238,28 +217,4 @@ final class ApiProfileRepository: ProfileRepository {
     func logOut() async {
         await sessions.logOut()
     }
-}
-
-/// Joins the gateway origin to a path a service handed back (Δ MCS-25).
-///
-/// Internal rather than private so `AbsoluteUrlTests` can hold the joining rules — the slashes are
-/// the kind of thing that works against one deployment and breaks against the next.
-///
-/// An **absolute** URL is returned untouched. registry-svc answers a relative path today, but D-36
-/// lets the same operation redirect to a presigned bucket URL, and a caller that blindly prefixed
-/// the origin would turn that into a 404 against the gateway.
-func absoluteUrl(gatewayOrigin: String, path: String?) -> String? {
-    let trimmed = (path ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-
-    guard !trimmed.isEmpty else { return nil }
-
-    if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") { return trimmed }
-
-    var origin = gatewayOrigin
-    while origin.hasSuffix("/") { origin.removeLast() }
-
-    var relative = trimmed
-    while relative.hasPrefix("/") { relative.removeFirst() }
-
-    return "\(origin)/\(relative)"
 }

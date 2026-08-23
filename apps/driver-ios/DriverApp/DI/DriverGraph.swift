@@ -344,7 +344,8 @@ final class DriverGraph: ObservableObject {
             // `registry.driver_profiles` and never `iam.users`, so the photo on `GET /v1/users/me`
             // is nil for every driver who onboarded in this app.
             registry: shared.api.registry,
-            gatewayOrigin: environment.apiBaseUrl
+            // Δ MCS-27 — §3.16, so both headers paint before a call is made.
+            databases: databases
         )
         self.history = ApiRideHistoryRepository(
             query: shared.api.query,

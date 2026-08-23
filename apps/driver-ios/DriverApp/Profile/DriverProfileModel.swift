@@ -40,8 +40,9 @@ struct DriverProfileState {
     /// The driver's own photograph, absolute and ready to load (Δ MCS-25).
     ///
     /// Not ``profile``'s `photoUrl`: that is `iam.users.photo_url`, which Profile Setup never
-    /// writes. See ``ProfileRepository/driverPhotoUrl()``.
-    var photoUrl: String?
+    /// writes. Bytes rather than a URL so the avatar paints off disk on the frame this screen
+    /// opens (Δ MCS-27) — see ``ProfileRepository/driverPhoto(driverId:)``.
+    var photo: Data?
     var contact: EmergencyContact?
     var standing = JobStanding()
     var sheet: ProfileSheet?
@@ -128,6 +129,21 @@ final class DriverProfileModel: ObservableObject {
     }
 
     /// Re-reads the profile, the emergency contact and the level.
+    /// The §3.16 cache, drawn first (Δ MCS-27).
+    ///
+    /// SCR-DI-029 opened on an empty header and filled in after three reads. This is the frame in
+    /// between, and on a bad connection it is most of the time the driver spends looking at it.
+    func paintFromCache() async {
+        guard let driverId = identity.driverId,
+              let cached = await profiles.cachedProfile(driverId: driverId),
+              !cached.isEmpty
+        else { return }
+
+        // A read that has already answered outranks the cache.
+        state.registration = state.registration ?? cached.registration
+        state.photo = state.photo ?? cached.photoBytes.map { nsDataOf(bytes: $0) as Data }
+    }
+
     func refresh() async {
         state.isLoading = true
         state.errorKey = nil
@@ -149,9 +165,17 @@ final class DriverProfileModel: ObservableObject {
                 // redraw would run again on every frame this screen draws.
                 state.registration = (try? await identity.liveVehicle().live)?.registrationNumber
 
-                // Δ MCS-25. Non-throwing on its own, like the read behind it: a gateway that
+                // Δ MCS-25/27. Non-throwing on its own, like the read behind it: a gateway that
                 // answered the profile but not this one should cost the avatar, not the screen.
-                state.photoUrl = await profiles.driverPhotoUrl()
+                if let driverId = identity.driverId {
+                    state.photo = await profiles.driverPhoto(driverId: driverId) ?? state.photo
+
+                    await profiles.cacheIdentity(
+                        driverId: driverId,
+                        name: state.profile?.firstName,
+                        level: state.standing.standing?.level?.int32Value,
+                        registration: state.registration)
+                }
             }
         } catch {
             state.errorKey = OnboardingErrors.messageKey(for: error)

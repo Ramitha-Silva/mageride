@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Who the driver is, as both SCR-DI-029 and SCR-DI-036 show it (Δ MCS-24).
 ///
@@ -17,20 +18,27 @@ import SwiftUI
 ///     ride. Four components have now reached that conclusion independently and each drew an em
 ///     dash. This carries the parameter so the day a read exists, one type gains a value and both
 ///     screens show it.
-///   - photoUrl: The driver's own photograph, absolute and ready to load (Δ MCS-25).
+///   - photo: The driver's own photograph, as bytes (Δ MCS-25, Δ MCS-27).
 ///
 ///     **registry-svc's, not `GET /v1/users/me`'s.** This was a `hasPhoto` flag fed from
 ///     `UserProfile.photoUrl`, which is `nil` for every driver who onboarded in this app: Profile
 ///     Setup writes `registry.driver_profiles` and never touches `iam.users` (D3'
-///     §`getDriverProfile`). `nil` draws the glyph — before the read answers, and for a driver
-///     whose photo PDPA erasure has cleared.
+///     §`getDriverProfile`).
+///
+///     **Bytes rather than a URL (Δ MCS-27).** They come off disk, so the avatar is on screen in
+///     the frame the header opens instead of a network round trip later. A URL could not have done
+///     it: the signed link's `expires` changes on every profile read, so every image cache that
+///     keys on the URL misses every time.
+///
+///     `nil` draws the glyph — for a driver this handset has not cached, and for one whose photo
+///     PDPA erasure has cleared.
 struct DriverHeaderState {
 
     var name: String?
     var level: Int32?
     var registration: String?
     var rating: Double?
-    var photoUrl: String?
+    var photo: Data?
 }
 
 /// The avatar, the name and level, and the vehicle and rating line.
@@ -41,10 +49,8 @@ struct DriverHeaderState {
 /// and the profile showed the driver's name above that same id — neither of which answers "who am I
 /// and what am I driving".
 ///
-/// The photo is the placeholder glyph. `UserProfile.photoUrl` is a URL and nothing in this target
-/// loads a remote image (``CaptureTile`` deliberately never holds one either), so drawing the glyph
-/// is the honest state — a grey circle that never resolves would read as a failed load rather than
-/// as a feature that is not built.
+/// The photograph comes off disk (Δ MCS-27) and the glyph sits under it, so a driver this handset
+/// has not cached still gets something sensible rather than a grey circle that never resolves.
 struct DriverHeader<Trailing: View>: View {
 
     let state: DriverHeaderState
@@ -52,29 +58,24 @@ struct DriverHeader<Trailing: View>: View {
 
     var body: some View {
         HStack(spacing: MageRideSpacing.sm) {
-            // The glyph is drawn underneath and the photograph over it, so it is also what shows
-            // while the load is in flight and what is left if it fails. `AsyncImage`'s phase-based
-            // form would give explicit placeholder and failure branches; this needs neither,
-            // because the right thing to draw in both is the thing already there.
+            // The glyph is drawn underneath and the photograph over it, so it is what shows for a
+            // driver with no cached photo and what is left if the bytes will not decode. A decode
+            // failure is silent for the same reason: the bytes came off this handset's own disk, so
+            // it means a truncated write, and the answer to that is the glyph rather than a crash.
             ZStack {
                 Image(systemName: "person.crop.circle.fill")
                     .font(.system(size: MageRideControl.avatarSmall))
                     .foregroundStyle(MageRideColor.onSurfaceVariant)
 
-                if let photoUrl = state.photoUrl, let url = URL(string: photoUrl) {
-                    AsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            // The stored photograph is whatever shape the handset camera took and
-                            // the wireframe's avatar is a circle. Fill rather than fit, or a
-                            // portrait is letterboxed into a disc with the face in a band across it.
-                            .scaledToFill()
-                    } placeholder: {
-                        // Deliberately nothing: the glyph underneath is the placeholder.
-                        Color.clear
-                    }
-                    .frame(width: MageRideControl.avatarSmall, height: MageRideControl.avatarSmall)
-                    .clipShape(Circle())
+                if let avatar = state.photo.flatMap(UIImage.init(data:)) {
+                    Image(uiImage: avatar)
+                        .resizable()
+                        // The stored photograph is whatever shape the handset camera took and the
+                        // wireframe's avatar is a circle. Fill rather than fit, or a portrait is
+                        // letterboxed into a disc with the face in a band across it.
+                        .scaledToFill()
+                        .frame(width: MageRideControl.avatarSmall, height: MageRideControl.avatarSmall)
+                        .clipShape(Circle())
                 }
             }
             .frame(width: MageRideControl.avatarSmall, height: MageRideControl.avatarSmall)
