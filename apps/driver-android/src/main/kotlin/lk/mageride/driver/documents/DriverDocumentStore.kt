@@ -42,10 +42,8 @@ internal interface DriverDocumentStore {
 }
 
 /** [DriverDocumentStore] over §3.17 and registry-svc. */
-internal class ApiDriverDocumentStore(
-    private val registry: RegistryApi,
-    private val database: DriverDatabase,
-) : DriverDocumentStore {
+internal class ApiDriverDocumentStore(private val registry: RegistryApi, private val database: DriverDatabase) :
+    DriverDocumentStore {
 
     override suspend fun cached(): List<CachedDocumentImage> = onCache { it.all(Clock.System.now()) }
 

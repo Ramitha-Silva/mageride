@@ -9,10 +9,10 @@ import lk.mageride.driver.comms.VoipCallViewModel
 import lk.mageride.driver.comms.VoipEngine
 import lk.mageride.driver.delivery.DeliveryRepository
 import lk.mageride.driver.delivery.DeliveryViewModel
+import lk.mageride.driver.delivery.ProofUploadQueue
 import lk.mageride.driver.documents.ApiDriverDocumentStore
 import lk.mageride.driver.documents.DocumentsViewModel
 import lk.mageride.driver.documents.DriverDocumentStore
-import lk.mageride.driver.delivery.ProofUploadQueue
 import lk.mageride.driver.earnings.EarningsRepository
 import lk.mageride.driver.earnings.EarningsViewModel
 import lk.mageride.driver.history.RideHistoryRepository
