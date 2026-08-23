@@ -97,4 +97,26 @@ internal class MainDispatcher {
 internal suspend fun <T> StateFlow<T>.await(predicate: (T) -> Boolean): T =
     withTimeout(AWAIT_TIMEOUT) { first(predicate) }
 
-private val AWAIT_TIMEOUT = 5.seconds
+/**
+ * A hang detector, not a latency assertion (Δ MCS-29).
+ *
+ * **It was five seconds, and that made every test in this module flaky on a loaded machine.**
+ * `RideHistoryViewModelTest.submitting_sends_the_stars_and_marks_the_row_rated` failed three times
+ * across CI and the build host and passed on every re-run with no code change — once blocking a
+ * deploy, because `cd.yml`'s gate correctly refuses to ship a red commit.
+ *
+ * The measurement that settled it: these tests run in **20–110 ms**, so five seconds was already a
+ * fifty-fold margin. Nothing here is slow. What happens is that the whole thing is wall-clock —
+ * `runBlocking`, real dispatchers, a real `withTimeout` — so a test thread starved for a couple of
+ * seconds by a parallel Gradle worker, a GC pause, or (on the build host) twenty-three replica
+ * containers sharing the box, fails an assertion about a view model that did nothing wrong.
+ *
+ * Thirty seconds keeps the property this exists for — a test that genuinely never arrives still
+ * fails by name in well under Gradle's own timeout — and stops a busy machine being able to fail a
+ * correct test. **A larger number is not the real fix.** That is virtual time: `MainDispatcher`
+ * installing a `TestDispatcher` on `runTest`'s scheduler, so the timeout is measured in the
+ * scheduler's clock and cannot be affected by load at all. `shared/kmp`'s own test kit already says
+ * as much — *"anything with a coroutine in it wants `TestTime`"* — and moving twenty-seven files in
+ * this module onto it is a change worth making deliberately rather than inside a flake fix.
+ */
+private val AWAIT_TIMEOUT = 30.seconds
