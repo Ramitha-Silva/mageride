@@ -93,12 +93,17 @@ internal class MenuViewModel(
                 val standing = driverId?.let { id -> profiles.standing(id) }
                 val live = identity.liveVehicle().live
 
-                store.cacheIdentity(
-                    driverId = driverId,
-                    name = profile.firstName,
-                    level = standing?.standing?.level,
-                    registration = live?.registrationNumber,
-                )
+                // Δ MCS-27 — so the next open has it. Only with an id to file it under: a
+                // signed-out driver has no row, and inventing a key for one would leave a
+                // stranger's name on this handset.
+                driverId?.let { id ->
+                    store.cacheIdentity(
+                        driverId = id,
+                        name = profile.firstName,
+                        level = standing?.standing?.level,
+                        registration = live?.registrationNumber,
+                    )
+                }
 
                 mutableState.update {
                     it.copy(

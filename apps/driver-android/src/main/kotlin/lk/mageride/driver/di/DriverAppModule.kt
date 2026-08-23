@@ -44,6 +44,8 @@ import lk.mageride.driver.onboarding.OnboardingPreferences
 import lk.mageride.driver.onboarding.OnboardingRepository
 import lk.mageride.driver.onboarding.ProfileSetupViewModel
 import lk.mageride.driver.onboarding.SplashViewModel
+import lk.mageride.driver.profile.DbDriverProfileStore
+import lk.mageride.driver.profile.DriverProfileStore
 import lk.mageride.driver.profile.DriverProfileViewModel
 import lk.mageride.driver.profile.ProfileRepository
 import lk.mageride.driver.push.PushRouter
