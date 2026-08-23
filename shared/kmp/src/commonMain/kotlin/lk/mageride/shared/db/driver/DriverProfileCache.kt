@@ -99,7 +99,11 @@ public class DriverProfileCache(private val db: DriverDb) {
         db.transaction {
             db.sql.driverProfileQueries.upsertIdentity(
                 displayName = name,
-                level = level,
+                // `coalesce(:level, level)` is an expression, and an expression has no column to
+                // carry `AS Int` — so the generated parameter is the raw SQLite `Long?`. Widening
+                // here rather than dropping the adapter on the column, because `select` answering a
+                // Driver Level as an `Int` is what every caller of it wants.
+                level = level?.toLong(),
                 registration = registration,
                 syncedAt = at,
                 driverId = driverId,
