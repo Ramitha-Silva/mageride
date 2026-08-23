@@ -27,14 +27,13 @@ public data class CachedDriverProfile(
 
     // `ByteArray` is identity-compared by the generated equals, which would make two reads of the
     // same photograph unequal and re-emit state on every refresh.
-    override fun equals(other: Any?): Boolean =
-        other is CachedDriverProfile &&
-            name == other.name &&
-            level == other.level &&
-            registration == other.registration &&
-            photoVersion == other.photoVersion &&
-            syncedAt == other.syncedAt &&
-            photoBytes.contentEquals(other.photoBytes)
+    override fun equals(other: Any?): Boolean = other is CachedDriverProfile &&
+        name == other.name &&
+        level == other.level &&
+        registration == other.registration &&
+        photoVersion == other.photoVersion &&
+        syncedAt == other.syncedAt &&
+        photoBytes.contentEquals(other.photoBytes)
 
     override fun hashCode(): Int {
         var result = name?.hashCode() ?: 0
@@ -90,13 +89,7 @@ public class DriverProfileCache(private val db: DriverDb) {
      * alone — never *"the driver has no name"*. The three values arrive from three different calls
      * and one of them failing must not blank the other two.
      */
-    public fun writeIdentity(
-        driverId: String,
-        name: String?,
-        level: Int?,
-        registration: String?,
-        at: Instant,
-    ) {
+    public fun writeIdentity(driverId: String, name: String?, level: Int?, registration: String?, at: Instant) {
         db.transaction {
             db.sql.driverProfileQueries.upsertIdentity(
                 displayName = name,
