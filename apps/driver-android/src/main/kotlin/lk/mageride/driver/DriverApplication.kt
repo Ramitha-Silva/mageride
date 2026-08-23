@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import lk.mageride.driver.di.DriverDatabase
 import lk.mageride.driver.di.driverAppModule
 import lk.mageride.driver.location.PositionForegroundService
 import lk.mageride.driver.push.PushChannels
@@ -56,6 +57,20 @@ internal class DriverApplication : Application() {
         // the first sensitive mutation is `POST /v1/auth/otp/request`" — i.e. the OTP request on
         // the login screen, the first thing a new driver does.
         startUpScope.launch { get<PlatformAttestationProvider>().warmUp() }
+
+        // Δ MCS-31 — the same argument, for the database, and it is why §3.16's cache was not
+        // working. `DriverDatabase.get()` opens SQLCipher, which derives its key with PBKDF2 at
+        // SQLCipher 4's default iteration count — hundreds of milliseconds on a mid-range handset,
+        // and nothing else touches the file on a normal cold start.
+        //
+        // So the FIRST caller paid all of it, and the first caller was the very thing meant to
+        // remove a delay: `paintFromCache` on SCR-DA-029 and SCR-DA-036 sat on the key derivation
+        // while the network read beside it finished first, and the driver watched their name
+        // arrive from the server exactly as they had before the cache existed. Reported from a
+        // handset twice, and correctly both times.
+        //
+        // Opening it here spends that cost once, off the main thread, before any screen asks.
+        startUpScope.launch { get<DriverDatabase>().get() }
     }
 
     /**

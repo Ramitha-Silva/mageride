@@ -317,11 +317,11 @@ private const val SCRIM_ALPHA = 0.45f
  * the other two — *whatever the viewport has left once the banners and the sheet have had theirs* —
  * and a `Column` cannot express that: the only way to learn a sibling's height there is to let it
  * compose, report through `onSizeChanged`, and recompose. That is a feedback loop with a visible
- * first frame, and the frame it drew was the whole viewport times [MAP_HEIGHT_MULTIPLIER], because
+ * first frame, and the frame it drew was the whole viewport enlarged, because
  * the two heights it subtracts both start at zero. A driver opening the dashboard watched the map
  * fill the screen and then shrink by a third.
  *
- * That first frame used to be reasoned about and accepted — the old [homeMapNaturalHeight] treated
+ * That first frame used to be reasoned about and accepted — the old height rule treated
  * a zero sheet as *"not measured yet"* and handed the map the plain viewport, on the grounds that
  * MapLibre has no GL surface up that early. It has one by the second frame, and the shrink is what
  * a person actually sees. Reported from a handset.
@@ -355,8 +355,8 @@ private fun HomeDashboardLayout(
         val bannersHeight = bannerBands.sumOf { it.height }
         val sheetHeight = sheetBands.sumOf { it.height }
 
-        val natural = homeMapNaturalHeight(viewport, sheetHeight.toDp())
-        val mapHeight = natural * MAP_HEIGHT_MULTIPLIER
+        val mapHeight = homeMapHeight(viewport)
+        val natural = mapHeight
 
         val mapPx = mapHeight.roundToPx()
 
@@ -384,61 +384,38 @@ private fun HomeDashboardLayout(
 private enum class HomeBand { Banners, Sheet, Map }
 
 /**
- * The height SCR-DA-010's map would take at the wireframe's `flex:1`, before
- * [MAP_HEIGHT_MULTIPLIER] enlarges it: whatever [viewport] has left once [sheet] has had its
- * share.
+ * How tall SCR-DA-010's map is drawn (Δ MCS-31).
  *
- * Measured rather than taken as a fraction of the viewport, because a Mode C standby sheet is a
- * different height from a Mode A/B journey sheet and a fraction tuned on one handset in one of
- * those states is wrong in all the others.
+ * **A fraction of the viewport and nothing else — the third attempt at this, and the first that
+ * cannot move.** The height was `(viewport − banners − sheet) × 1.5`, and BOTH subtrahends turned
+ * out to be driven by data that arrives after the first frame:
  *
- * **Δ MCS-29 — the banner stack is deliberately NOT subtracted, and that is the whole fix.** It
- * used to be, which was right as arithmetic and wrong as behaviour: every banner is driven by data
- * that arrives after the first frame (`standing.dailyFee`, the low-balance threshold, the ignition
- * and auto-ended notices), so the map was composed tall against an empty stack and then shrank as
- * each one appeared — between 14% and 28% on a 411×891 handset, which is exactly the "loads bigger
- * then reduces" a driver reported from one. MCS-26 removed the *measurement* feedback loop and this
- * is the *content* one; they look identical on a screen and have nothing else in common.
+ *  * the banner stack is zero to five rows of `standing.dailyFee`, the low-balance threshold and
+ *    the ignition and auto-ended notices — removed from the arithmetic in MCS-29;
+ *  * and the **sheet is no better, which MCS-29 asserted it was and was wrong about.**
+ *    `StandbyDashboard` gates a block on `needsVehicle`, returns early from the vehicle chip until
+ *    `vehicles.live` answers, and prints "pending" for earnings until they arrive. It grows as the
+ *    reads land and takes the map's height down with it.
  *
- * A banner now pushes the map DOWN inside the scroll instead of resizing it, which costs part of
- * the overscroll the multiplier already creates and costs the driver nothing.
+ * So a driver watched the map shrink twice, for two different reasons, and reported it again after
+ * the first fix. Measuring anything that is still loading is the whole mistake. The viewport is the
+ * one quantity on this screen that is settled on the first frame.
  *
- * Pure, and outside the composable, because this module has no instrumentation source set: a
- * layout rule that is only ever checked by eye is a layout rule that regresses. `HomeMapHeightTest`
- * is where the three cases below are pinned.
+ * **0.82 is where the old arithmetic landed once it had settled**, on the 411×891 handset this was
+ * reported from: a 240dp sheet leaves 651, and 651 × 1.125 is 732, which is 0.82 of 891. The map
+ * looks the way MCS-24 asked for it to look — past the fold, so it reads as a map and the scroll
+ * stays discoverable — and gets there without a single frame at any other size.
  *
- * @param sheet A real measurement, always (Δ MCS-26). It used to be able to arrive as zero meaning
- *   *"not measured yet"*, and this function answered the plain viewport for that frame.
- *   [HomeDashboardLayout] measures the sheet before it composes the map, so there is no such frame
- *   and no such case to answer. Unlike the banners it is present from the first frame and its
- *   height is structural rather than data-driven, which is why it is still subtracted.
+ * The sheet is not subtracted at all now. It sits below the map inside the scroll and is reached by
+ * scrolling, which is what the surrounding `verticalScroll` has been for since MCS-24.
  */
-internal fun homeMapNaturalHeight(viewport: Dp, sheet: Dp): Dp =
-    (viewport - sheet).coerceAtLeast(ControlTokens.HomeMapMinimum)
+internal fun homeMapHeight(viewport: Dp): Dp =
+    (viewport * MAP_VIEWPORT_FRACTION).coerceAtLeast(ControlTokens.HomeMapMinimum)
 
 /**
- * How much taller than the wireframe's `flex:1` the dashboard map is drawn.
+ * The share of one screenful the map takes.
  *
- * A deliberate deviation from `specs/wireframes/driver_android.html`, asked for from a handset: at
- * `flex:1` on a real screen the map is a band roughly a quarter of the viewport, which is too
- * little of it to read as a map. Enlarging it costs the sheet its place on the first screenful,
- * which is what the surrounding scroll is for — and is why this belongs in a micro-change-set
- * against §SCR-DA-010 rather than being a number quietly different from the spec.
- *
- * **Δ MCS-24 — 1.5, down from 2.0: a 25% reduction, asked for from a handset.** Doubled, the map
- * pushed the standby sheet entirely off the first screenful, so the toggle a driver opens this
- * screen to press was below the fold.
- *
- * **Δ MCS-31 — 1.125, another 25% off, and the reason is a consequence of MCS-29.** Removing the
- * banner stack from [homeMapNaturalHeight] stopped the map shrinking as banners arrived, which was
- * the reported defect — but it also made the SETTLED map taller by the height of those banners
- * times this multiplier, because the height they used to take is no longer subtracted. On a
- * 411×891 handset carrying two or three banners that is 150–250dp of extra map that nobody asked
- * for. The same driver who reported the shrink then reported the size, which is the correct
- * complaint about the wrong half of the change being fixed.
- *
- * 1.125 puts the settled height back where MCS-24 left it while keeping MCS-29's property that it
- * does not move: still past the fold, so it reads as a map and the scroll is discoverable, and no
- * longer dependent on data that arrives late.
+ * **No spec fixes this** — the wireframe's own `flex:1` is what it replaces. See [homeMapHeight]
+ * for where the number comes from and why it is a fraction rather than a measurement.
  */
-private const val MAP_HEIGHT_MULTIPLIER = 1.125f
+private const val MAP_VIEWPORT_FRACTION = 0.82f
