@@ -315,12 +315,11 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
         version: String,
         expires: Long,
         signature: String,
-    ): ByteArray =
-        transport.apiGet(SERVICE, "getDriverProfilePhoto", "/v1/drivers/$driverId/profile-photo") {
-            parameter("v", version)
-            parameter("expires", expires)
-            parameter("signature", signature)
-        }.body()
+    ): ByteArray = transport.apiGet(SERVICE, "getDriverProfilePhoto", "/v1/drivers/$driverId/profile-photo") {
+        parameter("v", version)
+        parameter("expires", expires)
+        parameter("signature", signature)
+    }.body()
 
     @Throws(MageRideError::class, CancellationException::class)
     override suspend fun upsertDriverProfile(request: UpsertDriverProfileRequest): UpsertDriverProfileResponse =

@@ -27,13 +27,14 @@ public data class CachedDriverProfile(
 
     // `ByteArray` is identity-compared by the generated equals, which would make two reads of the
     // same photograph unequal and re-emit state on every refresh.
-    override fun equals(other: Any?): Boolean = other is CachedDriverProfile
-        && name == other.name
-        && level == other.level
-        && registration == other.registration
-        && photoVersion == other.photoVersion
-        && syncedAt == other.syncedAt
-        && photoBytes.contentEquals(other.photoBytes)
+    override fun equals(other: Any?): Boolean =
+        other is CachedDriverProfile &&
+            name == other.name &&
+            level == other.level &&
+            registration == other.registration &&
+            photoVersion == other.photoVersion &&
+            syncedAt == other.syncedAt &&
+            photoBytes.contentEquals(other.photoBytes)
 
     override fun hashCode(): Int {
         var result = name?.hashCode() ?: 0
