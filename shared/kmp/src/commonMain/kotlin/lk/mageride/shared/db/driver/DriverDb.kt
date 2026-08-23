@@ -108,6 +108,11 @@ public class DriverDb(internal val sqlDriver: SqlDriver) : BaseMageRideDb(MageRi
             level_up_thresholdAdapter = IntColumnAdapter,
             synced_atAdapter = EpochMillisAdapter,
         ),
+        // Δ MCS-27 — §3.16's first-frame cache.
+        driver_profileAdapter = Driver_profile.Adapter(
+            levelAdapter = IntColumnAdapter,
+            synced_atAdapter = EpochMillisAdapter,
+        ),
         emergency_contactsAdapter = Emergency_contacts.Adapter(
             synced_atAdapter = EpochMillisAdapter,
             updated_atAdapter = EpochMillisAdapter,
