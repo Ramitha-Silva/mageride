@@ -51,6 +51,29 @@ public sealed record ExtractedFieldResponse(
 /// Not <see cref="DriverProfileResponse"/> with an empty <c>fields</c>: that would say the licence
 /// had no extracted fields, which is a different claim from "this read did not go and get them".
 /// </remarks>
+/// <summary>Turns the stored pointer into something a client can actually fetch (Δ MCS-25).</summary>
+/// <remarks>
+/// <para>
+/// One helper for both profile reads, because they answer the same question about the same column
+/// and had no business answering it differently.
+/// </para>
+/// <para>
+/// <b>A driver with no photo keeps <see langword="null"/>.</b> Signing a link to a row that has
+/// nothing behind it would give an app a URL that always 404s, which reads as a broken image rather
+/// than as the absence the field already expresses. This is only reachable for a profile that
+/// exists, and AL-27 makes the photo required to create one — but the column is nullable, PDPA
+/// erasure sets it to <c>NULL</c> (<c>PdpaRepository</c>), and a link minted for an erased driver
+/// would be the one case where this leaked something.
+/// </para>
+/// </remarks>
+internal static class DriverProfilePhotoLink
+{
+    public static string? For(DriverProfileResult result, IDriverPhotoLinks links) =>
+        string.IsNullOrWhiteSpace(result.Profile.PhotoUrl)
+            ? null
+            : links.Create(result.Profile.DriverId);
+}
+
 public sealed record DriverProfileSummaryResponse(
     string DriverId,
     string Status,
@@ -59,15 +82,22 @@ public sealed record DriverProfileSummaryResponse(
     string? NicNo,
     IReadOnlyList<string> AllowedVehicleTypes)
 {
-    public static DriverProfileSummaryResponse From(DriverProfileResult result)
+    /// <param name="links">
+    /// Mints the signed, expiring URL that replaces the stored pointer (Δ MCS-25). The column holds
+    /// an <c>s3://</c> or <c>file://</c> storage URL, which is this service's to resolve and not a
+    /// thing a client can fetch; sending it put a scheme no image loader understands into a field
+    /// the contract types as <c>format: uri</c>.
+    /// </param>
+    public static DriverProfileSummaryResponse From(DriverProfileResult result, IDriverPhotoLinks links)
     {
         ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(links);
 
         return new DriverProfileSummaryResponse(
             result.Profile.DriverId.ToString(),
             result.Status,
             result.Profile.DisplayName,
-            result.Profile.PhotoUrl,
+            DriverProfilePhotoLink.For(result, links),
             result.Profile.NicNo,
             result.Profile.AllowedVehicleTypes ?? []);
     }
@@ -86,15 +116,22 @@ public sealed record DriverProfileResponse(
     IReadOnlyList<string> AllowedVehicleTypes,
     IReadOnlyList<ExtractedFieldResponse> Fields)
 {
-    public static DriverProfileResponse From(DriverProfileResult result)
+    /// <param name="links">
+    /// Mints the signed, expiring URL that replaces the stored pointer (Δ MCS-25). The column holds
+    /// an <c>s3://</c> or <c>file://</c> storage URL, which is this service's to resolve and not a
+    /// thing a client can fetch; sending it put a scheme no image loader understands into a field
+    /// the contract types as <c>format: uri</c>.
+    /// </param>
+    public static DriverProfileResponse From(DriverProfileResult result, IDriverPhotoLinks links)
     {
         ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(links);
 
         return new DriverProfileResponse(
             result.Profile.DriverId.ToString(),
             result.Status,
             result.Profile.DisplayName,
-            result.Profile.PhotoUrl,
+            DriverProfilePhotoLink.For(result, links),
             result.Profile.NicNo,
             result.Profile.AllowedVehicleTypes ?? [],
             [.. result.Fields.Select(ExtractedFieldResponse.From)]);

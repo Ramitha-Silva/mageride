@@ -224,6 +224,8 @@ paths:
                   photoUrl:
                     type: string
                     format: uri
+                    description: >-
+                      Δ MCS-25 — a **relative, signed, expiring** URL onto `getDriverProfilePhoto`, not the stored `s3://` / `file://` pointer. Resolve it against the gateway origin and follow it as given; it changes between reads and needs no bearer token.
                   nicNo:
                     type: string
                   allowedVehicleTypes:
@@ -240,6 +242,69 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
+
+  /v1/drivers/{driverId}/profile-photo:
+    get:
+      operationId: getDriverProfilePhoto
+      summary: The bytes behind the `photoUrl` a driver profile read handed back.
+      description: |
+        **Δ MCS-25.** `photoUrl` used to be the value `registry.driver_profiles.photo_url` holds,
+        which is an `s3://bucket/key` or `file://…` pointer — this service's to resolve, and not
+        something a client can fetch. Both driver apps therefore drew a placeholder where the
+        wireframes draw an avatar, and the photograph AL-27 *requires* a driver to upload was never
+        shown back to them.
+
+        The reads now hand back a **relative, signed, expiring** URL that resolves to this
+        operation, which is the same shape `TicketDetail.screenshotUrl` has carried since C053 and
+        is chosen for the same reason: the caller is an image loader.
+
+        **No bearer token, deliberately.** An image loader does not carry one, and putting an access
+        token in a query string puts it in every proxy log the request passes through. The
+        `signature` is the credential — unguessable, scoped to one driver, and expiring.
+
+        **Every refusal is the same refusal.** A malformed id, a forged or expired signature, a
+        driver who does not exist and a driver with no photo all answer `403`. Telling them apart
+        would let somebody holding a link they cannot use learn which driver ids are real.
+
+        The link is minted fresh on each profile read, so it changes between reads; clients should
+        follow the URL they were given rather than storing one.
+      tags: [drivers]
+      security: []
+      parameters:
+        - name: driverId
+          in: path
+          required: true
+          schema: { $ref: './_shared.yaml#/components/schemas/Ulid' }
+        - name: expires
+          in: query
+          required: true
+          description: Unix seconds at which the signature stops verifying.
+          schema:
+            type: string
+        - name: signature
+          in: query
+          required: true
+          description: Lower-case hex HMAC-SHA256 issued by registry-svc.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The image bytes.
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+        '302':
+          description: |
+            The object store can serve the bytes directly, so the caller is redirected to a
+            short-lived presigned URL (D-36). Only ever issued to a caller that already proved the
+            signature.
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404':
+          description: The link verified but the bytes are gone — a filesystem store whose pod was replaced.
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [forbidden]
 
   # -------------------------------------------------------------------------------------------
   # Vehicles
@@ -1237,6 +1302,8 @@ components:
         photoUrl:
           type: string
           format: uri
+          description: >-
+            Δ MCS-25 — a **relative, signed, expiring** URL onto `getDriverProfilePhoto`, not the stored `s3://` / `file://` pointer. Resolve it against the gateway origin and follow it as given; it changes between reads and needs no bearer token.
         nicNo:
           type: string
         allowedVehicleTypes:

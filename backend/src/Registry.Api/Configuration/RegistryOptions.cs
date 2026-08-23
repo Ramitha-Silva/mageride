@@ -123,6 +123,27 @@ public sealed class RegistryOptions
     public TimeSpan OnboardingDocumentRetention { get; set; } = TimeSpan.FromDays(90);
 
     // -----------------------------------------------------------------------------------------
+    // The profile photo link (Δ MCS-25)
+    // -----------------------------------------------------------------------------------------
+
+    /// <summary>Signs the expiring URL the driver profile reads carry in place of the raw pointer.</summary>
+    /// <remarks>
+    /// <b>Set this wherever there is more than one replica.</b> Unset, <see cref="Onboarding.DriverPhotoLinks"/>
+    /// generates a key per process and says so at start-up: links minted by one replica then fail on
+    /// the next, which a driver sees as an avatar that loads on one refresh and not the following one.
+    /// </remarks>
+    public string? ProfilePhotoLinkSigningKey { get; set; }
+
+    /// <summary>How long one of those links stays good for.</summary>
+    /// <remarks>
+    /// <b>No spec.</b> Long enough that a header rendered when a screen opened still loads if the
+    /// driver reads down the page first, short enough that a link copied out of a log is worthless
+    /// by the time anyone finds it. support-svc's <c>FileLinkTtl</c> is the sibling to keep this in
+    /// step with.
+    /// </remarks>
+    public TimeSpan ProfilePhotoLinkTtl { get; set; } = TimeSpan.FromMinutes(15);
+
+    // -----------------------------------------------------------------------------------------
     // C054 — the ocr-svc hop (D6' §7.5)
     // -----------------------------------------------------------------------------------------
 

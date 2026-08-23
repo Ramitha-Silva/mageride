@@ -71,6 +71,10 @@ public static class RegistryServiceCollectionExtensions
         // which left Profile Setup and the Mode-C wizard unreachable on a real gateway.
         services.AddSingleton<IOnboardingDocumentStore, OnboardingDocumentStore>();
 
+        // Δ MCS-25 — mints the signed, expiring URL the profile reads carry instead of the raw
+        // `s3://` / `file://` pointer, which no image loader can follow.
+        services.AddSingleton<IDriverPhotoLinks, DriverPhotoLinks>();
+
         // Δ D-36. `Registry:PayoutDocumentRoot` stays honoured as the filesystem fallback's root so
         // a deployment that has not set `Storage:*` behaves exactly as it did, and so the rows it
         // already wrote go on resolving after it has.
