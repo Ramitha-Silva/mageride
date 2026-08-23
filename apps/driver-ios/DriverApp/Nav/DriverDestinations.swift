@@ -15,6 +15,11 @@ struct DriverDestinationView: View {
 
     let route: DriverRoute
 
+    /// Δ MCS-28 — the first arm in this switch that builds a model directly rather than delegating
+    /// to a cluster's own destination view. `.documents` belongs to no screen group, which is why
+    /// it was the last placeholder standing.
+    @EnvironmentObject private var graph: DriverGraph
+
     var body: some View {
         switch route {
         // ---- C086 · auth / onboarding ------------------------------------------------
@@ -75,9 +80,12 @@ struct DriverDestinationView: View {
         // ---- menu and what hangs off it ----------------------------------------------
         //
         // `.menu` is SCR-DI-036 and is C088's — see the arm above; it is the Menu tab's root and the
-        // whole of AL-31's replacement for the hamburger. `Documents` is the one placeholder left in
-        // this app, on both platforms: no screen group owns it.
-        case .documents: placeholder("driver documents")
+        // whole of AL-31's replacement for the hamburger.
+        //
+        // Δ MCS-28 — `.documents` was the last placeholder on either platform, and it stood because
+        // there was nothing to draw: `VehicleDocument` carried a kind, a status and an expiry and no
+        // image. The signed image links exist now.
+        case .documents: DocumentsScreen(model: graph.makeDocumentsModel())
         }
     }
 

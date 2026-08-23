@@ -507,6 +507,11 @@ final class DriverGraph: ObservableObject {
         MenuModel(identity: identity, profiles: profileSettings)
     }
 
+    /// SCR-DI-029a (Δ MCS-28) — the driver's own documents, cached under the §0.4 exception.
+    func makeDocumentsModel() -> DocumentsModel {
+        DocumentsModel(store: ApiDriverDocumentStore(registry: shared.api.registry, databases: databases))
+    }
+
     /// SCR-DI-030.
     func makeRideHistoryModel() -> RideHistoryModel {
         RideHistoryModel(identity: identity, history: history)

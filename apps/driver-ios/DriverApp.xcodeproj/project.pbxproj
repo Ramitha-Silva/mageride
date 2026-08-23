@@ -27,6 +27,9 @@
 		D8E7732C8B422FEDE6B0AD95 /* DriverEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35CED894E1BC32921553881E /* DriverEnvironment.swift */; };
 		ACAD0F669D5A7A1AED145D08 /* DriverGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A69E5573001975393345A80 /* DriverGraph.swift */; };
 		5B0D4C9C9658B83B296E2F41 /* SharedTypeNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = A279896BB9F21E4E6908C9EB /* SharedTypeNames.swift */; };
+		CADF7BC9C054C428FB69975D /* DocumentsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88B186E7E67694B740613B37 /* DocumentsModel.swift */; };
+		A6A0F192B80A6466A70490D2 /* DocumentsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 887651699E2577EF2CABBD88 /* DocumentsScreen.swift */; };
+		0743535E8E5BFC6899ECD253 /* DriverDocumentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 377252D565CDD1F703870A57 /* DriverDocumentStore.swift */; };
 		92F1B04466957D5FCDCE9E5A /* DriverApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B71D93C4CD477D8FAC44391 /* DriverApp.swift */; };
 		026E1E6BF577D166F02784CD /* DriverAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1724F2FBB5F598329BDF7F6C /* DriverAppDelegate.swift */; };
 		5D9B53E7391EE580527F2631 /* EarningsBuckets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07F663E68636185DC5173458 /* EarningsBuckets.swift */; };
@@ -337,6 +340,9 @@
 		FAEA558C5FCFDF1EDD2825F6 /* DeliverySheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DeliverySheets.swift"; path = "DeliverySheets.swift"; sourceTree = "<group>"; };
 		97629AC0ECF2A22730E0F863 /* DeliveryState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DeliveryState.swift"; path = "DeliveryState.swift"; sourceTree = "<group>"; };
 		B64924DD58C56AA4AEC5B994 /* ProofUploadQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ProofUploadQueue.swift"; path = "ProofUploadQueue.swift"; sourceTree = "<group>"; };
+		88B186E7E67694B740613B37 /* DocumentsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DocumentsModel.swift"; path = "DocumentsModel.swift"; sourceTree = "<group>"; };
+		887651699E2577EF2CABBD88 /* DocumentsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DocumentsScreen.swift"; path = "DocumentsScreen.swift"; sourceTree = "<group>"; };
+		377252D565CDD1F703870A57 /* DriverDocumentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverDocumentStore.swift"; path = "DriverDocumentStore.swift"; sourceTree = "<group>"; };
 		6B71D93C4CD477D8FAC44391 /* DriverApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverApp.swift"; path = "DriverApp.swift"; sourceTree = "<group>"; };
 		1724F2FBB5F598329BDF7F6C /* DriverAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverAppDelegate.swift"; path = "DriverAppDelegate.swift"; sourceTree = "<group>"; };
 		07F663E68636185DC5173458 /* EarningsBuckets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "EarningsBuckets.swift"; path = "EarningsBuckets.swift"; sourceTree = "<group>"; };
@@ -565,6 +571,7 @@
 				5230F37308010AF712F41D7B /* Comms */,
 				357D1A2C1F459E842DF63E70 /* DI */,
 				77393FC836F3F2E23973BB70 /* Delivery */,
+				D7144785A05F342AA304740F /* Documents */,
 				B8308AD24EAA8CA15E1596BE /* Earnings */,
 				BF815807CC31EF58B971510A /* History */,
 				89BADD16B183CA556686C344 /* Home */,
@@ -711,6 +718,16 @@
 				B64924DD58C56AA4AEC5B994 /* ProofUploadQueue.swift */,
 			);
 			path = "Delivery";
+			sourceTree = "<group>";
+		};
+		D7144785A05F342AA304740F /* Documents */ = {
+			isa = PBXGroup;
+			children = (
+				88B186E7E67694B740613B37 /* DocumentsModel.swift */,
+				887651699E2577EF2CABBD88 /* DocumentsScreen.swift */,
+				377252D565CDD1F703870A57 /* DriverDocumentStore.swift */,
+			);
+			path = "Documents";
 			sourceTree = "<group>";
 		};
 		B8308AD24EAA8CA15E1596BE /* Earnings */ = {
@@ -1199,6 +1216,9 @@
 				D8E7732C8B422FEDE6B0AD95 /* DriverEnvironment.swift in Sources */,
 				ACAD0F669D5A7A1AED145D08 /* DriverGraph.swift in Sources */,
 				5B0D4C9C9658B83B296E2F41 /* SharedTypeNames.swift in Sources */,
+				CADF7BC9C054C428FB69975D /* DocumentsModel.swift in Sources */,
+				A6A0F192B80A6466A70490D2 /* DocumentsScreen.swift in Sources */,
+				0743535E8E5BFC6899ECD253 /* DriverDocumentStore.swift in Sources */,
 				92F1B04466957D5FCDCE9E5A /* DriverApp.swift in Sources */,
 				026E1E6BF577D166F02784CD /* DriverAppDelegate.swift in Sources */,
 				5D9B53E7391EE580527F2631 /* EarningsBuckets.swift in Sources */,

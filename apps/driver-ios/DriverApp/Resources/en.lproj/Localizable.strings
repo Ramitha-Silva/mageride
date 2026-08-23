@@ -938,3 +938,14 @@
 
 /* The search field's clear button, which VoiceOver reads and nothing else does. */
 "action_clear" = "Clear";
+"documents_title" = "My documents";
+"documents_empty" = "Your documents will appear here once you have uploaded them.";
+"documents_offline" = "Showing what is saved on this phone. Could not reach MageRide to check for updates.";
+"documents_stale" = "Saved copy — may be out of date";
+"documents_open" = "My documents";
+"documents_vehicle_action" = "Documents";
+"doc_kind_driving_license" = "Driving licence";
+"doc_kind_registration" = "Registration";
+"doc_kind_permit" = "Route permit";
+"doc_kind_insurance" = "Insurance";
+"doc_kind_revenue_license" = "Revenue licence";

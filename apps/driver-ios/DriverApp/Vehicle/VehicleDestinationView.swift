@@ -64,7 +64,8 @@ struct VehicleDestinationView: View {
                 // wizard opens at the next incomplete step or starts a NEW vehicle at Step 1/4, and
                 // it decides that in the repository, not here.
                 onAddVehicle: { navigator.open(.vehicleOnboarding) },
-                onOpenStatus: { navigator.open(.vehicleOnboardingStatus) }
+                onOpenStatus: { navigator.open(.vehicleOnboardingStatus) },
+                onOpenDocuments: { navigator.open(.documents) }
             )
 
         default:

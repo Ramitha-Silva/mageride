@@ -19,6 +19,8 @@ import SwiftUI
 ///     wizard, and ``VehicleOnboardingRepository/resume()`` decides whether that is a resume or a
 ///     **new** vehicle at Step 1/4 (US-2.27).
 ///   - onOpenStatus: Opens SCR-DI-006 for a vehicle whose documents are being verified.
+///   - onOpenDocuments: Opens SCR-DI-029a (Δ MCS-28), where the documents themselves can be looked
+///     at — a different question from ``onOpenStatus``, and the one asked at a checkpoint.
 ///
 /// `@MainActor` on the whole view, not on its initialiser — see ``ProfileSetupScreen`` for why.
 @MainActor
@@ -28,19 +30,22 @@ struct VehiclesScreen: View {
 
     private let onAddVehicle: () -> Void
     private let onOpenStatus: () -> Void
+    private let onOpenDocuments: () -> Void
 
     init(
         vehicles: VehicleOnboardingRepository,
         session: VehicleOnboardingSession,
         activeVehicle: ActiveVehicleStore,
         onAddVehicle: @escaping () -> Void,
-        onOpenStatus: @escaping () -> Void
+        onOpenStatus: @escaping () -> Void,
+        onOpenDocuments: @escaping () -> Void
     ) {
         _model = StateObject(
             wrappedValue: VehiclesModel(vehicles: vehicles, session: session, activeVehicle: activeVehicle)
         )
         self.onAddVehicle = onAddVehicle
         self.onOpenStatus = onOpenStatus
+        self.onOpenDocuments = onOpenDocuments
     }
 
     var body: some View {
@@ -249,6 +254,18 @@ struct VehiclesScreen: View {
             }
         }
         .tint(MageRideColor.primary)
+
+        // Δ MCS-28 — the documents themselves, not their verification state. `vehicles_view_status`
+        // above answers "has an officer checked this yet"; this answers "show me the certificate",
+        // which is the question asked at a checkpoint.
+        Button(action: onOpenDocuments) {
+            Label {
+                Text(key: "documents_vehicle_action")
+            } icon: {
+                Image(systemName: "doc.text.fill")
+            }
+        }
+        .tint(MageRideColor.secondary)
     }
 
     private func resume(_ row: VehicleRow) {
