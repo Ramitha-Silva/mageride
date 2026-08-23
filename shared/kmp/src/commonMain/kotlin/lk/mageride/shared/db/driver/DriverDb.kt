@@ -113,6 +113,13 @@ public class DriverDb(internal val sqlDriver: SqlDriver) : BaseMageRideDb(MageRi
             levelAdapter = IntColumnAdapter,
             synced_atAdapter = EpochMillisAdapter,
         ),
+        // Δ MCS-28 — §3.17's document images. Both timestamps, no adapted Int: `side` and `kind`
+        // stay TEXT for the reason every other enum-ish column here does — an adapter that threw on
+        // an unknown value would crash the app on a deploy that added a document kind.
+        document_imagesAdapter = Document_images.Adapter(
+            cached_atAdapter = EpochMillisAdapter,
+            expires_atAdapter = EpochMillisAdapter,
+        ),
         emergency_contactsAdapter = Emergency_contacts.Adapter(
             synced_atAdapter = EpochMillisAdapter,
             updated_atAdapter = EpochMillisAdapter,

@@ -106,7 +106,7 @@ public class DocumentImageCache(private val db: DriverDb, private val retention:
                 kind = kind,
                 side = side,
                 content_type = contentType,
-                bytes_ = bytes,
+                bytes = bytes,
                 version = version,
                 cached_at = now,
                 expires_at = now + retention,
@@ -146,7 +146,7 @@ public class DocumentImageCache(private val db: DriverDb, private val retention:
         kind = kind,
         side = side,
         contentType = content_type,
-        bytes = bytes_,
+        bytes = bytes,
         version = version,
         isStale = expires_at <= now,
     )
