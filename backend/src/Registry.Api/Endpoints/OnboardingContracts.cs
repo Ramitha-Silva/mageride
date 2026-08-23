@@ -51,6 +51,52 @@ public sealed record ExtractedFieldResponse(
 /// Not <see cref="DriverProfileResponse"/> with an empty <c>fields</c>: that would say the licence
 /// had no extracted fields, which is a different claim from "this read did not go and get them".
 /// </remarks>
+/// <summary>One of a driver's documents, with a link to its image (Δ MCS-28).</summary>
+/// <param name="VehicleId">
+/// <see langword="null"/> for the driving licence, which belongs to the person rather than to any
+/// vehicle (AL-27). That is also how a client groups this list: the null ones go on SCR-DA/DI-029
+/// and the rest onto the card of the vehicle they name.
+/// </param>
+/// <param name="ImageUrl">
+/// A relative, signed, expiring link to the bytes. Resolve it against the gateway origin and follow
+/// it as given; it changes between reads and needs no bearer token.
+/// </param>
+public sealed record DriverDocumentResponse(
+    string DocId,
+    string? VehicleId,
+    string Kind,
+    string Status,
+    DateTimeOffset? ExpiresAt,
+    string ImageUrl)
+{
+    public static DriverDocumentResponse From(Guid driverId, VehicleDocument document, IDriverPhotoLinks links)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(links);
+
+        return new DriverDocumentResponse(
+            document.Id.ToString(),
+            document.VehicleId?.ToString(),
+            document.Kind,
+            document.Status,
+            document.ExpiresAt,
+            links.CreateDocument(driverId, document.Id, document.FileUrl));
+    }
+}
+
+/// <summary>200 body of <c>GET /v1/drivers/documents</c> (Δ MCS-28).</summary>
+public sealed record DriverDocumentListResponse(IReadOnlyList<DriverDocumentResponse> Items)
+{
+    public static DriverDocumentListResponse From(
+        Guid driverId, IReadOnlyList<VehicleDocument> documents, IDriverPhotoLinks links)
+    {
+        ArgumentNullException.ThrowIfNull(documents);
+
+        return new DriverDocumentListResponse(
+            [.. documents.Select(document => DriverDocumentResponse.From(driverId, document, links))]);
+    }
+}
+
 /// <summary>Turns the stored pointer into something a client can actually fetch (Δ MCS-25).</summary>
 /// <remarks>
 /// <para>

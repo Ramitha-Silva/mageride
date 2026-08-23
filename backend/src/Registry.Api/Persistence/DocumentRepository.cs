@@ -85,6 +85,41 @@ public interface IDocumentRepository
     Task<IReadOnlyList<VehicleDocument>> ListCurrentForDriverAsync(
         NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid driverId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Every current document this driver is entitled to look at (Δ MCS-28) — their own identity
+    /// documents, and the documents of every vehicle they own or are assigned to.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>One query, and the entitlement is a join rather than a filter.</b> The alternative is to
+    /// list the driver's vehicles and then read documents per vehicle, which is the same answer
+    /// with a race in it: a vehicle deactivated between the two reads still yields its documents.
+    /// </para>
+    /// <para>
+    /// <c>registry.driver_eligible_vehicles</c> is what "entitled to" means here, because it is
+    /// what it means everywhere else — <c>select-live</c>, dispatch's standby gate and
+    /// trip-state-svc all read it, and a fourth definition of the same question is how three of
+    /// them end up disagreeing.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<VehicleDocument>> ListVisibleToDriverAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid driverId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// One document, but only if <paramref name="driverId"/> may see it (Δ MCS-28).
+    /// </summary>
+    /// <remarks>
+    /// The ownership predicate is in the SQL rather than checked afterwards, so "not yours" and
+    /// "does not exist" are the same query result. Telling them apart would let somebody holding a
+    /// document id learn whose vehicle it names.
+    /// </remarks>
+    Task<VehicleDocument?> FindVisibleToDriverAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid driverId,
+        Guid documentId,
+        CancellationToken cancellationToken);
+
     /// <summary>The documents a step uploaded, newest save first.</summary>
     Task<IReadOnlyList<VehicleDocument>> ListByVehicleAndKindAsync(
         NpgsqlConnection connection,
@@ -274,6 +309,59 @@ public sealed class DocumentRepository : IDocumentRepository
             cancellationToken: cancellationToken));
 
         return [.. documents];
+    }
+
+    /// <summary>The entitlement both MCS-28 reads share, as a WHERE clause.</summary>
+    /// <remarks>
+    /// A driver sees their own vehicle-less identity documents, and the documents of any vehicle
+    /// <c>driver_eligible_vehicles</c> says they may operate. Rejected documents are excluded from
+    /// the list for the same reason the other two reads exclude them: a superseded upload is
+    /// audit-trail, not something to show a driver as their insurance.
+    /// </remarks>
+    private const string VisibleToDriver =
+        """
+        (
+          (driver_id = @DriverId AND vehicle_id IS NULL)
+          OR vehicle_id IN (SELECT vehicle_id FROM registry.driver_eligible_vehicles WHERE driver_id = @DriverId)
+        )
+        """;
+
+    public async Task<IReadOnlyList<VehicleDocument>> ListVisibleToDriverAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid driverId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        // The same newest-batch-per-kind rule the other two reads use, partitioned by vehicle as
+        // well as kind so one vehicle's renewed insurance does not hide another's.
+        var documents = await connection.QueryAsync<VehicleDocument>(new CommandDefinition(
+            $"""
+             SELECT {Columns} FROM (
+               SELECT {Columns}, max(created_at) OVER (PARTITION BY vehicle_id, kind) AS newest
+                 FROM registry.documents
+                WHERE {VisibleToDriver} AND status <> '{DocumentStatuses.Rejected}'
+             ) current WHERE created_at = newest ORDER BY vehicle_id NULLS FIRST, kind, id;
+             """,
+            new { DriverId = driverId },
+            transaction,
+            cancellationToken: cancellationToken));
+
+        return [.. documents];
+    }
+
+    public Task<VehicleDocument?> FindVisibleToDriverAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid driverId,
+        Guid documentId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        return connection.QuerySingleOrDefaultAsync<VehicleDocument>(new CommandDefinition(
+            $"SELECT {Columns} FROM registry.documents WHERE id = @DocumentId AND {VisibleToDriver};",
+            new { DriverId = driverId, DocumentId = documentId },
+            transaction,
+            cancellationToken: cancellationToken));
     }
 
     public async Task<IReadOnlyList<VehicleDocument>> ListByVehicleAndKindAsync(

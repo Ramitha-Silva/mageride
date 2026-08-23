@@ -61,6 +61,19 @@ public interface IDriverPhotoLinks
     /// photo the driver currently has.
     /// </summary>
     bool Verify(Guid driverId, string currentStorageUrl, string? version, string? expires, string? signature);
+
+    /// <summary>The relative, signed URL for one of a driver's documents (Δ MCS-28).</summary>
+    /// <remarks>
+    /// <b>The signature names the driver AND the document.</b> The route re-checks entitlement
+    /// against <c>driver_eligible_vehicles</c> anyway, so this is the second of two locks rather
+    /// than the only one — a signing key that ever leaked would otherwise be a key to every NIC and
+    /// driving licence on the platform, which is a materially worse thing to hold than an avatar.
+    /// </remarks>
+    string CreateDocument(Guid driverId, Guid documentId, string storageUrl);
+
+    /// <summary>Whether a presented document signature is one this service issued and still current.</summary>
+    bool VerifyDocument(
+        Guid driverId, Guid documentId, string currentStorageUrl, string? version, string? expires, string? signature);
 }
 
 /// <inheritdoc cref="IDriverPhotoLinks"/>
@@ -75,6 +88,17 @@ public sealed class DriverPhotoLinks : IDriverPhotoLinks
     /// few bytes now and removes a class of mistake later.
     /// </remarks>
     private const string Purpose = "driver_profile_photo";
+
+    /// <summary>
+    /// The document link's own domain separation (Δ MCS-28).
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="Purpose"/> so a signature minted for an avatar can never verify as
+    /// one for a driving licence, whatever else goes wrong. The two routes read different columns
+    /// and answer different bytes; sharing a signed message between them would be one refactor away
+    /// from being the same link.
+    /// </remarks>
+    private const string DocumentPurpose = "driver_document_image";
 
     private readonly RegistryOptions _options;
     private readonly TimeProvider _clock;
@@ -117,7 +141,24 @@ public sealed class DriverPhotoLinks : IDriverPhotoLinks
             + $"?v={version}&expires={expires}&signature={Sign(driverId, version, expires)}";
     }
 
-    public bool Verify(Guid driverId, string currentStorageUrl, string? version, string? expires, string? signature)
+    public bool Verify(Guid driverId, string currentStorageUrl, string? version, string? expires, string? signature) =>
+        Verify(
+            signed: Sign(driverId, version ?? string.Empty, expires ?? string.Empty),
+            currentStorageUrl: currentStorageUrl,
+            version: version,
+            expires: expires,
+            signature: signature);
+
+    /// <summary>
+    /// Everything both links check, given the signature the caller should have presented.
+    /// </summary>
+    /// <remarks>
+    /// One body rather than two, because these are the properties the whole arrangement rests on —
+    /// the deadline is real, the version names what the driver has now, and the comparison is
+    /// fixed-time. A second copy is a second place for one of the three to go missing.
+    /// </remarks>
+    private bool Verify(
+        string signed, string currentStorageUrl, string? version, string? expires, string? signature)
     {
         if (string.IsNullOrWhiteSpace(version) || string.IsNullOrWhiteSpace(expires)
             || string.IsNullOrWhiteSpace(signature))
@@ -152,9 +193,34 @@ public sealed class DriverPhotoLinks : IDriverPhotoLinks
 
         // Fixed-time, so a caller cannot learn a valid signature one byte at a time from how long
         // the comparison took.
-        return CryptographicOperations.FixedTimeEquals(
-            presented, Convert.FromHexString(Sign(driverId, version, expires)));
+        return CryptographicOperations.FixedTimeEquals(presented, Convert.FromHexString(signed));
     }
+
+    public string CreateDocument(Guid driverId, Guid documentId, string storageUrl)
+    {
+        var expires = (_clock.GetUtcNow() + _options.ProfilePhotoLinkTtl).ToUnixTimeSeconds()
+            .ToString(CultureInfo.InvariantCulture);
+
+        var version = Version(storageUrl);
+
+        return $"/v1/drivers/documents/{documentId}/image"
+            + $"?d={driverId}&v={version}&expires={expires}"
+            + $"&signature={SignDocument(driverId, documentId, version, expires)}";
+    }
+
+    public bool VerifyDocument(
+        Guid driverId, Guid documentId, string currentStorageUrl, string? version, string? expires, string? signature) =>
+        Verify(
+            signed: SignDocument(driverId, documentId, version ?? string.Empty, expires ?? string.Empty),
+            currentStorageUrl: currentStorageUrl,
+            version: version,
+            expires: expires,
+            signature: signature);
+
+    private string SignDocument(Guid driverId, Guid documentId, string version, string expires) =>
+        Convert.ToHexStringLower(
+            HMACSHA256.HashData(
+                _key, Encoding.UTF8.GetBytes($"{DocumentPurpose}|{driverId}|{documentId}|{version}|{expires}")));
 
     private string Sign(Guid driverId, string version, string expires) =>
         Convert.ToHexStringLower(
