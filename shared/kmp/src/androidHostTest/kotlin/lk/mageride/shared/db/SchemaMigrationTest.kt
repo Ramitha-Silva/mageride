@@ -160,9 +160,10 @@ class SchemaMigrationTest {
         // Δ MCS-27 — the two are no longer the same number, and there is no reason they should be.
         // They are separate files with separate schemas (§0.2) and a change to one is not a change
         // to the other: `2.sqm` adds §3.16's `driver_profile`, which is a driver-app table, and the
-        // passenger database has no business gaining a version for it.
+        // passenger database has no business gaining a version for it. `3.sqm` adds §3.17's
+        // `document_images` for the same reason and widens the gap again.
         assertEquals(2L, PassengerDb.SCHEMA.version)
-        assertEquals(3L, DriverDb.SCHEMA.version)
+        assertEquals(4L, DriverDb.SCHEMA.version)
     }
 
     @Test

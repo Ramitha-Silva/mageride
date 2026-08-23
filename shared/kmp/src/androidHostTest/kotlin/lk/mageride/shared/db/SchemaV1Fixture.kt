@@ -93,6 +93,9 @@ internal val DRIVER_V1_DOWNGRADE = """
     -- Δ MCS-27 — §3.16 arrives in `2.sqm`, so a version-1 handset has no such table.
     DROP TABLE driver_profile;
 
+    -- Δ MCS-28 — §3.17 arrives in `3.sqm`, likewise.
+    DROP TABLE document_images;
+
     CREATE TABLE active_ride (
         id                  TEXT NOT NULL PRIMARY KEY,
         state               TEXT NOT NULL,

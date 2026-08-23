@@ -195,6 +195,19 @@ class MobileSchemaTest {
             "photo_bytes",
             "synced_at",
         ),
+        // Δ MCS-28 — §3.17. The §0.4 identity-document exception: own documents only, encrypted at
+        // rest, bounded lifetime, wiped with the file, never exported.
+        "document_images" to setOf(
+            "document_id",
+            "vehicle_id",
+            "kind",
+            "side",
+            "content_type",
+            "bytes",
+            "version",
+            "cached_at",
+            "expires_at",
+        ),
     )
 
     /** Every index the spec prints, and the columns it prints them over. */
@@ -213,6 +226,8 @@ class MobileSchemaTest {
         "ix_jobboard_time" to ("job_board" to listOf("pickup_time")),
         "ix_docs_expiry" to ("documents" to listOf("expires_at")),
         "ix_credit_transfers_recent" to ("credit_transfers" to listOf("created_at")),
+        "ix_document_images_expiry" to ("document_images" to listOf("expires_at")),
+        "ix_document_images_vehicle" to ("document_images" to listOf("vehicle_id")),
     )
 
     @Test
