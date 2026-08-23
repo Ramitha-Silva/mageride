@@ -9,7 +9,8 @@ import kotlin.test.assertTrue
 /**
  * SCR-DA-010's map height, which is arithmetic rather than a constant and so can be wrong quietly.
  *
- * The dashboard map is drawn at twice the height the wireframe's `flex:1` gives it and the screen
+ * The dashboard map is drawn at one and a half times the height the wireframe's `flex:1` gives it
+ * and the screen
  * scrolls to make room, so the number below decides three things at once: how much map the driver
  * sees, where the offline hint and the recentre FAB land, and how far the sheet sits past the fold.
  * This module has no instrumentation source set — nothing else in the build looks at any of that.
@@ -33,14 +34,18 @@ class HomeMapHeightTest {
         assertEquals(400.dp, homeMapNaturalHeight(viewport, 0.dp, sheet))
     }
 
+    /**
+     * Δ MCS-26 — there is no longer a "not measured yet" case, and this is the test that used to
+     * say there was.
+     *
+     * It asserted that a zero sheet means *the first layout pass* and gave the map the plain
+     * viewport for that frame. `HomeDashboardLayout` subcomposes: the sheet is measured before the
+     * map is composed at all, so the map is never built at a height it will not keep. A zero here
+     * is now just arithmetic, and the arithmetic is the same as every other case.
+     */
     @Test
-    fun an_unmeasured_sheet_is_the_first_layout_pass_and_not_an_empty_sheet() {
-        // `DashboardSheet` always draws a grab handle and its own padding, so a measured sheet is
-        // never 0. Reading a zero as a real height would hand the map `viewport - banners` and
-        // then double THAT, which is a map two screens tall for the one frame before the sheet
-        // reports. The map takes the plain viewport instead.
-        assertEquals(viewport, homeMapNaturalHeight(viewport, banners, 0.dp))
-        assertEquals(viewport, homeMapNaturalHeight(viewport, banners, (-1).dp))
+    fun a_zero_sheet_is_arithmetic_now_and_not_a_first_frame() {
+        assertEquals(600.dp, homeMapNaturalHeight(viewport, banners, 0.dp))
     }
 
     @Test

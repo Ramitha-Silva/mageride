@@ -795,3 +795,14 @@
 
 /* தேடல் புலத்தை அழிக்கும் பொத்தான். */
 "action_clear" = "அழி";
+"documents_title" = "என் ஆவணங்கள்";
+"documents_empty" = "நீங்கள் பதிவேற்றியதும் உங்கள் ஆவணங்கள் இங்கே தோன்றும்.";
+"documents_offline" = "இந்த தொலைபேசியில் சேமிக்கப்பட்டவை காட்டப்படுகின்றன. புதுப்பிப்புகளைச் சரிபார்க்க MageRide ஐ அடைய முடியவில்லை.";
+"documents_stale" = "சேமித்த நகல் — காலாவதியாகி இருக்கலாம்";
+"documents_open" = "என் ஆவணங்கள்";
+"documents_vehicle_action" = "ஆவணங்கள்";
+"doc_kind_driving_license" = "ஓட்டுநர் உரிமம்";
+"doc_kind_registration" = "பதிவு";
+"doc_kind_permit" = "வழி அனுமதி";
+"doc_kind_insurance" = "காப்பீடு";
+"doc_kind_revenue_license" = "வருவாய் உரிமம்";

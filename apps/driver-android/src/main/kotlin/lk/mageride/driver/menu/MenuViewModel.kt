@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import lk.mageride.driver.home.DriverIdentity
+import lk.mageride.driver.profile.DriverProfileStore
 import lk.mageride.driver.profile.ProfileRepository
 import lk.mageride.driver.ui.component.DriverHeaderState
 
@@ -23,15 +24,64 @@ import lk.mageride.driver.ui.component.DriverHeaderState
  * are static, so the header fills in behind them and a failure leaves it on its defaults rather
  * than putting an error over a list of links that all still work.
  */
-internal class MenuViewModel(private val identity: DriverIdentity, private val profiles: ProfileRepository) :
-    ViewModel() {
+internal class MenuViewModel(
+    private val identity: DriverIdentity,
+    private val profiles: ProfileRepository,
+    private val store: DriverProfileStore,
+) : ViewModel() {
 
     private val mutableState = MutableStateFlow(DriverHeaderState())
 
     val header: StateFlow<DriverHeaderState> = mutableState.asStateFlow()
 
     init {
+        // Δ MCS-27 — the cache FIRST, and synchronously enough that the drawer's first frame has a
+        // name in it. Everything below is a refresh behind something already on screen.
+        paintFromCache()
         refresh()
+        refreshPhoto()
+    }
+
+    /**
+     * What the handset already knows, drawn before a single call is made (§3.16).
+     *
+     * The drawer used to open on *"Your name"* over a placeholder glyph and fill in a second later,
+     * every time, on whatever connection the driver happened to have. This is that second.
+     */
+    private fun paintFromCache() {
+        viewModelScope.launch {
+            val driverId = identity.driverId ?: return@launch
+            val cached = runCatching { store.cached(driverId) }.getOrNull() ?: return@launch
+
+            if (cached.isEmpty) return@launch
+
+            // `update` rather than `value =`: a network read that has already answered outranks the
+            // cache, and on a fast connection it genuinely can arrive first.
+            mutableState.update {
+                it.copy(
+                    name = it.name ?: cached.name,
+                    level = it.level ?: cached.level,
+                    registration = it.registration ?: cached.registration,
+                    photo = it.photo ?: cached.photoBytes,
+                )
+            }
+        }
+    }
+
+    /**
+     * The avatar, on its own coroutine (Δ MCS-25).
+     *
+     * **Deliberately not part of [refresh].** The rows are the point of this screen and the header
+     * fills in behind them; folding a fourth read into the same block would let a slow avatar hold
+     * the name and the plate back with it, which is the opposite of what the header is for.
+     */
+    private fun refreshPhoto() {
+        viewModelScope.launch {
+            val driverId = identity.driverId ?: return@launch
+            val photo = runCatching { store.photo(driverId) }.getOrNull() ?: return@launch
+
+            mutableState.update { it.copy(photo = photo) }
+        }
     }
 
     @Suppress("TooGenericExceptionCaught")
@@ -43,6 +93,18 @@ internal class MenuViewModel(private val identity: DriverIdentity, private val p
                 val standing = driverId?.let { id -> profiles.standing(id) }
                 val live = identity.liveVehicle().live
 
+                // Δ MCS-27 — so the next open has it. Only with an id to file it under: a
+                // signed-out driver has no row, and inventing a key for one would leave a
+                // stranger's name on this handset.
+                driverId?.let { id ->
+                    store.cacheIdentity(
+                        driverId = id,
+                        name = profile.firstName,
+                        level = standing?.standing?.level,
+                        registration = live?.registrationNumber,
+                    )
+                }
+
                 mutableState.update {
                     it.copy(
                         name = profile.firstName,
@@ -51,7 +113,6 @@ internal class MenuViewModel(private val identity: DriverIdentity, private val p
                         // No app-facing read carries a driver's own star average. See
                         // `DriverHeaderState` for the four places it is not.
                         rating = null,
-                        hasPhoto = !profile.photoUrl.isNullOrBlank(),
                     )
                 }
             } catch (cause: CancellationException) {

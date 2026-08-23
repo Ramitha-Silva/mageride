@@ -25,6 +25,26 @@ final class MenuModel: ObservableObject {
         self.profiles = profiles
     }
 
+    /// What the handset already knows, drawn before a single call is made (§3.16, Δ MCS-27).
+    ///
+    /// The tab used to open on a placeholder and fill in a second later, every time, on whatever
+    /// connection the driver happened to have. This is that second.
+    func paintFromCache() async {
+        guard let driverId = identity.driverId,
+              let cached = await profiles.cachedProfile(driverId: driverId),
+              !cached.isEmpty
+        else { return }
+
+        // A read that has already answered outranks the cache — on a fast connection it genuinely
+        // can arrive first.
+        header = DriverHeaderState(
+            name: header.name ?? cached.name,
+            level: header.level ?? cached.level?.int32Value,
+            registration: header.registration ?? cached.registration,
+            rating: header.rating,
+            photo: header.photo ?? cached.photoBytes.map { IosBytesKt.nsDataOf(bytes: $0) as Data })
+    }
+
     func load() async {
         // Deliberately silent on failure. A header that could not load is a header with no name in
         // it; an error banner over eight working links would be worse than the blank.
@@ -36,6 +56,14 @@ final class MenuModel: ObservableObject {
             standing = await profiles.standing(driverId: driverId)
         }
 
+        if let driverId = identity.driverId {
+            await profiles.cacheIdentity(
+                driverId: driverId,
+                name: profile?.firstName,
+                level: standing?.standing?.level,
+                registration: live?.registrationNumber)
+        }
+
         header = DriverHeaderState(
             name: profile?.firstName,
             level: standing?.standing?.level,
@@ -43,7 +71,19 @@ final class MenuModel: ObservableObject {
             // No app-facing read carries a driver's own star average. See ``DriverHeaderState``
             // for the four places it is not.
             rating: nil,
-            hasPhoto: !(profile?.photoUrl ?? "").isEmpty
+            photo: header.photo
         )
+    }
+}
+
+extension MenuModel {
+
+    /// The avatar, on its own task (Δ MCS-25/27) — a slow photograph must not hold the rows back.
+    func loadPhoto() async {
+        guard let driverId = identity.driverId,
+              let bytes = await profiles.driverPhoto(driverId: driverId)
+        else { return }
+
+        header.photo = bytes
     }
 }

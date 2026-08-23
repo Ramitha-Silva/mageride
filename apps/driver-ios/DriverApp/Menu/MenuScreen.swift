@@ -47,7 +47,12 @@ struct MenuScreen: View {
                 }
             }
         }
-        .task { await model.load() }
+        .task {
+            // Δ MCS-27 — the cache first, so the tab opens on a name; the reads refresh behind it.
+            await model.paintFromCache()
+            await model.load()
+        }
+        .task { await model.loadPhoto() }
         .listStyle(.insetGrouped)
         .navigationTitle(Text(key: "nav_menu"))
         .background(MageRideColor.background)

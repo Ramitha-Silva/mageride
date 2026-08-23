@@ -76,12 +76,25 @@ internal val PASSENGER_V1_DOWNGRADE = """
     );
 """.trimIndent()
 
-/** §3.3, §3.4, §3.6 and §3.15 at version 1. */
+/**
+ * §3.3, §3.4, §3.6 and §3.15 at version 1 — and §3.16 not existing yet.
+ *
+ * `openAtV1` creates the CURRENT schema and then walks it backwards, so a table added after
+ * version 1 has to be dropped here or the migration that creates it runs into one that is already
+ * there. That is not a detail of this fixture: it is the difference between testing a real upgrade
+ * path and testing a fresh install with the version number written down as 1.
+ */
 internal val DRIVER_V1_DOWNGRADE = """
     DROP TABLE active_ride;
     DROP TABLE dispatch_offers;
     DROP TABLE proof_upload_queue;
     DROP TABLE credit_transfers;
+
+    -- Δ MCS-27 — §3.16 arrives in `2.sqm`, so a version-1 handset has no such table.
+    DROP TABLE driver_profile;
+
+    -- Δ MCS-28 — §3.17 arrives in `3.sqm`, likewise.
+    DROP TABLE document_images;
 
     CREATE TABLE active_ride (
         id                  TEXT NOT NULL PRIMARY KEY,

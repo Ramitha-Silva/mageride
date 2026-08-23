@@ -171,16 +171,24 @@ class ContractCoverageTest {
          *
          * **242** since MCS-05 added `GET /v1/drivers/profile` — the read SCR-DA/DI-001 needs to
          * tell "this driver has done Profile Setup" from "this person has a name in `iam.users`".
+         *
+         * **243** since MCS-25 added `GET /v1/drivers/{driverId}/profile-photo`, which serves the
+         * bytes behind the avatar both driver headers draw. The column that read used to hand back
+         * held an `s3://` pointer, which no image loader can follow.
+         *
+         * **245** since MCS-28 added the driver's own document list and the image behind each row —
+         * the gap that let SCR-DA/DI-026 tell a driver their insurance had expired and not show it.
          */
-        const val EXPECTED_OPERATIONS = 242
+        const val EXPECTED_OPERATIONS = 245
 
         /**
          * The half of those an app can reach — everything outside `/v1/internal` and `/v1/admin`.
          *
-         * All 178 have a typed client today, which is the property this file exists to keep true.
-         * **178** since MCS-05's `getDriverProfile`.
+         * All 179 have a typed client today, which is the property this file exists to keep true.
+         * **178** since MCS-05's `getDriverProfile`; **179** since MCS-25's `getDriverProfilePhoto`;
+         * **181** since MCS-28's `listDriverDocuments` and `getDriverDocumentImage`.
          */
-        const val EXPECTED_APP_FACING = 178
+        const val EXPECTED_APP_FACING = 181
 
         /**
          * D3' §0's sensitive mutations: auth, payments, ride accept, wallet, SOS.

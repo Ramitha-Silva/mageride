@@ -172,8 +172,6 @@
 
     <!-- A route the shell knows about whose screen group has not landed. Trilingual because it
          renders on a real device during wave 4a, same as anything else. -->
-    <string name="route_placeholder_title">Not built yet</string>
-    <string name="route_placeholder_body">%1$s arrives with its screen group.</string>
 
     <!-- ==========================================================================
          C069 · SCR-DA-004…004c, 005, 006, 026/026a — Mode-C vehicle onboarding.
@@ -793,4 +791,19 @@
     <string name="error_upgrade_required">Update the app to keep using it.</string>
     <string name="error_attestation_failed">This copy of the app could not be verified. Install MageRide Driver from the Play Store.</string>
 
+
+    <!-- SCR-DA-029a — the driver's own documents (Δ MCS-28). -->
+    <string name="documents_title">My documents</string>
+    <string name="documents_personal">Your licence</string>
+    <string name="documents_empty">Your documents will appear here once you have uploaded them.</string>
+    <string name="documents_offline">Showing what is saved on this phone. Could not reach MageRide to check for updates.</string>
+    <string name="documents_stale">Saved copy — may be out of date</string>
+    <string name="documents_expires">Expires %1$s</string>
+    <string name="documents_open">My documents</string>
+    <string name="documents_vehicle_action">Documents</string>
+    <string name="doc_kind_driving_license">Driving licence</string>
+    <string name="doc_kind_registration">Registration</string>
+    <string name="doc_kind_permit">Route permit</string>
+    <string name="doc_kind_insurance">Insurance</string>
+    <string name="doc_kind_revenue_license">Revenue licence</string>
 </resources>

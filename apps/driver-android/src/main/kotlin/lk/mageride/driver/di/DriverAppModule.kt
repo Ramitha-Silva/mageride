@@ -10,6 +10,9 @@ import lk.mageride.driver.comms.VoipEngine
 import lk.mageride.driver.delivery.DeliveryRepository
 import lk.mageride.driver.delivery.DeliveryViewModel
 import lk.mageride.driver.delivery.ProofUploadQueue
+import lk.mageride.driver.documents.ApiDriverDocumentStore
+import lk.mageride.driver.documents.DocumentsViewModel
+import lk.mageride.driver.documents.DriverDocumentStore
 import lk.mageride.driver.earnings.EarningsRepository
 import lk.mageride.driver.earnings.EarningsViewModel
 import lk.mageride.driver.history.RideHistoryRepository
@@ -44,6 +47,8 @@ import lk.mageride.driver.onboarding.OnboardingPreferences
 import lk.mageride.driver.onboarding.OnboardingRepository
 import lk.mageride.driver.onboarding.ProfileSetupViewModel
 import lk.mageride.driver.onboarding.SplashViewModel
+import lk.mageride.driver.profile.DbDriverProfileStore
+import lk.mageride.driver.profile.DriverProfileStore
 import lk.mageride.driver.profile.DriverProfileViewModel
 import lk.mageride.driver.profile.ProfileRepository
 import lk.mageride.driver.push.PushRouter
@@ -375,16 +380,24 @@ private fun Module.trackerAndProfileBindings() {
     single { TrackerRepository(registry = get(), bindings = get()) }
     single { SharingRepository(registry = get(), subscription = get()) }
     single { ProfileRepository(iam = get(), jobs = get(), sessions = get(), preferences = get()) }
+
+    // Δ MCS-27 — §3.16, so both headers paint before a call is made.
+    single<DriverProfileStore> { DbDriverProfileStore(registry = get(), database = get()) }
+
+    // Δ MCS-28 — SCR-DA-029a's documents, cached under the §0.4 identity-document exception.
+    single<DriverDocumentStore> { ApiDriverDocumentStore(registry = get(), database = get()) }
+
+    viewModel { DocumentsViewModel(store = get()) }
     single { RideHistoryRepository(query = get(), ride = get(), tripState = get()) }
 
     viewModel { TrackerPairingViewModel(identity = get(), trackers = get(), publisher = get()) }
     viewModel { SharingViewModel(identity = get(), sharing = get()) }
-    viewModel { DriverProfileViewModel(identity = get(), profiles = get()) }
+    viewModel { DriverProfileViewModel(identity = get(), profiles = get(), store = get()) }
 
     // Δ MCS-24 — SCR-DA-036's header. It takes the same two dependencies SCR-DA-029's does,
     // because it shows the same block: the drawer used to draw the app's name, which needed
     // nothing, and now draws the driver's, which needs both reads.
-    viewModel { MenuViewModel(identity = get(), profiles = get()) }
+    viewModel { MenuViewModel(identity = get(), profiles = get(), store = get()) }
     viewModel { RideHistoryViewModel(identity = get(), history = get()) }
 
     commsSafetySupportBindings()

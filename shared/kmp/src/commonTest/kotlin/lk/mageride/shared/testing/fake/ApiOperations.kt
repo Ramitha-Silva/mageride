@@ -95,6 +95,7 @@ import lk.mageride.shared.data.models.registry.BindVehicleDeviceRequest
 import lk.mageride.shared.data.models.registry.BindVehicleDeviceResponse
 import lk.mageride.shared.data.models.registry.CreateShareGrantRequest
 import lk.mageride.shared.data.models.registry.CreateShareGrantResponse
+import lk.mageride.shared.data.models.registry.DriverDocumentListResponse
 import lk.mageride.shared.data.models.registry.DriverPayoutProfile
 import lk.mageride.shared.data.models.registry.DriverProfileSummary
 import lk.mageride.shared.data.models.registry.OnboardingStepInput
@@ -347,6 +348,18 @@ internal object ApiOperations {
 
         // registry-svc — driver identity, vehicles, onboarding, sharing (18)
         op<DriverProfileSummary>("getDriverProfile", ApiService.REGISTRY, "GET", "/v1/drivers/profile", 200),
+        // The image behind `DriverProfileSummary.photoUrl` (Δ MCS-25). Bytes, for the same reason
+        // `getSupportScreenshot` is: it is fetched by an image loader, not decoded into a model.
+        binary("getDriverProfilePhoto", ApiService.REGISTRY, "GET", "/v1/drivers/{driverId}/profile-photo", 200),
+        // Δ MCS-28 — the driver's own documents, and the bytes behind each one.
+        op<DriverDocumentListResponse>("listDriverDocuments", ApiService.REGISTRY, "GET", "/v1/drivers/documents", 200),
+        binary(
+            "getDriverDocumentImage",
+            ApiService.REGISTRY,
+            "GET",
+            "/v1/drivers/documents/{documentId}/image",
+            200,
+        ),
         op<UpsertDriverProfileResponse>(
             "upsertDriverProfile",
             ApiService.REGISTRY,

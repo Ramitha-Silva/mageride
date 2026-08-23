@@ -134,7 +134,7 @@ services:
 
   - name: registry-svc
     project: Registry.Api
-    secrets: [Registry__InternalApiKey, Registry__OcrInternalApiKey]
+    secrets: [Registry__InternalApiKey, Registry__OcrInternalApiKey, Registry__ProfilePhotoLinkSigningKey]
 
   - name: provisioning-svc
     project: Provisioning.Api

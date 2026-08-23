@@ -153,11 +153,17 @@ class SchemaMigrationTest {
     }
 
     @Test
-    fun both_schemas_are_at_version_two() {
+    fun each_schema_is_at_the_version_its_migrations_add_up_to() {
         // The version is derived from the migration files present, so this is the one assertion
         // that fails if a `.sqm` is added or removed without the rest of this test being revisited.
+        //
+        // Δ MCS-27 — the two are no longer the same number, and there is no reason they should be.
+        // They are separate files with separate schemas (§0.2) and a change to one is not a change
+        // to the other: `2.sqm` adds §3.16's `driver_profile`, which is a driver-app table, and the
+        // passenger database has no business gaining a version for it. `3.sqm` adds §3.17's
+        // `document_images` for the same reason and widens the gap again.
         assertEquals(2L, PassengerDb.SCHEMA.version)
-        assertEquals(2L, DriverDb.SCHEMA.version)
+        assertEquals(4L, DriverDb.SCHEMA.version)
     }
 
     @Test

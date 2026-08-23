@@ -64,6 +64,9 @@ import org.koin.androidx.compose.koinViewModel
  *   Step 1/4 (US-2.27 as amended), a row's *Resume ›* calls `resumeOnboarding` for that row. The
  *   route carries no arguments, so `VehicleOnboardingSession` carries the intent instead.
  * @param onOpenStatus Opens SCR-DA-006 for a vehicle whose documents are being verified.
+ * @param onOpenDocuments Opens SCR-DA-029a, where the documents themselves can be looked at
+ *   (Δ MCS-28). Distinct from [onOpenStatus], which answers "has an officer checked this yet" —
+ *   this one answers "show me the certificate", which is the question asked at a checkpoint.
  * @param onBack Leaves for the Menu tab.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,6 +74,7 @@ import org.koin.androidx.compose.koinViewModel
 internal fun VehiclesScreen(
     onAddVehicle: () -> Unit,
     onOpenStatus: () -> Unit,
+    onOpenDocuments: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -154,6 +158,7 @@ internal fun VehiclesScreen(
                                 viewModel.open(row)
                                 onOpenStatus()
                             },
+                            onOpenDocuments = onOpenDocuments,
                             onDeactivate = { viewModel.confirmDeactivate(row) },
                         )
                     }
@@ -182,6 +187,10 @@ internal fun VehiclesScreen(
                             onSelect = { viewModel.select(row) },
                             onResume = null,
                             onOpenStatus = null,
+                            // An assigned fleet vehicle's documents are still the driver's to show
+                            // at a checkpoint — the server decides entitlement, and it includes
+                            // assignments (US-13.9).
+                            onOpenDocuments = onOpenDocuments,
                             onDeactivate = null,
                         )
                     }
@@ -225,6 +234,7 @@ private fun VehicleCard(
     onSelect: () -> Unit,
     onResume: (() -> Unit)?,
     onOpenStatus: (() -> Unit)?,
+    onOpenDocuments: (() -> Unit)?,
     onDeactivate: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
@@ -297,6 +307,17 @@ private fun VehicleCard(
                     TextButton(onClick = onOpenStatus) {
                         Text(
                             text = stringResource(R.string.vehicles_view_status),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                }
+                // Δ MCS-28 — the documents themselves, not their verification state. Offered on
+                // every card: a driver at a roadside is asked for the certificate of whichever
+                // vehicle they are in, approved or not.
+                if (onOpenDocuments != null) {
+                    TextButton(onClick = onOpenDocuments) {
+                        Text(
+                            text = stringResource(R.string.documents_vehicle_action),
                             style = MaterialTheme.typography.labelLarge,
                         )
                     }

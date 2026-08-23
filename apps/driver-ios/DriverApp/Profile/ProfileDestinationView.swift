@@ -32,6 +32,7 @@ struct ProfileDestinationView: View {
             DriverProfileScreen(
                 model: graph.makeDriverProfileModel(),
                 onOpenVehicles: { navigator.open(.vehicles) },
+                onOpenDocuments: { navigator.open(.documents) },
                 // *"Per-trip ratings"* is not a screen of its own: the ratings live on the trips, and
                 // SCR-DI-030 is where a driver reads and leaves them (US-18.3).
                 onOpenRatings: { navigator.open(.rideHistory) },

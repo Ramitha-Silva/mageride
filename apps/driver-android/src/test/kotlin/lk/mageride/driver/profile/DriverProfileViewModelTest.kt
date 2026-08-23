@@ -9,9 +9,11 @@ import lk.mageride.driver.onboarding.MainDispatcher
 import lk.mageride.driver.onboarding.await
 import lk.mageride.shared.data.models.Language
 import lk.mageride.shared.data.models.Role
+import lk.mageride.shared.data.models.Ulid
 import lk.mageride.shared.data.models.iam.EmergencyContact
 import lk.mageride.shared.data.models.iam.EmergencyContactListResponse
 import lk.mageride.shared.data.models.iam.UserProfile
+import lk.mageride.shared.db.driver.CachedDriverProfile
 import lk.mageride.shared.serialization.MageRideJson
 import lk.mageride.shared.testing.fake.FakeApiBackend
 import lk.mageride.shared.testing.fake.mageRideApi
@@ -232,7 +234,27 @@ class DriverProfileViewModelTest {
                     sessions = sessions,
                     preferences = preferences,
                 ),
+                store = EmptyProfileStore,
             ),
         )
     }
+}
+
+/**
+ * A §3.16 cache with nothing in it (Δ MCS-27).
+ *
+ * Every assertion in this file is about what the three network reads produce, and a cache that
+ * answered would be a second source for the same fields — a test that passed because the handset
+ * remembered rather than because the read worked. An empty one is the state of a fresh install,
+ * which is exactly the case these tests are describing.
+ */
+private object EmptyProfileStore : DriverProfileStore {
+
+    override suspend fun cached(driverId: Ulid): CachedDriverProfile = CachedDriverProfile()
+
+    override suspend fun cacheIdentity(driverId: Ulid, name: String?, level: Int?, registration: String?): Unit = Unit
+
+    override suspend fun photo(driverId: Ulid): ByteArray? = null
+
+    override suspend fun forget(): Unit = Unit
 }

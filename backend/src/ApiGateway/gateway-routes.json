@@ -83,6 +83,48 @@
         "Metadata": { "RateLimit": "write" }
       },
 
+      "registry-driver-documents": {
+        "ClusterId": "registry-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "//": [
+          "Δ MCS-28. The driver's own documents, each with a signed link to its image. Bearer-",
+          "authenticated at the service, like every other /v1/drivers read on this table."
+        ],
+        "Match": { "Path": "/v1/drivers/documents" },
+        "Metadata": { "RateLimit": "default" }
+      },
+
+      "registry-driver-document-image": {
+        "ClusterId": "registry-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "//": [
+          "Δ MCS-28. The bytes behind one of those links. `anonymous` for the reason every signed-",
+          "link read on this table is: the caller is an image view and carries no bearer, so the",
+          "HMAC is the credential and the gateway has nothing to check that registry-svc does not",
+          "check better — including, on this route, a second entitlement check in its own SQL."
+        ],
+        "Match": { "Path": "/v1/drivers/documents/{documentId}/image" },
+        "Metadata": { "RateLimit": "default" }
+      },
+
+      "registry-driver-profile-photo": {
+        "ClusterId": "registry-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "//": [
+          "Δ MCS-25. The bytes behind the avatar both driver apps draw. `anonymous` here is the",
+          "same posture every other signed-link read on this table has: the caller is an image",
+          "loader and carries no bearer token, so registry-svc's HMAC is the credential and the",
+          "gateway has nothing to check that the service does not check better.",
+          "",
+          "`default` rather than `write` — it is a GET, and it is fetched once per screen open."
+        ],
+        "Match": { "Path": "/v1/drivers/{driverId}/profile-photo" },
+        "Metadata": { "RateLimit": "default" }
+      },
+
       "registry-driver-payout-profile": {
         "ClusterId": "registry-svc",
         "Order": 10,

@@ -1,13 +1,18 @@
 using System.Text.Json;
+using MageRide.Registry.Configuration;
 using MageRide.Registry.Domain;
 using MageRide.Registry.Onboarding;
+using MageRide.Registry.Persistence;
 using MageRide.Registry.Vehicles;
 using MageRide.Shared.Auth;
 using MageRide.Shared.Errors;
+using MageRide.Shared.Persistence;
+using MageRide.Shared.Storage;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Options;
 
 namespace MageRide.Registry.Endpoints;
 
@@ -40,6 +45,26 @@ public static class OnboardingEndpoints
         // it: signing into the Driver App grants that role now, so the first thing a driver does
         // after OTP can ask this.
         drivers.MapGet("/profile", ReadProfileAsync).WithName("getDriverProfile");
+
+        // Δ MCS-25 — the bytes behind the profile photo, for the header both apps draw.
+        //
+        // `AllowAnonymous` inside a group that requires the driver role, deliberately and for the
+        // same reason support-svc's screenshot route is: the caller is an image loader, which
+        // carries no bearer token. The link is what authorises, and it is unguessable and expiring.
+        // A token in a query string would be a token in every proxy log between here and the phone.
+        drivers.MapGet("/{driverId}/profile-photo", GetProfilePhotoAsync)
+            .AllowAnonymous()
+            .WithName("getDriverProfilePhoto");
+
+        // Δ MCS-28 — the driver's own documents, each with a signed link to its image.
+        drivers.MapGet("/documents", ListDocumentsAsync).WithName("listDriverDocuments");
+
+        // The bytes behind one of those links. Anonymous for the same reason as the avatar above:
+        // the caller is an image view. Unlike the avatar, the handler ALSO re-checks entitlement —
+        // a leaked signing key must not be a key to every NIC on the platform.
+        drivers.MapGet("/documents/{documentId}/image", GetDocumentImageAsync)
+            .AllowAnonymous()
+            .WithName("getDriverDocumentImage");
 
         // Δ MCS-01 — `DisableAntiforgery` because the route now also takes multipart/form-data.
         // The token would be a browser-form defence on an endpoint only a bearer-authenticated
@@ -77,10 +102,14 @@ public static class OnboardingEndpoints
     /// <see cref="IOnboardingService.ReadProfileAsync"/>.
     /// </remarks>
     private static async Task<IResult> ReadProfileAsync(
-        HttpContext context, IOnboardingService onboarding, CancellationToken cancellationToken)
+        HttpContext context,
+        IOnboardingService onboarding,
+        IDriverPhotoLinks links,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(onboarding);
+        ArgumentNullException.ThrowIfNull(links);
 
         var profile = await onboarding.ReadProfileAsync(context.User.RequireSubjectId(), cancellationToken);
 
@@ -90,7 +119,166 @@ public static class OnboardingEndpoints
         // behaviour. `TypedResults.Ok(null)` writes nothing at all, so the literal is explicit.
         return profile is null
             ? TypedResults.Content("null", "application/json; charset=utf-8")
-            : TypedResults.Ok(DriverProfileSummaryResponse.From(profile));
+            : TypedResults.Ok(DriverProfileSummaryResponse.From(profile, links));
+    }
+
+    /// <summary>
+    /// <c>GET /v1/drivers/{driverId}/profile-photo</c> — the bytes behind the signed link
+    /// (Δ MCS-25).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Anonymous, because the caller is an image loader and those carry no bearer token. The
+    /// signature is the credential; <see cref="IDriverPhotoLinks"/> says why that is the right one.
+    /// </para>
+    /// <para>
+    /// <b>Every refusal is the same refusal.</b> A malformed id, a forged signature, an expired
+    /// link, a link minted for a photo since replaced, a driver who does not exist and a driver
+    /// with no photo all answer identically.
+    /// Distinguishing them would let somebody holding a link they cannot use learn which driver ids
+    /// are real, and "that driver exists" is itself something a forged link should not be able to
+    /// ask.
+    /// </para>
+    /// </remarks>
+    private static async Task<IResult> GetProfilePhotoAsync(
+        string driverId,
+        string? v,
+        string? expires,
+        string? signature,
+        IOnboardingService onboarding,
+        IDriverPhotoLinks links,
+        IObjectStore objects,
+        IOptions<RegistryOptions> options,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(onboarding);
+        ArgumentNullException.ThrowIfNull(links);
+        ArgumentNullException.ThrowIfNull(objects);
+        ArgumentNullException.ThrowIfNull(options);
+
+        // The profile is read before the signature is checked, because the signature covers which
+        // photo this link was minted for and that is only knowable from the current row. The read
+        // is driver-scoped and its result is never revealed except through the one 403 below.
+        var profile = Guid.TryParse(driverId, out var id)
+            ? await onboarding.ReadProfileAsync(id, cancellationToken)
+            : null;
+
+        var storageUrl = profile?.Profile.PhotoUrl;
+
+        if (string.IsNullOrWhiteSpace(storageUrl) || !links.Verify(id, storageUrl, v, expires, signature))
+        {
+            throw new MageRideException(MageRideErrors.Forbidden, "That link is not valid.");
+        }
+
+        var opened = await objects.ReadAsync(storageUrl, cancellationToken);
+
+        if (opened is not { } file)
+        {
+            // Δ D-36: on a bucket the bytes are not this process's to stream, so the caller is sent
+            // on to a short-lived presigned URL. The signature was checked above, so this redirect
+            // only ever reaches somebody who already proved the link.
+            if (objects.TryPresign(storageUrl, options.Value.ProfilePhotoLinkTtl, out var direct))
+            {
+                return TypedResults.Redirect(direct, permanent: false, preserveMethod: false);
+            }
+
+            // On a filesystem store this means the pod that wrote the photo is gone.
+            return TypedResults.NotFound();
+        }
+
+        return TypedResults.File(file.Bytes.ToArray(), file.ContentType);
+    }
+
+    /// <summary>
+    /// <c>GET /v1/drivers/documents</c> — what this driver may look at (Δ MCS-28).
+    /// </summary>
+    /// <remarks>
+    /// Their own identity documents and the documents of every vehicle they own or are assigned to,
+    /// each carrying a signed link to its bytes. `VehicleDocument` has carried a kind, a status and
+    /// an expiry since C029 and no URL, so an app could tell a driver their insurance expired in
+    /// March and could not show it to them.
+    /// </remarks>
+    private static async Task<Ok<DriverDocumentListResponse>> ListDocumentsAsync(
+        HttpContext context,
+        INpgsqlConnectionFactory connections,
+        IDocumentRepository documents,
+        IDriverPhotoLinks links,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(connections);
+        ArgumentNullException.ThrowIfNull(documents);
+        ArgumentNullException.ThrowIfNull(links);
+
+        var driverId = context.User.RequireSubjectId();
+
+        await using var connection = await connections.OpenAsync(cancellationToken);
+
+        var rows = await documents.ListVisibleToDriverAsync(connection, null, driverId, cancellationToken);
+
+        return TypedResults.Ok(DriverDocumentListResponse.From(driverId, rows, links));
+    }
+
+    /// <summary>
+    /// <c>GET /v1/drivers/documents/{documentId}/image</c> — the bytes (Δ MCS-28).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Anonymous, like the avatar, because the caller is an image view and carries no bearer.
+    /// <b>Unlike the avatar, the signature is not the only lock:</b> the read is entitlement-scoped
+    /// in its own SQL, so a signing key that leaked would still not open a document belonging to
+    /// somebody else. An avatar is a face; these are an NIC and a licence number.
+    /// </para>
+    /// <para>
+    /// One refusal for every reason, as everywhere else on this surface — a forged signature, an
+    /// expired link, a document that does not exist and one that is not this driver's all answer
+    /// the same 403.
+    /// </para>
+    /// </remarks>
+    private static async Task<IResult> GetDocumentImageAsync(
+        string documentId,
+        string? d,
+        string? v,
+        string? expires,
+        string? signature,
+        INpgsqlConnectionFactory connections,
+        IDocumentRepository documents,
+        IDriverPhotoLinks links,
+        IObjectStore objects,
+        IOptions<RegistryOptions> options,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connections);
+        ArgumentNullException.ThrowIfNull(documents);
+        ArgumentNullException.ThrowIfNull(links);
+        ArgumentNullException.ThrowIfNull(objects);
+        ArgumentNullException.ThrowIfNull(options);
+
+        VehicleDocument? document = null;
+
+        if (Guid.TryParse(documentId, out var id) && Guid.TryParse(d, out var driverId))
+        {
+            await using var connection = await connections.OpenAsync(cancellationToken);
+
+            document = await documents.FindVisibleToDriverAsync(connection, null, driverId, id, cancellationToken);
+        }
+
+        if (document is null
+            || !links.VerifyDocument(Guid.Parse(d!), id, document.FileUrl, v, expires, signature))
+        {
+            throw new MageRideException(MageRideErrors.Forbidden, "That link is not valid.");
+        }
+
+        var opened = await objects.ReadAsync(document.FileUrl, cancellationToken);
+
+        if (opened is not { } file)
+        {
+            return objects.TryPresign(document.FileUrl, options.Value.ProfilePhotoLinkTtl, out var direct)
+                ? TypedResults.Redirect(direct, permanent: false, preserveMethod: false)
+                : TypedResults.NotFound();
+        }
+
+        return TypedResults.File(file.Bytes.ToArray(), file.ContentType);
     }
 
     /// <summary>
@@ -207,11 +395,13 @@ public static class OnboardingEndpoints
         HttpContext context,
         IOnboardingService onboarding,
         IOnboardingDocumentStore documents,
+        IDriverPhotoLinks links,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(onboarding);
         ArgumentNullException.ThrowIfNull(documents);
+        ArgumentNullException.ThrowIfNull(links);
 
         var driverId = context.User.RequireSubjectId();
 
@@ -232,7 +422,7 @@ public static class OnboardingEndpoints
                 body?.LicenceExpiry),
             cancellationToken);
 
-        return TypedResults.Ok(DriverProfileResponse.From(result));
+        return TypedResults.Ok(DriverProfileResponse.From(result, links));
     }
 
     /// <inheritdoc cref="UpsertProfileAsync" path="/remarks"/>

@@ -16,6 +16,7 @@ import UIKit
 ///
 /// - Parameters:
 ///   - onOpenVehicles: *"Vehicle details ›"* — SCR-DI-026, which is where a driver's vehicles are.
+///   - onOpenDocuments: *"My documents ›"* — SCR-DI-029a (Δ MCS-28), where the licence itself is.
 ///   - onOpenRatings: *"Per-trip ratings ›"* — SCR-DI-030, which is where the per-trip stars are
 ///     (US-18.3). Not a screen of its own: the ratings live on the trips.
 ///   - onOpenLevel: *"Driver Level  L3 ›"* — SCR-DI-019.
@@ -30,6 +31,7 @@ struct DriverProfileScreen: View {
     @StateObject private var model: DriverProfileModel
 
     private let onOpenVehicles: () -> Void
+    private let onOpenDocuments: () -> Void
     private let onOpenRatings: () -> Void
     private let onOpenLevel: () -> Void
 
@@ -38,11 +40,13 @@ struct DriverProfileScreen: View {
     init(
         model: @autoclosure @escaping () -> DriverProfileModel,
         onOpenVehicles: @escaping () -> Void,
+        onOpenDocuments: @escaping () -> Void,
         onOpenRatings: @escaping () -> Void,
         onOpenLevel: @escaping () -> Void
     ) {
         _model = StateObject(wrappedValue: model())
         self.onOpenVehicles = onOpenVehicles
+        self.onOpenDocuments = onOpenDocuments
         self.onOpenRatings = onOpenRatings
         self.onOpenLevel = onOpenLevel
     }
@@ -84,6 +88,12 @@ struct DriverProfileScreen: View {
 
                 row(titleKey: "profile_vehicle_details", symbolName: "car.fill", tint: MageRideColor.secondary) {
                     onOpenVehicles()
+                }
+                // Δ MCS-28 — where a driver goes to look at their own licence. Under the vehicle
+                // row because the two lead to the same screen from different questions: "what am I
+                // driving" and "show me the paperwork for it".
+                row(titleKey: "documents_open", symbolName: "doc.text.fill", tint: MageRideColor.secondary) {
+                    onOpenDocuments()
                 }
                 row(titleKey: "profile_trip_ratings", symbolName: "star.fill", tint: MageRideColor.warning) {
                     onOpenRatings()
@@ -130,7 +140,11 @@ struct DriverProfileScreen: View {
         .listStyle(.insetGrouped)
         .navigationTitle(Text(key: "profile_title"))
         .navigationBarTitleDisplayMode(.large)
-        .task { await model.refresh() }
+        .task {
+            // Δ MCS-27 — the cache first, so the header opens on a name; the reads refresh behind it.
+            await model.paintFromCache()
+            await model.refresh()
+        }
         .refreshable { await model.refresh() }
         .sheet(item: Binding(get: { model.state.sheet }, set: { if $0 == nil { model.dismissSheet() } })) { sheet in
             ProfileEditorSheet(sheet: sheet, model: model)
@@ -160,7 +174,7 @@ struct DriverProfileScreen: View {
                 registration: model.state.registration,
                 // No app-facing read carries a driver's own star average — see ``DriverHeaderState``.
                 rating: nil,
-                hasPhoto: !(model.state.profile?.photoUrl ?? "").isEmpty
+                photo: model.state.photo
             )
         ) {
             Button {

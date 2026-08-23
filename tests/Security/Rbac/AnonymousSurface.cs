@@ -187,6 +187,23 @@ internal static class AnonymousSurface
             "Bulk tracker-binding error report, same arrangement."),
         new("subscription GET /v1/mode-b/files/{}/{}", AnonymousCredential.SignedLink, true,
             "Mode B payment slip; HMAC under Subscription:FileLinkSigningKey."),
+        new("registry GET /v1/drivers/documents/{}/image", AnonymousCredential.SignedLink, true,
+            "Δ MCS-28. The driver's own licence and their vehicles' certificates, for an image view "
+            + "that carries no bearer token; HMAC under Registry:ProfilePhotoLinkSigningKey, "
+            + "domain-separated from the avatar link so one can never verify as the other. **This "
+            + "route has a second lock the avatar does not:** the read is entitlement-scoped in its "
+            + "own SQL against `driver_eligible_vehicles`, so a signing key that leaked would still "
+            + "not open somebody else's document. An avatar is a face; these are an NIC and a "
+            + "driving licence number, and that difference is why the signature is not trusted "
+            + "alone. Malformed id, forged or expired signature, unknown document and one that is "
+            + "not this driver's all answer the same 403."),
+        new("registry GET /v1/drivers/{}/profile-photo", AnonymousCredential.SignedLink, true,
+            "Δ MCS-25. The driver's own avatar, for an image loader that carries no bearer token; "
+            + "HMAC under Registry:ProfilePhotoLinkSigningKey. The signature names the driver, so a "
+            + "link cannot be edited into somebody else's, and the handler reads one column "
+            + "(`driver_profiles.photo_url`) that can hold nothing but a profile photo. Malformed "
+            + "id, forged or expired signature, unknown driver and no-photo all answer the same "
+            + "403, so a link nobody can use reveals no driver ids either."),
         new("support GET /v1/support/screenshots/{}", AnonymousCredential.SignedLink, true,
             "Ticket screenshot; HMAC under Support:FileLinkSigningKey."),
         new("transit GET /v1/admin/transit/gtfs/objects/{}", AnonymousCredential.SignedLink, true,

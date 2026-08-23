@@ -796,3 +796,14 @@
 
 /* සෙවුම් කොටුව හිස් කිරීමේ බොත්තම. */
 "action_clear" = "හිස් කරන්න";
+"documents_title" = "මගේ ලේඛන";
+"documents_empty" = "ඔබ උඩුගත කළ පසු ඔබේ ලේඛන මෙහි දිස්වේ.";
+"documents_offline" = "මෙම දුරකථනයේ සුරකින ලද දෑ පෙන්වයි. යාවත්කාලීන සඳහා MageRide වෙත සම්බන්ධ විය නොහැකි විය.";
+"documents_stale" = "සුරකින ලද පිටපත — කල් ඉකුත් වී තිබිය හැක";
+"documents_open" = "මගේ ලේඛන";
+"documents_vehicle_action" = "ලේඛන";
+"doc_kind_driving_license" = "රියදුරු බලපත්‍රය";
+"doc_kind_registration" = "ලියාපදිංචිය";
+"doc_kind_permit" = "මාර්ග අවසර පත්‍රය";
+"doc_kind_insurance" = "රක්ෂණය";
+"doc_kind_revenue_license" = "ආදායම් බලපත්‍රය";

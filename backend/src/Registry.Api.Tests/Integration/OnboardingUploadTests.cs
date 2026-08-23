@@ -114,8 +114,19 @@ public sealed class OnboardingUploadTests(PostgresFixture postgres)
         Assert.Equal(1, rows.Count(row => row.CapturedVia == "gallery"));
         Assert.Contains(rows, row => row.Kind == "profile_photo" && row.CapturedVia == "gallery");
 
-        // NFR-28: every one of these is raw identity evidence, so every one carries a deadline.
-        Assert.All(rows, row => Assert.NotNull(row.AutoDeleteAt));
+        // NFR-28: the licence images are raw identity evidence and carry a deadline.
+        Assert.All(
+            rows.Where(row => row.Kind != "profile_photo"),
+            row => Assert.NotNull(row.AutoDeleteAt));
+
+        // Δ MCS-25 — and the profile photo does NOT, because it is the one document here the
+        // platform keeps *serving*. It is the avatar SCR-DA/DI-029 and -036 draw and the face
+        // US-2.12 has a passenger recognise their driver by, so a deadline on it turns a working
+        // screen into a broken one ninety days after Profile Setup with nothing to re-upload from.
+        // Same exception, same mechanism, as the LankaQR in `DriverPayoutProfileTests`.
+        Assert.All(
+            rows.Where(row => row.Kind == "profile_photo"),
+            row => Assert.Null(row.AutoDeleteAt));
     }
 
     /// <summary>

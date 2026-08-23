@@ -339,7 +339,13 @@ final class DriverGraph: ObservableObject {
             iam: shared.api.iam,
             jobs: jobs,
             sessions: sessions,
-            preferences: preferences
+            preferences: preferences,
+            // Δ MCS-25 — the avatar comes from registry-svc, because Profile Setup writes
+            // `registry.driver_profiles` and never `iam.users`, so the photo on `GET /v1/users/me`
+            // is nil for every driver who onboarded in this app.
+            registry: shared.api.registry,
+            // Δ MCS-27 — §3.16, so both headers paint before a call is made.
+            databases: databases
         )
         self.history = ApiRideHistoryRepository(
             query: shared.api.query,
@@ -499,6 +505,11 @@ final class DriverGraph: ObservableObject {
     /// now draws the driver, which needs both reads.
     func makeMenuModel() -> MenuModel {
         MenuModel(identity: identity, profiles: profileSettings)
+    }
+
+    /// SCR-DI-029a (Δ MCS-28) — the driver's own documents, cached under the §0.4 exception.
+    func makeDocumentsModel() -> DocumentsModel {
+        DocumentsModel(store: ApiDriverDocumentStore(registry: shared.api.registry, databases: databases))
     }
 
     /// SCR-DI-030.

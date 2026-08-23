@@ -1,0 +1,62 @@
+import kotlin.time.Instant;
+
+-- mobile_db_schema.md §3.17 (Δ MCS-28) — the driver's own documents, for a roadside with no signal.
+--
+-- THIS IS THE §0.4 IDENTITY-DOCUMENT EXCEPTION and it inherits all five of its conditions: the
+-- driver's own documents only (the server decides, not this table), encrypted at rest by the same
+-- key as the rest of the file, a bounded lifetime, wiped with the database on logout and PDPA
+-- erasure, and never exported. Read that clause before adding a column or a caller here.
+--
+-- `document_id` is `registry.documents.id`, so a row is a specific version of a specific document:
+-- a renewed insurance certificate is a new id and a new row, and the old one falls out with the
+-- sweep rather than being overwritten in place.
+CREATE TABLE document_images (
+    document_id  TEXT NOT NULL PRIMARY KEY,
+    vehicle_id   TEXT,
+    kind         TEXT NOT NULL,
+    side         TEXT,
+    content_type TEXT NOT NULL,
+    bytes        BLOB NOT NULL,
+    version      TEXT,
+    cached_at    INTEGER AS Instant NOT NULL,
+    expires_at   INTEGER AS Instant NOT NULL
+);
+CREATE INDEX ix_document_images_expiry ON document_images(expires_at);
+CREATE INDEX ix_document_images_vehicle ON document_images(vehicle_id);
+
+select:
+SELECT * FROM document_images WHERE document_id = ?;
+
+-- Everything this handset holds, the driver's own documents first. `vehicle_id NULLS FIRST` is the
+-- grouping the screens use: the licence belongs to the person (AL-27) and heads the list.
+selectAll:
+SELECT * FROM document_images ORDER BY vehicle_id IS NULL DESC, vehicle_id, kind, side;
+
+-- Everything a vehicle's card shows. `expires_at` is checked by the caller rather than filtered
+-- here, so a lapsed row is still readable until the sweep takes it: a driver at a checkpoint with
+-- no signal is better served by yesterday's certificate than by nothing.
+selectForVehicle:
+SELECT * FROM document_images WHERE vehicle_id = ? ORDER BY kind, side;
+
+-- The driving licence and anything else that belongs to the person rather than a vehicle (AL-27).
+selectPersonal:
+SELECT * FROM document_images WHERE vehicle_id IS NULL ORDER BY kind, side;
+
+upsert:
+INSERT OR REPLACE INTO document_images
+    (document_id, vehicle_id, kind, side, content_type, bytes, version, cached_at, expires_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- §0.4 condition 3, run by §4's retention pass. `INSERT OR REPLACE` above is safe for the same
+-- reason `gps_buffer`'s is: the primary key is the only constraint on this table, so a repeat is
+-- the designed path and not a swallowed error.
+deleteExpired:
+DELETE FROM document_images WHERE expires_at <= ?;
+
+-- §0.4 condition 4. The whole file is wiped on logout and erasure, so this exists for the narrower
+-- case of a driver who no longer operates a vehicle whose documents this handset still holds.
+deleteForVehicle:
+DELETE FROM document_images WHERE vehicle_id = ?;
+
+deleteAll:
+DELETE FROM document_images;

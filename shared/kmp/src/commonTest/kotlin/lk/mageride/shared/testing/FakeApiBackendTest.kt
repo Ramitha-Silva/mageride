@@ -200,16 +200,20 @@ class FakeApiBackendTest {
          * 241; the remaining 38 are behind the app surface and are out of scope by that rule
          * rather than missing — see `ContractSurface` and the C076a handoff.
          *
-         * `downloadSignedGtfsObject` is the third binary read. It stays out because it is
+         * `downloadSignedGtfsObject` is the fourth binary read. It stays out because it is
          * `/v1/internal` and has no client, not because the table cannot hold it any more.
+         *
+         * **205** since MCS-25's `getDriverProfilePhoto` — the third binary read that does have a
+         * client, and the driver's own avatar.
          */
-        const val EXPECTED_OPERATIONS = 204
+        const val EXPECTED_OPERATIONS = 207
 
         /**
          * The reads that answer with bytes, sorted — a `List` rather than a sorted `Set` because
          * `sortedSetOf` is a JVM-only extension and this file is `commonTest`.
          */
-        val BINARY_OPERATIONS = listOf("getModeBFile", "getSupportScreenshot")
+        val BINARY_OPERATIONS =
+            listOf("getDriverDocumentImage", "getDriverProfilePhoto", "getModeBFile", "getSupportScreenshot")
 
         /** 204 (no payload), 302 (payload is a header), 200 (payload is bytes). */
         val NON_JSON_STATUSES = setOf(200, 204, 302)

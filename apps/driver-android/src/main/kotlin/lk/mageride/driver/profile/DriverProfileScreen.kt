@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.EmergencyShare
@@ -74,6 +75,7 @@ import org.koin.androidx.compose.koinViewModel
 internal fun DriverProfileScreen(
     onBack: () -> Unit,
     onOpenVehicles: () -> Unit,
+    onOpenDocuments: () -> Unit,
     onOpenRatings: () -> Unit,
     onOpenLevel: () -> Unit,
     onSignedOut: () -> Unit,
@@ -145,6 +147,14 @@ internal fun DriverProfileScreen(
                     icon = Icons.Outlined.DirectionsCar,
                     label = stringResource(R.string.profile_vehicle_details),
                     onClick = onOpenVehicles,
+                )
+                // Δ MCS-28 — where a driver goes to look at their own licence. Under the vehicle
+                // row because the two lead to the same screen from different questions: "what am I
+                // driving" and "show me the paperwork for it".
+                ProfileRow(
+                    icon = Icons.Outlined.Description,
+                    label = stringResource(R.string.documents_open),
+                    onClick = onOpenDocuments,
                 )
                 ProfileRow(
                     icon = Icons.Outlined.StarOutline,
@@ -219,7 +229,7 @@ private fun IdentityCard(state: DriverProfileState, onEdit: () -> Unit, modifier
             registration = state.registration,
             // No app-facing read carries a driver's own star average — see DriverHeaderState.
             rating = null,
-            hasPhoto = !state.profile?.photoUrl.isNullOrBlank(),
+            photo = state.photo,
         ),
         modifier = modifier.padding(vertical = MageRideTheme.spacing.xs),
         trailing = { IconButton(onClick = onEdit) { EditGlyph() } },

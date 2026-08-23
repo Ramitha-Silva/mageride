@@ -20,6 +20,16 @@ protocol ProfileRepository: AnyObject {
     /// `GET /v1/users/me` — name, photo, language and the notification switch map.
     func profile() async throws -> UserProfile
 
+
+    /// What the headers should draw right now, before a single call has answered (§3.16, Δ MCS-27).
+    func cachedProfile(driverId: String) async -> CachedDriverProfile?
+
+    /// Records what a completed read answered, so the next open has it.
+    func cacheIdentity(driverId: String, name: String?, level: Int32?, registration: String?) async
+
+    /// The driver's photograph as bytes — off disk when they are current, from the network when not.
+    func driverPhoto(driverId: String) async -> Data?
+
     /// `GET /v1/me/emergency-contacts` — who D-33's SOS SMS goes to (AL-13).
     func emergencyContacts() async throws -> [EmergencyContact]
 
@@ -68,12 +78,75 @@ final class ApiProfileRepository: ProfileRepository {
     private let jobs: JobsRepository
     private let sessions: DriverSessions
     private let preferences: OnboardingPreferences
+    private let registry: RegistryApi
+    private let databases: DriverDatabase
 
-    init(iam: IamApi, jobs: JobsRepository, sessions: DriverSessions, preferences: OnboardingPreferences) {
+    init(
+        iam: IamApi,
+        jobs: JobsRepository,
+        sessions: DriverSessions,
+        preferences: OnboardingPreferences,
+        registry: RegistryApi,
+        databases: DriverDatabase
+    ) {
         self.iam = iam
         self.jobs = jobs
         self.sessions = sessions
         self.preferences = preferences
+        self.registry = registry
+        self.databases = databases
+    }
+
+    func cachedProfile(driverId: String) async -> CachedDriverProfile? {
+        guard let cache = await cache() else { return nil }
+
+        return cache.read(driverId: driverId)
+    }
+
+    func cacheIdentity(driverId: String, name: String?, level: Int32?, registration: String?) async {
+        guard let cache = await cache() else { return }
+
+        cache.writeIdentity(
+            driverId: driverId,
+            name: name,
+            level: level.map { KotlinInt(int: $0) },
+            registration: registration,
+            at: IosInstantKt.nowTimestamp())
+    }
+
+    /// **Bytes rather than a URL, which is the whole point of §3.16.** The signed link carries an
+    /// `expires` that changes on every profile read, so a URL-keyed image cache misses every time
+    /// and re-downloads a photograph the handset already holds. The link's `v` says *which* photo it
+    /// is; when that has not changed nothing is fetched and the avatar paints from disk.
+    func driverPhoto(driverId: String) async -> Data? {
+        let cache = await cache()
+
+        guard let link = (try? await registry.getDriverProfile())?.photoUrl else {
+            return cache?.read(driverId: driverId).photoBytes.map { IosBytesKt.nsDataOf(bytes: $0) as Data }
+        }
+
+        let query = signedLinkParameters(link)
+        let version = query["v"]
+
+        if let cache, !cache.needsPhoto(driverId: driverId, version: version) {
+            return cache.read(driverId: driverId).photoBytes.map { IosBytesKt.nsDataOf(bytes: $0) as Data }
+        }
+
+        guard let expires = query["expires"].flatMap(Int64.init),
+              let signature = query["signature"],
+              let bytes = try? await registry.getDriverProfilePhoto(
+                  driverId: driverId, version: version ?? "", expires: expires, signature: signature)
+        else { return nil }
+
+        cache?.writePhoto(driverId: driverId, version: version, bytes: bytes, at: IosInstantKt.nowTimestamp())
+
+        return IosBytesKt.nsDataOf(bytes: bytes) as Data
+    }
+
+    private func cache() async -> DriverProfileCache? {
+        guard let db = await databases.get() else { return nil }
+
+        return DriverProfileCache(db: db)
     }
 
     func profile() async throws -> UserProfile {

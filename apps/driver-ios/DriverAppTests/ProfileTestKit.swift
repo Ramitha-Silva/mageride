@@ -255,6 +255,7 @@ final class FakeProfileRepository: ProfileRepository {
     var contacts: [EmergencyContact] = []
     var jobStanding = JobStanding()
     var language: Language? = Language.si
+
     var nextFailure: Error?
 
     private(set) var profileReads = 0
@@ -276,6 +277,18 @@ final class FakeProfileRepository: ProfileRepository {
     }
 
     func standing(driverId: String) async -> JobStanding { jobStanding }
+
+    /// Δ MCS-27 — empty by default, which is a fresh install and the only honest fixture for a
+    /// test whose assertions are about what the network reads produce.
+    var cached: CachedDriverProfile?
+
+    var photoBytes: Data?
+
+    func cachedProfile(driverId: String) async -> CachedDriverProfile? { cached }
+
+    func cacheIdentity(driverId: String, name: String?, level: Int32?, registration: String?) async {}
+
+    func driverPhoto(driverId: String) async -> Data? { photoBytes }
 
     func saveName(_ name: String) async throws -> UserProfile {
         savedNames.append(name)

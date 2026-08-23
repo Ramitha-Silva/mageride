@@ -133,8 +133,6 @@
     <string name="map_recentre">නැවත මධ්‍යගත කරන්න</string>
     <string name="map_content_description">සිතියම</string>
 
-    <string name="route_placeholder_title">තවම සාදා නැත</string>
-    <string name="route_placeholder_body">%1$s එහි තිර කාණ්ඩය සමඟ ලැබේ.</string>
 
     <!-- C069 · SCR-DA-004…004c, 005, 006, 026/026a — මාදිලි C වාහන ලියාපදිංචිය. -->
 
@@ -730,4 +728,19 @@
     <string name="error_upgrade_required">දිගටම භාවිත කිරීමට යෙදුම යාවත්කාලීන කරන්න.</string>
     <string name="error_attestation_failed">මෙම යෙදුමේ පිටපත සත්‍යාපනය කළ නොහැකි විය. Play Store එකෙන් MageRide Driver ස්ථාපනය කරන්න.</string>
 
+
+    <!-- SCR-DA-029a — the driver's own documents (Δ MCS-28). -->
+    <string name="documents_title">මගේ ලේඛන</string>
+    <string name="documents_personal">ඔබේ බලපත්‍රය</string>
+    <string name="documents_empty">ඔබ උඩුගත කළ පසු ඔබේ ලේඛන මෙහි දිස්වේ.</string>
+    <string name="documents_offline">මෙම දුරකථනයේ සුරකින ලද දෑ පෙන්වයි. යාවත්කාලීන සඳහා MageRide වෙත සම්බන්ධ විය නොහැකි විය.</string>
+    <string name="documents_stale">සුරකින ලද පිටපත — කල් ඉකුත් වී තිබිය හැක</string>
+    <string name="documents_expires">කල් ඉකුත් වන්නේ %1$s</string>
+    <string name="documents_open">මගේ ලේඛන</string>
+    <string name="documents_vehicle_action">ලේඛන</string>
+    <string name="doc_kind_driving_license">රියදුරු බලපත්‍රය</string>
+    <string name="doc_kind_registration">ලියාපදිංචිය</string>
+    <string name="doc_kind_permit">මාර්ග අවසර පත්‍රය</string>
+    <string name="doc_kind_insurance">රක්ෂණය</string>
+    <string name="doc_kind_revenue_license">ආදායම් බලපත්‍රය</string>
 </resources>

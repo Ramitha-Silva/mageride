@@ -38,3 +38,5 @@ spec:
       remoteRef: { key: internal-keys, property: registry }
     - secretKey: Registry__OcrInternalApiKey
       remoteRef: { key: internal-keys, property: ocr }
+    - secretKey: Registry__ProfilePhotoLinkSigningKey
+      remoteRef: { key: registry-svc, property: Registry__ProfilePhotoLinkSigningKey }
