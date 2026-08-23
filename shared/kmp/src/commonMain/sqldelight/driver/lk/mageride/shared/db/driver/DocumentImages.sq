@@ -27,6 +27,11 @@ CREATE INDEX ix_document_images_vehicle ON document_images(vehicle_id);
 select:
 SELECT * FROM document_images WHERE document_id = ?;
 
+-- Everything this handset holds, the driver's own documents first. `vehicle_id NULLS FIRST` is the
+-- grouping the screens use: the licence belongs to the person (AL-27) and heads the list.
+selectAll:
+SELECT * FROM document_images ORDER BY vehicle_id IS NULL DESC, vehicle_id, kind, side;
+
 -- Everything a vehicle's card shows. `expires_at` is checked by the caller rather than filtered
 -- here, so a lapsed row is still readable until the sweep takes it: a driver at a checkpoint with
 -- no signal is better served by yesterday's certificate than by nothing.

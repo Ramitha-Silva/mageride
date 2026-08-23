@@ -134,6 +134,7 @@ internal fun DriverNavHost(controller: NavHostController, modifier: Modifier = M
                 // and it decides that in the repository, not here.
                 onAddVehicle = { controller.navigate(DriverRoute.VehicleOnboarding.path) },
                 onOpenStatus = { controller.navigate(DriverRoute.VehicleOnboardingStatus.path) },
+                onOpenDocuments = { controller.navigate(DriverRoute.Documents.path) },
                 onBack = { controller.popBackStack() },
             )
         }
@@ -248,6 +249,7 @@ internal fun DriverNavHost(controller: NavHostController, modifier: Modifier = M
                 // of its own — US-18.3's per-trip stars live on the trips, and there is no read
                 // that returns ratings apart from them.
                 onOpenVehicles = { controller.navigate(DriverRoute.Vehicles.path) },
+                onOpenDocuments = { controller.navigate(DriverRoute.Documents.path) },
                 onOpenRatings = { controller.navigate(DriverRoute.RideHistory.path) },
                 onOpenLevel = { controller.navigate(DriverRoute.DriverLevel.path) },
                 // Log out is a one-way door out of the whole graph, exactly like the onboarding
@@ -284,11 +286,15 @@ internal fun DriverNavHost(controller: NavHostController, modifier: Modifier = M
             )
         }
 
-        // SCR-DA-029a — driver documents and their expiry (E-03, `mageride://documents`). NOT a
-        // C075 screen: the `## Screens` list this component builds against is 031–035, and D2' has
-        // no SCR-DA-029a entry at all — the route exists because `PushRouter` resolves a link
-        // notification-svc mints for it. Left on the standing placeholder rather than invented.
-        placeholder(DriverRoute.Documents, "SCR-DA-029a documents")
+        // SCR-DA-029a — the driver's own documents (E-03, `mageride://documents`).
+        //
+        // Δ MCS-28 — the last standing placeholder, and it stood because there was nothing to draw:
+        // `VehicleDocument` carried a kind, a status and an expiry and NO image, so a screen here
+        // could have told a driver their insurance expired in March and not shown it to them. The
+        // signed image links exist now, so it does.
+        composable(DriverRoute.Documents.path) {
+            DocumentsScreen(onBack = { controller.popBackStack() })
+        }
     }
 }
 

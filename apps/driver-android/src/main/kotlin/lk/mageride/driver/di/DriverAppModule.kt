@@ -9,6 +9,9 @@ import lk.mageride.driver.comms.VoipCallViewModel
 import lk.mageride.driver.comms.VoipEngine
 import lk.mageride.driver.delivery.DeliveryRepository
 import lk.mageride.driver.delivery.DeliveryViewModel
+import lk.mageride.driver.documents.ApiDriverDocumentStore
+import lk.mageride.driver.documents.DocumentsViewModel
+import lk.mageride.driver.documents.DriverDocumentStore
 import lk.mageride.driver.delivery.ProofUploadQueue
 import lk.mageride.driver.earnings.EarningsRepository
 import lk.mageride.driver.earnings.EarningsViewModel
@@ -380,6 +383,11 @@ private fun Module.trackerAndProfileBindings() {
 
     // Δ MCS-27 — §3.16, so both headers paint before a call is made.
     single<DriverProfileStore> { DbDriverProfileStore(registry = get(), database = get()) }
+
+    // Δ MCS-28 — SCR-DA-029a's documents, cached under the §0.4 identity-document exception.
+    single<DriverDocumentStore> { ApiDriverDocumentStore(registry = get(), database = get()) }
+
+    viewModel { DocumentsViewModel(store = get()) }
     single { RideHistoryRepository(query = get(), ride = get(), tripState = get()) }
 
     viewModel { TrackerPairingViewModel(identity = get(), trackers = get(), publisher = get()) }

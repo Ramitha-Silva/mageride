@@ -112,6 +112,16 @@ public data class DocumentImageWrite(
  */
 public class DocumentImageCache(private val db: DriverDb, private val retention: Duration) {
 
+    /**
+     * Everything this handset holds, the driver's own documents first.
+     *
+     * One query rather than a personal read plus a read per vehicle: the screens draw a single
+     * grouped list, and a caller that assembled it from several reads could show a vehicle's
+     * documents under a vehicle it had just stopped operating.
+     */
+    public fun all(now: Instant): List<CachedDocumentImage> =
+        db.sql.documentImagesQueries.selectAll().executeAsList().map { it.toCached(now) }
+
     /** Everything held for one vehicle — its four onboarding documents, as far as they are cached. */
     public fun forVehicle(vehicleId: String, now: Instant): List<CachedDocumentImage> =
         db.sql.documentImagesQueries.selectForVehicle(vehicleId).executeAsList().map { it.toCached(now) }

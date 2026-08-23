@@ -729,4 +729,19 @@
     <string name="error_upgrade_required">தொடர்ந்து பயன்படுத்த செயலியைப் புதுப்பிக்கவும்.</string>
     <string name="error_attestation_failed">இந்தச் செயலியின் நகலைச் சரிபார்க்க முடியவில்லை. Play Store இலிருந்து MageRide Driver ஐ நிறுவவும்.</string>
 
+
+    <!-- SCR-DA-029a — the driver's own documents (Δ MCS-28). -->
+    <string name="documents_title">என் ஆவணங்கள்</string>
+    <string name="documents_personal">உங்கள் உரிமம்</string>
+    <string name="documents_empty">நீங்கள் பதிவேற்றியதும் உங்கள் ஆவணங்கள் இங்கே தோன்றும்.</string>
+    <string name="documents_offline">இந்த தொலைபேசியில் சேமிக்கப்பட்டவை காட்டப்படுகின்றன. புதுப்பிப்புகளைச் சரிபார்க்க MageRide ஐ அடைய முடியவில்லை.</string>
+    <string name="documents_stale">சேமித்த நகல் — காலாவதியாகி இருக்கலாம்</string>
+    <string name="documents_expires">%1$s அன்று காலாவதியாகும்</string>
+    <string name="documents_open">என் ஆவணங்கள்</string>
+    <string name="documents_vehicle_action">ஆவணங்கள்</string>
+    <string name="doc_kind_driving_license">ஓட்டுநர் உரிமம்</string>
+    <string name="doc_kind_registration">பதிவு</string>
+    <string name="doc_kind_permit">வழி அனுமதி</string>
+    <string name="doc_kind_insurance">காப்பீடு</string>
+    <string name="doc_kind_revenue_license">வருவாய் உரிமம்</string>
 </resources>
