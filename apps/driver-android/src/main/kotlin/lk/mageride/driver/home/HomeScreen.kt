@@ -385,8 +385,8 @@ private enum class HomeBand { Banners, Sheet, Map }
 
 /**
  * The height SCR-DA-010's map would take at the wireframe's `flex:1`, before
- * [MAP_HEIGHT_MULTIPLIER] doubles it: whatever [viewport] has left once [banners] and [sheet] have
- * had theirs.
+ * [MAP_HEIGHT_MULTIPLIER] enlarges it: whatever [viewport] has left once [sheet] has had its
+ * share.
  *
  * Measured rather than taken as a fraction of the viewport, because a Mode C standby sheet is a
  * different height from a Mode A/B journey sheet and a fraction tuned on one handset in one of
@@ -425,10 +425,20 @@ internal fun homeMapNaturalHeight(viewport: Dp, sheet: Dp): Dp =
  * which is what the surrounding scroll is for — and is why this belongs in a micro-change-set
  * against §SCR-DA-010 rather than being a number quietly different from the spec.
  *
- * **Δ MCS-24 — 1.5, down from 2.0: a 25% reduction, asked for from the same handset.** Doubled, the
- * map pushed the standby sheet entirely off the first screenful, so the toggle a driver opens this
- * screen to press was below the fold. One and a half still reads as a map and leaves the sheet's
- * top edge visible, which is what makes the scroll discoverable rather than something to find out
- * about.
+ * **Δ MCS-24 — 1.5, down from 2.0: a 25% reduction, asked for from a handset.** Doubled, the map
+ * pushed the standby sheet entirely off the first screenful, so the toggle a driver opens this
+ * screen to press was below the fold.
+ *
+ * **Δ MCS-31 — 1.125, another 25% off, and the reason is a consequence of MCS-29.** Removing the
+ * banner stack from [homeMapNaturalHeight] stopped the map shrinking as banners arrived, which was
+ * the reported defect — but it also made the SETTLED map taller by the height of those banners
+ * times this multiplier, because the height they used to take is no longer subtracted. On a
+ * 411×891 handset carrying two or three banners that is 150–250dp of extra map that nobody asked
+ * for. The same driver who reported the shrink then reported the size, which is the correct
+ * complaint about the wrong half of the change being fixed.
+ *
+ * 1.125 puts the settled height back where MCS-24 left it while keeping MCS-29's property that it
+ * does not move: still past the fold, so it reads as a map and the scroll is discoverable, and no
+ * longer dependent on data that arrives late.
  */
-private const val MAP_HEIGHT_MULTIPLIER = 1.5f
+private const val MAP_HEIGHT_MULTIPLIER = 1.125f
