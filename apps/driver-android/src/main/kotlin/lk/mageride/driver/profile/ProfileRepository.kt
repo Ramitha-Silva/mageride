@@ -4,6 +4,7 @@ import lk.mageride.driver.jobs.JobStanding
 import lk.mageride.driver.jobs.JobsRepository
 import lk.mageride.driver.onboarding.OnboardingPreferences
 import lk.mageride.shared.data.api.iam.IamApi
+import lk.mageride.shared.data.api.registry.RegistryApi
 import lk.mageride.shared.data.models.Language
 import lk.mageride.shared.data.models.PhoneE164
 import lk.mageride.shared.data.models.Ulid
@@ -32,10 +33,31 @@ internal class ProfileRepository(
     private val jobs: JobsRepository,
     private val sessions: AuthSessionManager,
     private val preferences: OnboardingPreferences,
+    private val registry: RegistryApi,
+    private val gatewayOrigin: String,
 ) {
 
     /** `GET /v1/users/me` — name, photo, language and the notification switch map. */
     suspend fun profile(): UserProfile = iam.getMyProfile()
+
+    /**
+     * `GET /v1/drivers/profile` — the driver's own photograph (Δ MCS-25).
+     *
+     * **Not [profile]'s `photoUrl`, and that is the whole point of this method existing.** The
+     * header used to read the one on `GET /v1/users/me`, which is `iam.users.photo_url` — and D3'
+     * §`getDriverProfile` records that Profile Setup *"writes `registry.driver_profiles` and never
+     * touches `iam.users`"*. So for a driver who onboarded in this app that field is **always
+     * null**, and the avatar it fed was never going to render whatever loader was put behind it.
+     * The photograph AL-27 required them to upload is the one registry-svc stored.
+     *
+     * Absolute, because a loader needs one. registry-svc answers a **relative** signed path for the
+     * reason `TicketDetail.screenshotUrl` is relative — a service does not know the origin it is
+     * reached on, and a response that could name one could name a different one. [DriverEnvironment]
+     * is where this app's single gateway origin lives, and resolving here keeps every caller from
+     * having to remember to.
+     */
+    suspend fun driverPhotoUrl(): String? =
+        absoluteUrl(gatewayOrigin, registry.getDriverProfile()?.photoUrl)
 
     /** `GET /v1/me/emergency-contacts` — who D-33's SOS SMS goes to (AL-13). */
     suspend fun emergencyContacts(): List<EmergencyContact> = iam.listEmergencyContacts().items
@@ -105,4 +127,24 @@ internal class ProfileRepository(
     suspend fun logOut() {
         sessions.logout()
     }
+}
+
+/**
+ * Joins the gateway origin to a path a service handed back (Δ MCS-25).
+ *
+ * `internal` rather than private so [ProfileRepositoryUrlTest] can hold the joining rules — the
+ * slashes are the kind of thing that works against one deployment and breaks against the next.
+ *
+ * An **absolute** URL is returned untouched. registry-svc answers a relative path today, but D-36
+ * lets the same operation redirect to a presigned bucket URL, and a caller that blindly prefixed
+ * the origin would turn that into a 404 against the gateway.
+ */
+internal fun absoluteUrl(gatewayOrigin: String, path: String?): String? {
+    val trimmed = path?.trim().orEmpty()
+
+    if (trimmed.isEmpty()) return null
+
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed
+
+    return gatewayOrigin.trimEnd('/') + "/" + trimmed.removePrefix("/")
 }

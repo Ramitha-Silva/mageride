@@ -118,6 +118,7 @@ kafkaClients = "4.3.1"
 # ADD §18.2 "KMP Shared Libraries" names the concern; the version is the newest stable
 # release that works with Kotlin 2.4.10 at scaffold time.
 ktor = "3.5.1"                    # HTTP client — C013 builds the API client on it
+coil = "3.3.0"                    # Δ MCS-25 — the driver avatar; the only image loader in the repo
 kotlinxSerialization = "1.11.0"   # JSON/CBOR for REST + MQTT payloads
 kotlinxCoroutines = "1.11.0"      # async/concurrency model
 kotlinxDatetime = "0.8.0"         # multiplatform date handling (D-38 business dates)
@@ -242,6 +243,13 @@ hivemq-mqtt = { module = "com.hivemq:hivemq-mqtt-client",       version.ref = "h
 gson        = { module = "com.google.code.gson:gson",           version.ref = "gson" }
 # e2e harness only — see the `kafkaClients` version comment.
 kafka-clients = { module = "org.apache.kafka:kafka-clients",    version.ref = "kafkaClients" }
+
+# ---- Coil (Δ MCS-25) ------------------------------------------------------------------
+# The first and only image loader here. `coil-network-okhttp` rather than the Ktor fetcher
+# because OkHttp is already on this app's classpath — `ktor-client-okhttp` is the engine
+# :shared uses on Android — so it adds a fetcher and not a second HTTP stack.
+coil-compose                    = { module = "io.coil-kt.coil3:coil-compose",             version.ref = "coil" }
+coil-network-okhttp             = { module = "io.coil-kt.coil3:coil-network-okhttp",      version.ref = "coil" }
 
 # ---- Ktor -----------------------------------------------------------------------------
 # commonMain gets the engine-agnostic pieces; each platform source set gets its engine.

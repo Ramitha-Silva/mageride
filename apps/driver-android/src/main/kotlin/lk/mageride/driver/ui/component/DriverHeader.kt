@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -16,8 +17,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import coil3.compose.AsyncImage
 import lk.mageride.driver.R
 import lk.mageride.driver.home.DashboardLabels
 import lk.mageride.driver.ui.Symbols
@@ -53,12 +56,30 @@ internal fun DriverHeader(
             color = MaterialTheme.colorScheme.primaryContainer,
         ) {
             Box(contentAlignment = Alignment.Center) {
+                // The glyph is drawn first and the photograph over it, so it is also what shows
+                // while the load is in flight and what is left if it fails. `SubcomposeAsyncImage`
+                // would give explicit loading and error slots; this needs neither, because the
+                // right thing to draw in both states is the thing already underneath.
                 Icon(
                     imageVector = Icons.Outlined.Person,
                     contentDescription = null,
                     modifier = Modifier.size(ControlTokens.RowIcon),
                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
+
+                if (state.photoUrl != null) {
+                    AsyncImage(
+                        model = state.photoUrl,
+                        // Decorative: the driver's name is on the very next line, and a screen
+                        // reader announcing "photo of Nimal" before reading "Nimal" is noise.
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        // The stored photograph is whatever shape the handset camera took; the
+                        // wireframe's avatar is a circle. Crop rather than fit, or a portrait is
+                        // letterboxed into a disc with the driver's face in a band across it.
+                        contentScale = ContentScale.Crop,
+                    )
+                }
             }
         }
 
@@ -116,19 +137,23 @@ internal fun DriverHeader(
  *   *passenger* is shown about the driver of *their* ride. C070's menu header and C074's profile
  *   card each reached that conclusion independently and each drew an em dash. This carries the
  *   parameter so that the day a read exists, one type gains a value and both screens show it.
- * @property hasPhoto Whether the driver has uploaded one.
+ * @property photoUrl The driver's own photograph, absolute and ready to load (Δ MCS-25).
  *
- *   The avatar is a glyph either way. `UserProfile.photoUrl` is a URL and this module has no image
- *   loader — no Coil, no Glide, nothing in the catalogue — so there is nothing here that could
- *   fetch it. Drawing the glyph is the honest state; a grey circle that never resolves would look
- *   like a failed load rather than a feature that is not built.
+ *   **This is registry-svc's, not `GET /v1/users/me`'s.** It used to be a `hasPhoto` flag fed from
+ *   `UserProfile.photoUrl`, and that field is null for every driver who onboarded in this app:
+ *   Profile Setup writes `registry.driver_profiles` and never touches `iam.users` (D3'
+ *   §`getDriverProfile`). The photograph AL-27 *requires* is the one registry-svc stored, and it
+ *   now arrives as a signed link a loader can follow with no credential of its own.
+ *
+ *   `null` draws the glyph, which is the state before the read answers and for a driver whose photo
+ *   PDPA erasure has cleared.
  */
 internal data class DriverHeaderState(
     val name: String? = null,
     val level: Int? = null,
     val registration: String? = null,
     val rating: Double? = null,
-    val hasPhoto: Boolean = false,
+    val photoUrl: String? = null,
 )
 
 /**

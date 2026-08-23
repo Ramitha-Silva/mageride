@@ -374,7 +374,19 @@ private fun Module.trackerAndProfileBindings() {
 
     single { TrackerRepository(registry = get(), bindings = get()) }
     single { SharingRepository(registry = get(), subscription = get()) }
-    single { ProfileRepository(iam = get(), jobs = get(), sessions = get(), preferences = get()) }
+    single {
+        ProfileRepository(
+            iam = get(),
+            jobs = get(),
+            sessions = get(),
+            preferences = get(),
+            // Δ MCS-25 — the avatar comes from registry-svc, because Profile Setup writes
+            // `registry.driver_profiles` and never `iam.users`, so the photo on `GET /v1/users/me`
+            // is null for every driver who onboarded in this app.
+            registry = get(),
+            gatewayOrigin = environment.apiBaseUrl,
+        )
+    }
     single { RideHistoryRepository(query = get(), ride = get(), tripState = get()) }
 
     viewModel { TrackerPairingViewModel(identity = get(), trackers = get(), publisher = get()) }

@@ -53,6 +53,13 @@ internal data class DriverProfileState(
      * eligible — a driver who has not onboarded one, or whose only vehicle is suspended.
      */
     val registration: String? = null,
+    /**
+     * The driver's own photograph, absolute and ready to load (Δ MCS-25).
+     *
+     * Not [profile]'s `photoUrl`: that is `iam.users.photo_url`, which Profile Setup never writes.
+     * See `ProfileRepository.driverPhotoUrl`.
+     */
+    val photoUrl: String? = null,
     val contact: EmergencyContact? = null,
     val standing: JobStanding = JobStanding(),
     val sheet: ProfileSheet? = null,
@@ -134,6 +141,10 @@ internal class DriverProfileViewModel(private val identity: DriverIdentity, priv
             // by recomposition would run again on every frame this screen redraws.
             val live = runCatching { identity.liveVehicle().live }.getOrNull()
 
+            // Δ MCS-25. Its own read and its own failure: a gateway that answered the profile but
+            // not this one should cost the avatar, not the screen.
+            val photoUrl = runCatching { profiles.driverPhotoUrl() }.getOrNull()
+
             mutableState.update {
                 it.copy(
                     loading = false,
@@ -144,6 +155,7 @@ internal class DriverProfileViewModel(private val identity: DriverIdentity, priv
                     contact = contacts.firstOrNull(EmergencyContact::isPrimary) ?: contacts.firstOrNull(),
                     standing = standing ?: it.standing,
                     registration = live?.registrationNumber ?: it.registration,
+                    photoUrl = photoUrl ?: it.photoUrl,
                 )
             }
         }

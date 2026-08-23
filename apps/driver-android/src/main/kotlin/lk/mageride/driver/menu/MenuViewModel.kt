@@ -42,6 +42,7 @@ internal class MenuViewModel(private val identity: DriverIdentity, private val p
                 val driverId = identity.driverId
                 val standing = driverId?.let { id -> profiles.standing(id) }
                 val live = identity.liveVehicle().live
+                val photoUrl = profiles.driverPhotoUrl()
 
                 mutableState.update {
                     it.copy(
@@ -51,7 +52,8 @@ internal class MenuViewModel(private val identity: DriverIdentity, private val p
                         // No app-facing read carries a driver's own star average. See
                         // `DriverHeaderState` for the four places it is not.
                         rating = null,
-                        hasPhoto = !profile.photoUrl.isNullOrBlank(),
+                        // registry-svc's, not `GET /v1/users/me`'s — see `driverPhotoUrl`.
+                        photoUrl = photoUrl,
                     )
                 }
             } catch (cause: CancellationException) {
