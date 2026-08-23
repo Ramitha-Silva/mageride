@@ -56,8 +56,7 @@ internal class ProfileRepository(
      * is where this app's single gateway origin lives, and resolving here keeps every caller from
      * having to remember to.
      */
-    suspend fun driverPhotoUrl(): String? =
-        absoluteUrl(gatewayOrigin, registry.getDriverProfile()?.photoUrl)
+    suspend fun driverPhotoUrl(): String? = absoluteUrl(gatewayOrigin, registry.getDriverProfile()?.photoUrl)
 
     /** `GET /v1/me/emergency-contacts` — who D-33's SOS SMS goes to (AL-13). */
     suspend fun emergencyContacts(): List<EmergencyContact> = iam.listEmergencyContacts().items

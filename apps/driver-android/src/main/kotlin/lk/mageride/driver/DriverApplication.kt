@@ -29,7 +29,9 @@ import org.koin.core.logger.Level
  * five-year-old handset feels every millisecond of `Application.onCreate`, and the two things
  * below are here because they genuinely cannot be anywhere else.
  */
-internal class DriverApplication : Application(), SingletonImageLoader.Factory {
+internal class DriverApplication :
+    Application(),
+    SingletonImageLoader.Factory {
 
     /**
      * Start-up work that outlives any Activity.
@@ -55,10 +57,9 @@ internal class DriverApplication : Application(), SingletonImageLoader.Factory {
      * precisely so a loader can follow it without one; attaching the bearer token here would put
      * it in a query-adjacent header on a request that does not need it.
      */
-    override fun newImageLoader(context: PlatformContext): ImageLoader =
-        ImageLoader.Builder(context)
-            .components { add(OkHttpNetworkFetcherFactory()) }
-            .build()
+    override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
+        .components { add(OkHttpNetworkFetcherFactory()) }
+        .build()
 
     override fun onCreate() {
         super.onCreate()
