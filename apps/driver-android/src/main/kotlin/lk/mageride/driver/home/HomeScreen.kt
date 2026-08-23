@@ -24,15 +24,14 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -89,24 +88,11 @@ internal fun HomeScreen(
         topBar = { HomeTopBar(state = state, onOpenLevel = onOpenLevel) },
     ) { insets ->
         BoxWithConstraints(modifier = Modifier.padding(insets).fillMaxSize()) {
-            val density = LocalDensity.current
-            var bannersHeight by remember { mutableStateOf(0.dp) }
-            var sheetHeight by remember { mutableStateOf(0.dp) }
-
-            // The two heights the rest of this layout is built out of — see [homeMapNaturalHeight].
-            val naturalMapHeight = homeMapNaturalHeight(maxHeight, bannersHeight, sheetHeight)
-            val mapHeight = naturalMapHeight * MAP_HEIGHT_MULTIPLIER
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                HomeBanners(
-                    state = state,
-                    modifier = Modifier.onSizeChanged { bannersHeight = with(density) { it.height.toDp() } },
-                )
-
+            HomeDashboardLayout(
+                viewport = maxHeight,
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                banners = { HomeBanners(state = state) },
+                map = { mapHeight, controlsInset ->
                 Box(modifier = Modifier.fillMaxWidth().height(mapHeight)) {
                     DriverHomeMap(
                         position = state.position,
@@ -114,7 +100,7 @@ internal fun HomeScreen(
                         // Everything past the first screenful, so §0.3's recentre FAB stays on it
                         // rather than at the bottom edge of a map that is off the bottom of the
                         // screen — a control the driver would have to scroll past to reach.
-                        controlsBottomInset = mapHeight - naturalMapHeight,
+                        controlsBottomInset = controlsInset,
                         modifier = Modifier.fillMaxSize(),
                     )
 
@@ -129,29 +115,27 @@ internal fun HomeScreen(
                         OfflineScrim()
                     }
                 }
-
-                val sheet = Modifier.onSizeChanged { sheetHeight = with(density) { it.height.toDp() } }
-
-                if (state.isScheduledMode) {
-                    JourneySheet(
-                        state = state,
-                        onStart = viewModel::startJourney,
-                        onEndOrRestart = viewModel::endOrRestartJourney,
-                        onChooseRoute = viewModel::chooseRoute,
-                        onAutoEndChanged = viewModel::setAutoEndAtDestination,
-                        modifier = sheet,
-                    )
-                } else {
-                    StandbySheet(
-                        state = state,
-                        onToggleOnline = viewModel::toggleOnline,
-                        onOpenDirectional = onOpenDirectional,
-                        onOpenVehicles = onOpenVehicles,
-                        onOpenEarnings = onOpenEarnings,
-                        modifier = sheet,
-                    )
-                }
-            }
+                },
+                sheet = {
+                    if (state.isScheduledMode) {
+                        JourneySheet(
+                            state = state,
+                            onStart = viewModel::startJourney,
+                            onEndOrRestart = viewModel::endOrRestartJourney,
+                            onChooseRoute = viewModel::chooseRoute,
+                            onAutoEndChanged = viewModel::setAutoEndAtDestination,
+                        )
+                    } else {
+                        StandbySheet(
+                            state = state,
+                            onToggleOnline = viewModel::toggleOnline,
+                            onOpenDirectional = onOpenDirectional,
+                            onOpenVehicles = onOpenVehicles,
+                            onOpenEarnings = onOpenEarnings,
+                        )
+                    }
+                },
+            )
         }
     }
 
@@ -327,6 +311,73 @@ internal object DashboardLabels {
 private const val SCRIM_ALPHA = 0.45f
 
 /**
+ * SCR-DA-010's three bands, measured in ONE pass (Δ MCS-26).
+ *
+ * **Why this is a `SubcomposeLayout` and not a `Column`.** The map's height is defined in terms of
+ * the other two — *whatever the viewport has left once the banners and the sheet have had theirs* —
+ * and a `Column` cannot express that: the only way to learn a sibling's height there is to let it
+ * compose, report through `onSizeChanged`, and recompose. That is a feedback loop with a visible
+ * first frame, and the frame it drew was the whole viewport times [MAP_HEIGHT_MULTIPLIER], because
+ * the two heights it subtracts both start at zero. A driver opening the dashboard watched the map
+ * fill the screen and then shrink by a third.
+ *
+ * That first frame used to be reasoned about and accepted — the old [homeMapNaturalHeight] treated
+ * a zero sheet as *"not measured yet"* and handed the map the plain viewport, on the grounds that
+ * MapLibre has no GL surface up that early. It has one by the second frame, and the shrink is what
+ * a person actually sees. Reported from a handset.
+ *
+ * Subcomposing measures the banners and the sheet **first**, computes the remainder, and only then
+ * composes the map with a height it will keep. There is no earlier frame to see.
+ *
+ * @param viewport What one screenful is, from the `BoxWithConstraints` outside the scroll. It
+ *   cannot be read in here: this layout is inside a `verticalScroll`, so its own `maxHeight` is
+ *   `Infinity` — which is the whole point of the scroll and useless as a share-out.
+ * @param map Given its final height and the overscroll past [viewport] that [DriverHomeMap] keeps
+ *   its controls out of.
+ */
+@Composable
+private fun HomeDashboardLayout(
+    viewport: Dp,
+    banners: @Composable () -> Unit,
+    sheet: @Composable () -> Unit,
+    map: @Composable (mapHeight: Dp, controlsInset: Dp) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SubcomposeLayout(modifier) { constraints ->
+        // Height-unbounded: both of these are content that takes what it needs, and the map gets
+        // what is left. Bounding them by the viewport would make a five-row banner stack fight the
+        // sheet for the same pixels.
+        val loose = constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity)
+
+        val bannerBands = subcompose(HomeBand.Banners, banners).map { it.measure(loose) }
+        val sheetBands = subcompose(HomeBand.Sheet, sheet).map { it.measure(loose) }
+
+        val bannersHeight = bannerBands.sumOf { it.height }
+        val sheetHeight = sheetBands.sumOf { it.height }
+
+        val natural = homeMapNaturalHeight(viewport, bannersHeight.toDp(), sheetHeight.toDp())
+        val mapHeight = natural * MAP_HEIGHT_MULTIPLIER
+
+        val mapPx = mapHeight.roundToPx()
+
+        val mapBands = subcompose(HomeBand.Map) { map(mapHeight, mapHeight - natural) }
+            .map { it.measure(constraints.copy(minHeight = mapPx, maxHeight = mapPx)) }
+
+        layout(constraints.maxWidth, bannersHeight + mapPx + sheetHeight) {
+            var y = 0
+
+            bannerBands.forEach { band -> band.placeRelative(0, y); y += band.height }
+            mapBands.forEach { band -> band.placeRelative(0, y) }
+            y += mapPx
+            sheetBands.forEach { band -> band.placeRelative(0, y); y += band.height }
+        }
+    }
+}
+
+/** The three slots [HomeDashboardLayout] subcomposes, in the order it measures them. */
+private enum class HomeBand { Banners, Sheet, Map }
+
+/**
  * The height SCR-DA-010's map would take at the wireframe's `flex:1`, before
  * [MAP_HEIGHT_MULTIPLIER] doubles it: whatever [viewport] has left once [banners] and [sheet] have
  * had theirs.
@@ -341,15 +392,13 @@ private const val SCRIM_ALPHA = 0.45f
  * layout rule that is only ever checked by eye is a layout rule that regresses. `HomeMapHeightTest`
  * is where the three cases below are pinned.
  *
- * @param sheet Zero means *"not measured yet"*, not *"an empty sheet"* — `DashboardSheet` always
- *   draws a grab handle and its own padding, so a real one is never zero. Until the first layout
- *   pass reports one the map takes the whole viewport, which is where it sat before it was doubled
- *   and is a frame MapLibre has no GL surface to draw on anyway.
+ * @param sheet A real measurement, always (Δ MCS-26). It used to be able to arrive as zero meaning
+ *   *"not measured yet"*, and this function answered the plain viewport for that frame — which is
+ *   the shrink a driver saw on every dashboard open. [HomeDashboardLayout] measures the sheet
+ *   before it composes the map, so there is no such frame and no such case to answer.
  */
-internal fun homeMapNaturalHeight(viewport: Dp, banners: Dp, sheet: Dp): Dp = when {
-    sheet <= 0.dp -> viewport
-    else -> (viewport - banners - sheet).coerceAtLeast(ControlTokens.HomeMapMinimum)
-}
+internal fun homeMapNaturalHeight(viewport: Dp, banners: Dp, sheet: Dp): Dp =
+    (viewport - banners - sheet).coerceAtLeast(ControlTokens.HomeMapMinimum)
 
 /**
  * How much taller than the wireframe's `flex:1` the dashboard map is drawn.
