@@ -209,6 +209,7 @@ components:
         - bad-request
         - unauthorized
         - forbidden
+        - device-revoked
         - not-found
         - method-not-allowed
         - conflict

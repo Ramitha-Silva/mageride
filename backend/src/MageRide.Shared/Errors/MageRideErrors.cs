@@ -40,6 +40,26 @@ public static partial class MageRideErrors
     /// <summary>Authenticated, but the effective role set does not permit this (deny-by-default, AL-06).</summary>
     public static readonly ErrorCode Forbidden = new("forbidden", 403, "Forbidden");
 
+    /// <summary>
+    /// This session was displaced by a sign-in on another device (AL-08, Δ MCS-30).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Both apps have handled this code since C014 and nothing has ever sent it.</b>
+    /// `AuthSessionManager` matches on it, both shells clear their whole back stack for it and
+    /// `SessionRevocationTest` covers it — a complete displacement path with no producer, so a
+    /// driver whose account was taken over by a new handset saw a generic 401 at their next refresh
+    /// and no explanation at all.
+    /// </para>
+    /// <para>
+    /// Distinct from <see cref="Unauthorized"/> on purpose: an expired token is answered by
+    /// refreshing, and a displaced one must never be. The apps wipe the local database on this and
+    /// route to Login (`mobile_db_schema.md` §0.4), which is exactly what a handset that no longer
+    /// belongs to the account should do with an offline copy of a driving licence.
+    /// </para>
+    /// </remarks>
+    public static readonly ErrorCode DeviceRevoked = new("device-revoked", 403, "Signed in on another device");
+
     public static readonly ErrorCode NotFound = new("not-found", 404, "Resource not found");
     public static readonly ErrorCode MethodNotAllowed = new("method-not-allowed", 405, "Method not allowed");
     public static readonly ErrorCode Conflict = new("conflict", 409, "Conflict");

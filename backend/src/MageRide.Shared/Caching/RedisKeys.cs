@@ -353,6 +353,26 @@ public static class RedisKeys
     /// <summary>Opaque refresh token mirror for O(1) revocation (D-29).</summary>
     public static string RefreshToken(string jti) => $"refresh:{jti}";
 
+    /// <summary>
+    /// A tombstone for a session that has been revoked, read on every authenticated request
+    /// (AL-08, Δ MCS-30).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Presence means revoked; absence means nothing.</b> That direction is the whole design.
+    /// The <see cref="RefreshToken"/> mirror beside it is best-effort and its own writer says
+    /// "Postgres remains authoritative" — so treating a MISSING key as revocation would sign every
+    /// driver on the platform out of a Redis restart. A present key can only have been written by
+    /// a revocation, so it is safe to act on and safe to lose.
+    /// </para>
+    /// <para>
+    /// Written with a TTL of one access-token lifetime. After that the token it exists to kill has
+    /// expired on its own and the tombstone has nothing left to do, which is what keeps this from
+    /// growing without bound.
+    /// </para>
+    /// </remarks>
+    public static string RevokedSession(string jti) => $"session:revoked:{jti}";
+
     /// <summary>Pre-signed URL to a generated PDPA export ZIP, TTL 30 d (E-06).</summary>
     public static string PdpaExport(Guid requestId) => $"pdpa:export:{requestId}";
 

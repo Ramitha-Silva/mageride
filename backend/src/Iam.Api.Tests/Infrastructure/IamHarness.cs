@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
 using MageRide.Iam.Otp;
+using MageRide.Shared.Caching;
 using MageRide.TestKit;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -70,6 +71,33 @@ internal sealed class IamHarness : IAsyncDisposable
 
     /// <summary>Direct database access, for the accounts a portal sign-in cannot create itself.</summary>
     public IamSeed Seed { get; }
+
+    /// <summary>
+    /// Forgets a session's revocation tombstone, which is what a Redis eviction or restart looks
+    /// like from the kernel's side (Δ MCS-30).
+    /// </summary>
+    /// <remarks>
+    /// The JWT is taken apart here rather than in a test because the interesting part is the
+    /// behaviour either side of the deletion, not the base64url. Signature unverified on purpose:
+    /// this reads a claim out of a token the harness itself just minted.
+    /// </remarks>
+    public Task ForgetRevocationAsync(string accessToken) =>
+        // Fully qualified: a blanket `using StackExchange.Redis` collides with
+        // `Microsoft.AspNetCore.Hosting.Server.IServer`, which this file also uses.
+        _app.Services.GetRequiredService<StackExchange.Redis.IConnectionMultiplexer>()
+            .GetDatabase()
+            .KeyDeleteAsync(RedisKeys.RevokedSession(JtiOf(accessToken)));
+
+    /// <summary>The <c>jti</c> claim of an access token, without verifying it.</summary>
+    public static string JtiOf(string accessToken)
+    {
+        var payload = accessToken.Split('.')[1];
+        var padded = payload.Replace('-', '+').Replace('_', '/').PadRight((payload.Length + 3) / 4 * 4, '=');
+
+        using var document = JsonDocument.Parse(Convert.FromBase64String(padded));
+
+        return document.RootElement.GetProperty("jti").GetString()!;
+    }
 
     public string BaseAddress { get; }
 
