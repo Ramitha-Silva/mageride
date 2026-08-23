@@ -10,7 +10,6 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using StackExchange.Redis;
 using Microsoft.Extensions.Hosting;
 
 namespace MageRide.Iam.Tests.Infrastructure;
@@ -83,7 +82,9 @@ internal sealed class IamHarness : IAsyncDisposable
     /// this reads a claim out of a token the harness itself just minted.
     /// </remarks>
     public Task ForgetRevocationAsync(string accessToken) =>
-        _app.Services.GetRequiredService<IConnectionMultiplexer>()
+        // Fully qualified: a blanket `using StackExchange.Redis` collides with
+        // `Microsoft.AspNetCore.Hosting.Server.IServer`, which this file also uses.
+        _app.Services.GetRequiredService<StackExchange.Redis.IConnectionMultiplexer>()
             .GetDatabase()
             .KeyDeleteAsync(RedisKeys.RevokedSession(JtiOf(accessToken)));
 
