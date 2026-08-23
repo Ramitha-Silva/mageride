@@ -122,6 +122,24 @@ internal class DriverProfileViewModel(private val identity: DriverIdentity, priv
 
     init {
         refresh()
+        refreshPhoto()
+    }
+
+    /**
+     * The avatar, on its own coroutine (Δ MCS-25).
+     *
+     * **Deliberately not part of [refresh].** It was, and that made a fourth network read a
+     * precondition for `loading` clearing — so a gateway that answered the profile but was slow on
+     * this one held the whole screen on its spinner, and every field the driver came to read waited
+     * on a picture. A failure here costs the avatar and nothing else; the glyph is already the
+     * right thing to draw.
+     */
+    private fun refreshPhoto() {
+        launchGuarded(onFailure = { }) {
+            val photoUrl = profiles.driverPhotoUrl()
+
+            mutableState.update { it.copy(photoUrl = photoUrl ?: it.photoUrl) }
+        }
     }
 
     /** Re-reads the profile, the emergency contact and the level. */
@@ -141,10 +159,6 @@ internal class DriverProfileViewModel(private val identity: DriverIdentity, priv
             // by recomposition would run again on every frame this screen redraws.
             val live = runCatching { identity.liveVehicle().live }.getOrNull()
 
-            // Δ MCS-25. Its own read and its own failure: a gateway that answered the profile but
-            // not this one should cost the avatar, not the screen.
-            val photoUrl = runCatching { profiles.driverPhotoUrl() }.getOrNull()
-
             mutableState.update {
                 it.copy(
                     loading = false,
@@ -155,7 +169,6 @@ internal class DriverProfileViewModel(private val identity: DriverIdentity, priv
                     contact = contacts.firstOrNull(EmergencyContact::isPrimary) ?: contacts.firstOrNull(),
                     standing = standing ?: it.standing,
                     registration = live?.registrationNumber ?: it.registration,
-                    photoUrl = photoUrl ?: it.photoUrl,
                 )
             }
         }

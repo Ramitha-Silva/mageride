@@ -32,6 +32,22 @@ internal class MenuViewModel(private val identity: DriverIdentity, private val p
 
     init {
         refresh()
+        refreshPhoto()
+    }
+
+    /**
+     * The avatar, on its own coroutine (Δ MCS-25).
+     *
+     * **Deliberately not part of [refresh].** The rows are the point of this screen and the header
+     * fills in behind them; folding a fourth read into the same block would let a slow avatar hold
+     * the name and the plate back with it, which is the opposite of what the header is for.
+     */
+    private fun refreshPhoto() {
+        viewModelScope.launch {
+            val photoUrl = runCatching { profiles.driverPhotoUrl() }.getOrNull() ?: return@launch
+
+            mutableState.update { it.copy(photoUrl = photoUrl) }
+        }
     }
 
     @Suppress("TooGenericExceptionCaught")
@@ -42,7 +58,6 @@ internal class MenuViewModel(private val identity: DriverIdentity, private val p
                 val driverId = identity.driverId
                 val standing = driverId?.let { id -> profiles.standing(id) }
                 val live = identity.liveVehicle().live
-                val photoUrl = profiles.driverPhotoUrl()
 
                 mutableState.update {
                     it.copy(
@@ -52,8 +67,6 @@ internal class MenuViewModel(private val identity: DriverIdentity, private val p
                         // No app-facing read carries a driver's own star average. See
                         // `DriverHeaderState` for the four places it is not.
                         rating = null,
-                        // registry-svc's, not `GET /v1/users/me`'s — see `driverPhotoUrl`.
-                        photoUrl = photoUrl,
                     )
                 }
             } catch (cause: CancellationException) {
