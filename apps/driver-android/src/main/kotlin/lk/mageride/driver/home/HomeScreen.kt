@@ -93,28 +93,28 @@ internal fun HomeScreen(
                 modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                 banners = { HomeBanners(state = state) },
                 map = { mapHeight, controlsInset ->
-                Box(modifier = Modifier.fillMaxWidth().height(mapHeight)) {
-                    DriverHomeMap(
-                        position = state.position,
-                        vehicleType = state.vehicles.live?.vehicleType,
-                        // Everything past the first screenful, so §0.3's recentre FAB stays on it
-                        // rather than at the bottom edge of a map that is off the bottom of the
-                        // screen — a control the driver would have to scroll past to reach.
-                        controlsBottomInset = controlsInset,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    Box(modifier = Modifier.fillMaxWidth().height(mapHeight)) {
+                        DriverHomeMap(
+                            position = state.position,
+                            vehicleType = state.vehicles.live?.vehicleType,
+                            // Everything past the first screenful, so §0.3's recentre FAB stays on it
+                            // rather than at the bottom edge of a map that is off the bottom of the
+                            // screen — a control the driver would have to scroll past to reach.
+                            controlsBottomInset = controlsInset,
+                            modifier = Modifier.fillMaxSize(),
+                        )
 
-                    // D2' §SCR-DA-010: "Offline → grey overlay + 'Go online to receive rides'". Only
-                    // on the Mode C standby map — a Mode A/B dashboard has no standby to be off.
-                    //
-                    // The label centres in the whole map, which puts it at `viewport - sheet` on
-                    // screen: exactly where the map's bottom edge is today, and on the first
-                    // screenful whatever the handset. Arithmetic rather than luck — the map is
-                    // twice a height that was itself `viewport - banners - sheet`.
-                    if (!state.online && !state.isScheduledMode && !state.loading) {
-                        OfflineScrim()
+                        // D2' §SCR-DA-010: "Offline → grey overlay + 'Go online to receive rides'". Only
+                        // on the Mode C standby map — a Mode A/B dashboard has no standby to be off.
+                        //
+                        // The label centres in the whole map, which puts it at `viewport - sheet` on
+                        // screen: exactly where the map's bottom edge is today, and on the first
+                        // screenful whatever the handset. Arithmetic rather than luck — the map is
+                        // a multiple of a height that was itself `viewport - banners - sheet`.
+                        if (!state.online && !state.isScheduledMode && !state.loading) {
+                            OfflineScrim()
+                        }
                     }
-                }
                 },
                 sheet = {
                     if (state.isScheduledMode) {
@@ -366,10 +366,16 @@ private fun HomeDashboardLayout(
         layout(constraints.maxWidth, bannersHeight + mapPx + sheetHeight) {
             var y = 0
 
-            bannerBands.forEach { band -> band.placeRelative(0, y); y += band.height }
+            bannerBands.forEach { band ->
+                band.placeRelative(0, y)
+                y += band.height
+            }
             mapBands.forEach { band -> band.placeRelative(0, y) }
             y += mapPx
-            sheetBands.forEach { band -> band.placeRelative(0, y); y += band.height }
+            sheetBands.forEach { band ->
+                band.placeRelative(0, y)
+                y += band.height
+            }
         }
     }
 }
