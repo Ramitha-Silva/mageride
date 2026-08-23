@@ -186,8 +186,14 @@ class MobileSchemaTest {
         // Δ MCS-27 — §3.16. `photo_bytes` is the avatar itself rather than a URL, because the
         // signed link's `expires` changes on every read and a URL-keyed cache would miss each time.
         "driver_profile" to setOf(
-            "driver_id", "display_name", "level", "registration",
-            "photo_url", "photo_version", "photo_bytes", "synced_at",
+            "driver_id",
+            "display_name",
+            "level",
+            "registration",
+            "photo_url",
+            "photo_version",
+            "photo_bytes",
+            "synced_at",
         ),
     )
 
