@@ -698,6 +698,37 @@ CREATE TABLE credit_transfers (
 CREATE INDEX ix_credit_transfers_recent ON credit_transfers(created_at DESC);
 ```
 
+### 3.16 `driver_profile` — the driver's own identity, for an instant first paint (Δ MCS-27)
+
+> **Why this exists.** SCR-DA/DI-029 and SCR-DA/DI-036 both open on the driver's own name, Driver
+> Level, live plate and photograph, and every one of those was a network read. The header therefore
+> painted *"Your name"* over a placeholder glyph and filled in a second later, on every open, on a
+> connection that is a Colombo bus at 7am. Reported from a handset.
+>
+> Every field here is a **cache of something a server owns** — `registry.driver_profiles` for the
+> name and photo, `GET /v1/drivers/{id}/level` for the level, the live-vehicle read for the plate.
+> Nothing writes to it except a completed read, and nothing reads from it as truth: it decides what
+> is drawn in the first frame and is replaced by whatever the refresh answers.
+>
+> **`photo_bytes` is the photograph itself**, not a URL, and that is the point. The signed link
+> (MCS-25) carries an `expires` that changes on every profile read, so a URL-keyed image cache — Coil's,
+> `URLCache`'s — misses every single time and re-downloads an avatar the handset already has.
+> `photo_version` is the link's opaque `v`: when it changes the photograph changed, which is exactly
+> when the bytes are worth fetching again.
+
+```sql
+CREATE TABLE driver_profile (
+  driver_id     TEXT PRIMARY KEY,
+  display_name  TEXT,
+  level         INTEGER,                                       -- Driver Level 1..3 (D5' §4.2)
+  registration  TEXT,                                          -- the live vehicle's plate (D-03)
+  photo_url     TEXT,                                          -- the signed link the bytes came from
+  photo_version TEXT,                                          -- the link's `v` — which photo this is
+  photo_bytes   BLOB,                                          -- the avatar itself, so it paints offline
+  synced_at     INTEGER
+);
+```
+
 ---
 
 ## 4. Sync, Outbox & Eviction Strategy

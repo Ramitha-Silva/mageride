@@ -1,0 +1,15 @@
+-- Schema 2 -> 3 (Δ MCS-27). Adds mobile_db_schema.md §3.16 `driver_profile`.
+--
+-- A plain CREATE TABLE: nothing is migrated because nothing existed. The table is a cache and an
+-- empty one is correct — the first profile read after the upgrade fills it, and until then both
+-- headers behave exactly as they did before this change.
+CREATE TABLE driver_profile (
+    driver_id     TEXT NOT NULL PRIMARY KEY,
+    display_name  TEXT,
+    level         INTEGER,
+    registration  TEXT,
+    photo_url     TEXT,
+    photo_version TEXT,
+    photo_bytes   BLOB,
+    synced_at     INTEGER
+);

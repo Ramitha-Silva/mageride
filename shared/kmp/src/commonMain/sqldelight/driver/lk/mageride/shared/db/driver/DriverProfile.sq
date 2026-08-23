@@ -1,0 +1,50 @@
+import kotlin.Int;
+import kotlin.time.Instant;
+
+-- mobile_db_schema.md §3.16 (Δ MCS-27) — the driver's own identity, cached so SCR-DA/DI-029 and
+-- SCR-DA/DI-036 paint a name rather than a placeholder on the frame they open.
+--
+-- Every column is a cache of something a server owns. Nothing reads this as truth: it decides the
+-- first frame and is replaced by whatever the refresh behind it answers.
+CREATE TABLE driver_profile (
+    driver_id     TEXT NOT NULL PRIMARY KEY,
+    display_name  TEXT,
+    level         INTEGER AS Int,
+    registration  TEXT,
+    photo_url     TEXT,
+    photo_version TEXT,
+    photo_bytes   BLOB,
+    synced_at     INTEGER AS Instant
+);
+
+select:
+SELECT * FROM driver_profile WHERE driver_id = ?;
+
+-- The identity half, written by a completed profile read. Deliberately does NOT touch the photo:
+-- a name refresh must not blank an avatar that is already on screen, and the two arrive from
+-- different calls at different times.
+upsertIdentity:
+INSERT INTO driver_profile (driver_id, display_name, level, registration, synced_at)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(driver_id) DO UPDATE SET
+    display_name = coalesce(excluded.display_name, display_name),
+    level        = coalesce(excluded.level, level),
+    registration = coalesce(excluded.registration, registration),
+    synced_at    = excluded.synced_at;
+
+-- The photograph, written only once its bytes are actually in hand. `photo_version` is the signed
+-- link's opaque `v`: it changes when and only when the photograph does, which is what tells a later
+-- read whether the bytes it already holds are still the right ones.
+upsertPhoto:
+INSERT INTO driver_profile (driver_id, photo_url, photo_version, photo_bytes, synced_at)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(driver_id) DO UPDATE SET
+    photo_url     = excluded.photo_url,
+    photo_version = excluded.photo_version,
+    photo_bytes   = excluded.photo_bytes,
+    synced_at     = excluded.synced_at;
+
+-- D-26/PDPA and sign-out: the identity of the driver who was signed in must not survive the next
+-- one arriving on the same handset.
+deleteAll:
+DELETE FROM driver_profile;
