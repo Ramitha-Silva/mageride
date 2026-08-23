@@ -142,9 +142,9 @@ internal class ProfileRepository(
 internal fun absoluteUrl(gatewayOrigin: String, path: String?): String? {
     val trimmed = path?.trim().orEmpty()
 
-    if (trimmed.isEmpty()) return null
-
-    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed
-
-    return gatewayOrigin.trimEnd('/') + "/" + trimmed.removePrefix("/")
+    return when {
+        trimmed.isEmpty() -> null
+        trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
+        else -> gatewayOrigin.trimEnd('/') + "/" + trimmed.removePrefix("/")
+    }
 }
