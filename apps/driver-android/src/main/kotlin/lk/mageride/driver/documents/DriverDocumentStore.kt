@@ -119,7 +119,9 @@ internal val DOCUMENT_RETENTION: Duration = 30.days
  * What the platform is told these bytes are.
  *
  * Every document on this surface arrives as a photograph taken on a handset or a scan of one, and
- * the contract's own response type is `image/*`. A stored `content_type` exists so a viewer does
+ * the contract's own response type is `image/…` (written without the glob — Kotlin block comments
+ * nest, so `image/` followed by a star opens a second comment and eats the rest of the file). A
+ * stored `content_type` exists so a viewer does
  * not have to guess, not because this app can offer a better answer than the one it was sent.
  */
 private const val CONTENT_TYPE = "image/jpeg"

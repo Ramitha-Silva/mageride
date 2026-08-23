@@ -17,6 +17,7 @@ import androidx.navigation.compose.composable
 import lk.mageride.driver.R
 import lk.mageride.driver.capture.DocumentScannerScreen
 import lk.mageride.driver.comms.VoipCallScreen
+import lk.mageride.driver.documents.DocumentsScreen
 import lk.mageride.driver.earnings.EarningsScreen
 import lk.mageride.driver.history.RideHistoryScreen
 import lk.mageride.driver.home.DirectionalScreen
