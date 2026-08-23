@@ -431,9 +431,7 @@ public data class DriverDocument(
 
 /** 200 body of `GET /v1/drivers/documents` (Δ MCS-28). */
 @Serializable
-public data class DriverDocumentListResponse(
-    val items: List<DriverDocument> = emptyList(),
-)
+public data class DriverDocumentListResponse(val items: List<DriverDocument> = emptyList())
 
 /**
  * A vehicle with everything the owner, an assigned driver or an internal role may see

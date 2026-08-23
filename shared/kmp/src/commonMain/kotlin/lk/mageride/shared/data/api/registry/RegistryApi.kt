@@ -27,8 +27,8 @@ import lk.mageride.shared.data.models.registry.BindVehicleDeviceRequest
 import lk.mageride.shared.data.models.registry.BindVehicleDeviceResponse
 import lk.mageride.shared.data.models.registry.CreateShareGrantRequest
 import lk.mageride.shared.data.models.registry.CreateShareGrantResponse
-import lk.mageride.shared.data.models.registry.DriverPayoutProfile
 import lk.mageride.shared.data.models.registry.DriverDocumentListResponse
+import lk.mageride.shared.data.models.registry.DriverPayoutProfile
 import lk.mageride.shared.data.models.registry.DriverProfileSummary
 import lk.mageride.shared.data.models.registry.OnboardingCorrections
 import lk.mageride.shared.data.models.registry.OnboardingStep
@@ -347,13 +347,12 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
         version: String,
         expires: Long,
         signature: String,
-    ): ByteArray =
-        transport.apiGet(SERVICE, "getDriverDocumentImage", "/v1/drivers/documents/$documentId/image") {
-            parameter("d", driverId)
-            parameter("v", version)
-            parameter("expires", expires)
-            parameter("signature", signature)
-        }.body()
+    ): ByteArray = transport.apiGet(SERVICE, "getDriverDocumentImage", "/v1/drivers/documents/$documentId/image") {
+        parameter("d", driverId)
+        parameter("v", version)
+        parameter("expires", expires)
+        parameter("signature", signature)
+    }.body()
 
     @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getDriverProfilePhoto(
