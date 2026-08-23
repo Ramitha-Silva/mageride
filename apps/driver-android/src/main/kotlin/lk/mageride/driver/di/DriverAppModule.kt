@@ -384,7 +384,7 @@ private fun Module.trackerAndProfileBindings() {
             // `registry.driver_profiles` and never `iam.users`, so the photo on `GET /v1/users/me`
             // is null for every driver who onboarded in this app.
             registry = get(),
-            gatewayOrigin = environment.apiBaseUrl,
+            gatewayOrigin = get<DriverEnvironment>().apiBaseUrl,
         )
     }
     single { RideHistoryRepository(query = get(), ride = get(), tripState = get()) }

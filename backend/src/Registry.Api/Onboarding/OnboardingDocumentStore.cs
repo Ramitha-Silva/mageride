@@ -82,9 +82,18 @@ public static class OnboardingUploadKinds
 /// told exists and cannot open.
 /// </para>
 /// <para>
-/// <b>Retention is never null here.</b> The payout store has an exception because a driver's
-/// LankaQR is live payment infrastructure (AL-59); every document that reaches this store is raw
-/// identity evidence and carries NFR-28's deadline.
+/// <b>Retention is null for exactly one kind (Δ MCS-25).</b> Every document that reaches this store
+/// is raw identity evidence and carries NFR-28's deadline — except the profile photo, which the
+/// platform keeps <em>serving</em> as the driver's avatar (US-2.12). That is the same exception the
+/// payout store makes for a driver's LankaQR (AL-59) and it is made the same way: null retention,
+/// the <c>retained/</c> prefix, a NULL <c>auto_delete_at</c>, and a key of its own.
+///
+/// <b>What this costs, stated plainly.</b> Nothing on this platform can delete an object —
+/// <see cref="IObjectStore"/> has no delete, so removal is the bucket lifecycle rule and nothing
+/// else — and PDPA erasure clears <c>driver_profiles.photo_url</c> without touching
+/// <c>docs.uploads</c>. A retained photo therefore outlives an erasure request as unreferenced
+/// bytes. That was already true of the LankaQR; this extends it to a face. Closing it means a
+/// delete on the store and an erasure hook that uses it, and is worth doing.
 /// </para>
 /// </remarks>
 public interface IOnboardingDocumentStore
@@ -134,14 +143,34 @@ internal sealed class OnboardingDocumentStore(
 
         var uploadId = Guid.CreateVersion7();
 
+        // Δ MCS-25 — the profile photo is the one document here the platform keeps SERVING.
+        //
+        // Everything else in this store is evidence somebody checked once: a licence is read, its
+        // fields are extracted, and NFR-28 then wants the image gone. The profile photo is read
+        // once too, but it is also the avatar SCR-DA/DI-029 and -036 draw and the face US-2.12 has
+        // a passenger recognise their driver by — so expiring it turns a working screen into a
+        // broken one ninety days after Profile Setup, with nothing to re-upload from.
+        //
+        // This is `PayoutDocumentStore`'s LankaQR exception, for the same reason and by the same
+        // mechanism: null retention puts the object under the `retained/` prefix, which the NFR-28
+        // lifecycle rule does not match, and leaves `docs.uploads.auto_delete_at` NULL.
+        //
+        // The key is separate too, so the two classes are distinguishable in the bucket without
+        // joining back to Postgres.
+        var isRetained = string.Equals(kind, OnboardingUploadKinds.ProfilePhoto, StringComparison.Ordinal);
+
+        TimeSpan? retention = isRetained ? null : _options.OnboardingDocumentRetention;
+
         var stored = await objects.PutAsync(
             new ObjectPutRequest(
                 // Built from ids this service minted, never from the client's filename.
-                $"registry/onboarding/{ownerId:N}/{uploadId:N}",
+                isRetained
+                    ? $"registry/driver-photo/{ownerId:N}/{uploadId:N}"
+                    : $"registry/onboarding/{ownerId:N}/{uploadId:N}",
                 content,
                 contentType,
                 _options.OnboardingDocumentMaxBytes,
-                _options.OnboardingDocumentRetention),
+                retention),
             cancellationToken);
 
         await using var connection = await connections.OpenAsync(cancellationToken);
@@ -149,7 +178,8 @@ internal sealed class OnboardingDocumentStore(
         await connection.ExecuteAsync(new CommandDefinition(
             """
             INSERT INTO docs.uploads (id, owner_id, storage_url, sha256, kind, captured_via, auto_delete_at)
-            VALUES (@Id, @OwnerId, @StorageUrl, @Sha256, @Kind, @CapturedVia, now() + @Retention);
+            VALUES (@Id, @OwnerId, @StorageUrl, @Sha256, @Kind, @CapturedVia,
+                    CASE WHEN @Retention::interval IS NULL THEN NULL ELSE now() + @Retention END);
             """,
             new
             {
@@ -159,7 +189,7 @@ internal sealed class OnboardingDocumentStore(
                 Sha256 = stored.Sha256,
                 Kind = kind,
                 CapturedVia = capturedVia,
-                Retention = _options.OnboardingDocumentRetention,
+                Retention = retention,
             },
             cancellationToken: cancellationToken));
 
