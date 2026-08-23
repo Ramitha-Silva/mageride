@@ -84,11 +84,10 @@ public interface RegistryApi {
      * `GET /v1/drivers/{driverId}/profile-photo` — the bytes behind the avatar (Δ MCS-25).
      *
      * **`DriverProfileSummary.photoUrl` is a signed link onto this, and following that URL is what
-     * a client should normally do.** Both driver apps hand it to an image loader — Coil on Android,
-     * `AsyncImage` on iOS — which is the whole reason it is shaped this way. This function exists
-     * because the operation is part of the app-facing surface and every one of those has a typed
-     * client; reach for it when you need the bytes rather than a view, and parse the three query
-     * parameters out of `photoUrl` to call it.
+     * a client should normally do.** This is what both driver apps call to fill §3.16's cache
+     * (Δ MCS-27), which is why neither of them has a network image loader any more: the bytes are
+     * fetched once, kept on disk, and re-fetched only when the link's `v` says the photograph
+     * actually changed. Parse the three query parameters out of `photoUrl` to call it.
      *
      * **Unauthenticated, because the signature is the credential** — the same arrangement, for the
      * same reason, as [lk.mageride.shared.data.api.support.SupportApi.getSupportScreenshot]. An
@@ -96,6 +95,14 @@ public interface RegistryApi {
      * every proxy log on the way. A bad signature, an expired one, an unknown driver and a driver
      * with no photo all answer `403`, so a forged link tells its author nothing.
      */
+    @Throws(MageRideError::class, CancellationException::class)
+    public suspend fun getDriverProfilePhoto(
+        driverId: Ulid,
+        version: String,
+        expires: Long,
+        signature: String,
+    ): ByteArray
+
     /**
      * `GET /v1/drivers/documents` — every document this driver may look at (Δ MCS-28).
      *
@@ -117,14 +124,6 @@ public interface RegistryApi {
     @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getDriverDocumentImage(
         documentId: Ulid,
-        driverId: Ulid,
-        version: String,
-        expires: Long,
-        signature: String,
-    ): ByteArray
-
-    @Throws(MageRideError::class, CancellationException::class)
-    public suspend fun getDriverProfilePhoto(
         driverId: Ulid,
         version: String,
         expires: Long,
