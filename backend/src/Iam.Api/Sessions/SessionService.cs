@@ -94,6 +94,7 @@ public sealed class SessionService(
         }
 
         await ForgetAsync(superseded, cancellationToken);
+        await DisplaceAsync(superseded, cancellationToken);
         await RememberAsync(session, cancellationToken);
 
         return Build(session, deviceKey, principal);

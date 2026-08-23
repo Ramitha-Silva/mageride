@@ -77,6 +77,16 @@ public enum class ErrorCode(public val wire: String) {
     BAD_REQUEST("bad-request"),
     UNAUTHORIZED("unauthorized"),
     FORBIDDEN("forbidden"),
+
+    /**
+     * This session was displaced by a sign-in on another device (AL-08, Δ MCS-30).
+     *
+     * Distinct from [FORBIDDEN] because the apps act on it rather than render it:
+     * `AuthSessionManager` wipes the local database and routes to Login, which is what a handset
+     * that no longer belongs to the account should do with an offline copy of a driving licence.
+     * A plain 403 is copy to show somebody.
+     */
+    DEVICE_REVOKED("device-revoked"),
     NOT_FOUND("not-found"),
     METHOD_NOT_ALLOWED("method-not-allowed"),
     CONFLICT("conflict"),
