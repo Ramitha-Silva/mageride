@@ -232,6 +232,9 @@ private fun IdentityCard(state: DriverProfileState, onEdit: () -> Unit, modifier
             // No app-facing read carries a driver's own star average — see DriverHeaderState.
             rating = null,
             photo = state.photo,
+            // Δ MCS-32 — the header draws no name until something has answered. `profile` arriving
+            // is one answer; the cache having been consulted is the other.
+            isResolved = state.profile != null || state.isCacheResolved,
         ),
         modifier = modifier.padding(vertical = MageRideTheme.spacing.xs),
         trailing = { IconButton(onClick = onEdit) { EditGlyph() } },

@@ -311,6 +311,14 @@ src/androidHostTest/  JVM-only tests of the Android actuals (NOT `androidUnitTes
   `util/BusinessCalendar`, never the handset's zone). `INTEGER AS Boolean` needs no adapter;
   `INTEGER AS Int` needs SQLDelight's `IntColumnAdapter`. Enum-ish columns stay `TEXT` on purpose —
   an adapter that threw on an unknown server state would crash the app on a deploy.
+- **A grouped statement can be silently HALF-GENERATED, and nothing tells you.** `DriverProfile.sq`
+  expressed an upsert the way the pinned 3.18 dialect requires — an `UPDATE` and an
+  `INSERT OR IGNORE` under one label — and SQLDelight emitted only the UPDATE. The generated
+  `DriverProfileQueries.kt` contained the word `INSERT` nowhere at all, the build was clean, and the
+  table could never gain a row: every read answered empty and four components tried to fix the
+  resulting blank header from the screen end. **Write the two halves as two labelled queries** and
+  call them in order inside one `transaction { }`. After adding or editing any multi-statement
+  query, `grep` the file under `build/generated/sqldelight/` and check every statement is there.
 - **`INSERT OR IGNORE` suppresses every constraint, not just the primary key.** `command_outbox` and
   `proof_upload_queue` therefore use a plain `INSERT` (a swallowed command is a lost user action);
   `gps_buffer` keeps `OR IGNORE` because a repeated `(vehicle_id, seq)` is the designed path and the

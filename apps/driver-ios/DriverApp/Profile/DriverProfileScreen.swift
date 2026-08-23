@@ -176,7 +176,11 @@ struct DriverProfileScreen: View {
                 registration: model.state.registration,
                 // No app-facing read carries a driver's own star average — see ``DriverHeaderState``.
                 rating: nil,
-                photo: model.state.photo
+                photo: model.state.photo,
+                // Δ MCS-32 — either a read or a non-empty cache has answered. Until one has, the
+                // header draws nothing rather than `profile_unnamed`, which is the copy for a
+                // driver who has genuinely not set a name.
+                isResolved: model.state.profile != nil || model.state.isCacheResolved
             )
         ) {
             Button {
