@@ -219,3 +219,15 @@ RAMITHA-FINAL.docx
 e[0-9].jpeg
 e[0-9].jpg
 design[0-9].jpeg
+
+# The same class of file, by FORMAT rather than by name (Δ MCS-33). The list above grew one entry
+# per document as each was written, which only ever ignores the leak that already happened — the
+# two Sri Lanka proposal PDFs arrived after it and were untracked and unignored.
+#
+# Root-anchored on purpose: a commercial document lands in the repo root during development, and
+# `/*.pdf` still lets a legitimate PDF be committed under `specs/` or `docs/` rather than being
+# dropped silently — which is the failure mode a bare `*.pdf` would create.
+/*.pdf
+/*.docx
+/*.xlsx
+/*.pptx
