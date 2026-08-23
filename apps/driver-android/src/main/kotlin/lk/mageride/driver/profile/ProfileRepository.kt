@@ -1,13 +1,9 @@
 package lk.mageride.driver.profile
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import lk.mageride.driver.di.DriverDatabase
 import lk.mageride.driver.jobs.JobStanding
 import lk.mageride.driver.jobs.JobsRepository
 import lk.mageride.driver.onboarding.OnboardingPreferences
 import lk.mageride.shared.data.api.iam.IamApi
-import lk.mageride.shared.data.api.registry.RegistryApi
 import lk.mageride.shared.data.models.Language
 import lk.mageride.shared.data.models.PhoneE164
 import lk.mageride.shared.data.models.Ulid
@@ -16,10 +12,7 @@ import lk.mageride.shared.data.models.iam.EmergencyContactInput
 import lk.mageride.shared.data.models.iam.LanguagePreference
 import lk.mageride.shared.data.models.iam.UpdateProfileRequest
 import lk.mageride.shared.data.models.iam.UserProfile
-import lk.mageride.shared.db.driver.CachedDriverProfile
-import lk.mageride.shared.db.driver.DriverProfileCache
 import lk.mageride.shared.domain.auth.AuthSessionManager
-import kotlin.time.Clock
 
 /**
  * SCR-DA-029's data — the profile, its preferences, its emergency contact and the way out.
@@ -39,83 +32,10 @@ internal class ProfileRepository(
     private val jobs: JobsRepository,
     private val sessions: AuthSessionManager,
     private val preferences: OnboardingPreferences,
-    private val registry: RegistryApi,
-    private val gatewayOrigin: String,
-    private val database: DriverDatabase,
 ) {
 
     /** `GET /v1/users/me` — name, photo, language and the notification switch map. */
     suspend fun profile(): UserProfile = iam.getMyProfile()
-
-    /**
-     * `GET /v1/drivers/profile` — the driver's own photograph (Δ MCS-25).
-     *
-     * **Not [profile]'s `photoUrl`, and that is the whole point of this method existing.** The
-     * header used to read the one on `GET /v1/users/me`, which is `iam.users.photo_url` — and D3'
-     * §`getDriverProfile` records that Profile Setup *"writes `registry.driver_profiles` and never
-     * touches `iam.users`"*. So for a driver who onboarded in this app that field is **always
-     * null**, and the avatar it fed was never going to render whatever loader was put behind it.
-     * The photograph AL-27 required them to upload is the one registry-svc stored.
-     *
-     * Absolute, because a loader needs one. registry-svc answers a **relative** signed path for the
-     * reason `TicketDetail.screenshotUrl` is relative — a service does not know the origin it is
-     * reached on, and a response that could name one could name a different one. [DriverEnvironment]
-     * is where this app's single gateway origin lives, and resolving here keeps every caller from
-     * having to remember to.
-     */
-    suspend fun driverPhotoUrl(): String? = absoluteUrl(gatewayOrigin, registry.getDriverProfile()?.photoUrl)
-
-    // ---------------------------------------------------------------------------------------
-    // The first-frame cache (Δ MCS-27, mobile_db_schema.md §3.16)
-    // ---------------------------------------------------------------------------------------
-
-    /**
-     * What the headers should draw right now, before a single call has answered.
-     *
-     * Blocking work on [Dispatchers.IO]: SQLDelight's Android driver is synchronous, and this is
-     * called from a view model's `init`.
-     */
-    suspend fun cachedProfile(driverId: Ulid): CachedDriverProfile =
-        onCache { it.read(driverId.toString()) }
-
-    /** Records what a completed read answered, so the next open has it. */
-    suspend fun cacheIdentity(driverId: Ulid, name: String?, level: Int?, registration: String?) {
-        onCache { it.writeIdentity(driverId.toString(), name, level, registration, Clock.System.now()) }
-    }
-
-    /**
-     * The driver's photograph as BYTES, from the cache when they are current and from the network
-     * when they are not.
-     *
-     * **Bytes rather than a URL, which is the whole point of §3.16.** The signed link carries an
-     * `expires` that changes on every profile read, so a URL-keyed image cache misses every time
-     * and re-downloads a photograph the handset already holds. The link's `v` says *which* photo it
-     * is; when that has not changed, nothing is fetched at all and the avatar paints from disk.
-     */
-    suspend fun driverPhoto(driverId: Ulid): ByteArray? {
-        val id = driverId.toString()
-        val link = registry.getDriverProfile()?.photoUrl ?: return onCache { it.read(id) }.photoBytes
-        val query = signedLinkParameters(link)
-        val version = query["v"]
-
-        if (!onCache { it.needsPhoto(id, version) }) return onCache { it.read(id) }.photoBytes
-
-        val expires = query["expires"]?.toLongOrNull() ?: return null
-        val signature = query["signature"] ?: return null
-        val bytes = registry.getDriverProfilePhoto(driverId, version.orEmpty(), expires, signature)
-
-        onCache { it.writePhoto(id, version, bytes, Clock.System.now()) }
-
-        return bytes
-    }
-
-    /** D-26: the next driver to sign in on this handset must not see the last one's face. */
-    suspend fun forgetCachedProfile() {
-        onCache { it.clear() }
-    }
-
-    private suspend fun <T> onCache(block: (DriverProfileCache) -> T): T =
-        withContext(Dispatchers.IO) { block(DriverProfileCache(database.get())) }
 
     /** `GET /v1/me/emergency-contacts` — who D-33's SOS SMS goes to (AL-13). */
     suspend fun emergencyContacts(): List<EmergencyContact> = iam.listEmergencyContacts().items
@@ -186,37 +106,3 @@ internal class ProfileRepository(
         sessions.logout()
     }
 }
-
-/**
- * Joins the gateway origin to a path a service handed back (Δ MCS-25).
- *
- * `internal` rather than private so [ProfileRepositoryUrlTest] can hold the joining rules — the
- * slashes are the kind of thing that works against one deployment and breaks against the next.
- *
- * An **absolute** URL is returned untouched. registry-svc answers a relative path today, but D-36
- * lets the same operation redirect to a presigned bucket URL, and a caller that blindly prefixed
- * the origin would turn that into a 404 against the gateway.
- */
-internal fun absoluteUrl(gatewayOrigin: String, path: String?): String? {
-    val trimmed = path?.trim().orEmpty()
-
-    return when {
-        trimmed.isEmpty() -> null
-        trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
-        else -> gatewayOrigin.trimEnd('/') + "/" + trimmed.removePrefix("/")
-    }
-}
-
-/**
- * The query of a signed link, as a map (Δ MCS-27).
- *
- * `getDriverProfilePhoto` takes `v`, `expires` and `signature` as typed arguments, and the only
- * place they exist is inside the URL the profile read handed back — so something has to take them
- * apart again. Deliberately tolerant: a link missing a parameter yields a map missing a key, and the
- * caller answers that by not fetching rather than by throwing at a driver.
- */
-internal fun signedLinkParameters(url: String): Map<String, String> =
-    url.substringAfter('?', "")
-        .split('&')
-        .filter { it.contains('=') }
-        .associate { it.substringBefore('=') to it.substringAfter('=') }

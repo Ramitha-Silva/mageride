@@ -3,6 +3,8 @@ package lk.mageride.driver.profile
 import kotlinx.coroutines.runBlocking
 import lk.mageride.driver.home.signedInSessions
 import lk.mageride.driver.jobs.JobsRepository
+import lk.mageride.shared.data.models.Ulid
+import lk.mageride.shared.db.driver.CachedDriverProfile
 import lk.mageride.driver.jobs.identity
 import lk.mageride.driver.onboarding.FakeOnboardingPreferences
 import lk.mageride.driver.onboarding.MainDispatcher
@@ -231,10 +233,28 @@ class DriverProfileViewModelTest {
                     jobs = JobsRepository(dispatch = api.dispatch),
                     sessions = sessions,
                     preferences = preferences,
-                    registry = api.registry,
-                    gatewayOrigin = "https://api.test",
                 ),
+                store = EmptyProfileStore,
             ),
         )
     }
+}
+
+/**
+ * A §3.16 cache with nothing in it (Δ MCS-27).
+ *
+ * Every assertion in this file is about what the three network reads produce, and a cache that
+ * answered would be a second source for the same fields — a test that passed because the handset
+ * remembered rather than because the read worked. An empty one is the state of a fresh install,
+ * which is exactly the case these tests are describing.
+ */
+private object EmptyProfileStore : DriverProfileStore {
+
+    override suspend fun cached(driverId: Ulid): CachedDriverProfile = CachedDriverProfile()
+
+    override suspend fun cacheIdentity(driverId: Ulid, name: String?, level: Int?, registration: String?): Unit = Unit
+
+    override suspend fun photo(driverId: Ulid): ByteArray? = null
+
+    override suspend fun forget(): Unit = Unit
 }

@@ -374,31 +374,20 @@ private fun Module.trackerAndProfileBindings() {
 
     single { TrackerRepository(registry = get(), bindings = get()) }
     single { SharingRepository(registry = get(), subscription = get()) }
-    single {
-        ProfileRepository(
-            iam = get(),
-            jobs = get(),
-            sessions = get(),
-            preferences = get(),
-            // Δ MCS-25 — the avatar comes from registry-svc, because Profile Setup writes
-            // `registry.driver_profiles` and never `iam.users`, so the photo on `GET /v1/users/me`
-            // is null for every driver who onboarded in this app.
-            registry = get(),
-            gatewayOrigin = get<DriverEnvironment>().apiBaseUrl,
-            // Δ MCS-27 — §3.16, so both headers paint before a call is made.
-            database = get(),
-        )
-    }
+    single { ProfileRepository(iam = get(), jobs = get(), sessions = get(), preferences = get()) }
+
+    // Δ MCS-27 — §3.16, so both headers paint before a call is made.
+    single<DriverProfileStore> { DbDriverProfileStore(registry = get(), database = get()) }
     single { RideHistoryRepository(query = get(), ride = get(), tripState = get()) }
 
     viewModel { TrackerPairingViewModel(identity = get(), trackers = get(), publisher = get()) }
     viewModel { SharingViewModel(identity = get(), sharing = get()) }
-    viewModel { DriverProfileViewModel(identity = get(), profiles = get()) }
+    viewModel { DriverProfileViewModel(identity = get(), profiles = get(), store = get()) }
 
     // Δ MCS-24 — SCR-DA-036's header. It takes the same two dependencies SCR-DA-029's does,
     // because it shows the same block: the drawer used to draw the app's name, which needed
     // nothing, and now draws the driver's, which needs both reads.
-    viewModel { MenuViewModel(identity = get(), profiles = get()) }
+    viewModel { MenuViewModel(identity = get(), profiles = get(), store = get()) }
     viewModel { RideHistoryViewModel(identity = get(), history = get()) }
 
     commsSafetySupportBindings()

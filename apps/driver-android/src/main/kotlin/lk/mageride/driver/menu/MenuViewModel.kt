@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import lk.mageride.driver.home.DriverIdentity
+import lk.mageride.driver.profile.DriverProfileStore
 import lk.mageride.driver.profile.ProfileRepository
 import lk.mageride.driver.ui.component.DriverHeaderState
 
@@ -23,8 +24,11 @@ import lk.mageride.driver.ui.component.DriverHeaderState
  * are static, so the header fills in behind them and a failure leaves it on its defaults rather
  * than putting an error over a list of links that all still work.
  */
-internal class MenuViewModel(private val identity: DriverIdentity, private val profiles: ProfileRepository) :
-    ViewModel() {
+internal class MenuViewModel(
+    private val identity: DriverIdentity,
+    private val profiles: ProfileRepository,
+    private val store: DriverProfileStore,
+) : ViewModel() {
 
     private val mutableState = MutableStateFlow(DriverHeaderState())
 
@@ -47,7 +51,7 @@ internal class MenuViewModel(private val identity: DriverIdentity, private val p
     private fun paintFromCache() {
         viewModelScope.launch {
             val driverId = identity.driverId ?: return@launch
-            val cached = runCatching { profiles.cachedProfile(driverId) }.getOrNull() ?: return@launch
+            val cached = runCatching { store.cached(driverId) }.getOrNull() ?: return@launch
 
             if (cached.isEmpty) return@launch
 
@@ -74,7 +78,7 @@ internal class MenuViewModel(private val identity: DriverIdentity, private val p
     private fun refreshPhoto() {
         viewModelScope.launch {
             val driverId = identity.driverId ?: return@launch
-            val photo = runCatching { profiles.driverPhoto(driverId) }.getOrNull() ?: return@launch
+            val photo = runCatching { store.photo(driverId) }.getOrNull() ?: return@launch
 
             mutableState.update { it.copy(photo = photo) }
         }
@@ -89,7 +93,7 @@ internal class MenuViewModel(private val identity: DriverIdentity, private val p
                 val standing = driverId?.let { id -> profiles.standing(id) }
                 val live = identity.liveVehicle().live
 
-                profiles.cacheIdentity(
+                store.cacheIdentity(
                     driverId = driverId,
                     name = profile.firstName,
                     level = standing?.standing?.level,

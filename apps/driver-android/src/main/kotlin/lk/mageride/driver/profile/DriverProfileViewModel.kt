@@ -114,8 +114,11 @@ internal data class DriverProfileState(
 // editors into a second view model would put one driver's profile in two states that have to be
 // kept in step. The class is long because the screen is, not because anything is tangled.
 @Suppress("TooManyFunctions")
-internal class DriverProfileViewModel(private val identity: DriverIdentity, private val profiles: ProfileRepository) :
-    ViewModel() {
+internal class DriverProfileViewModel(
+    private val identity: DriverIdentity,
+    private val profiles: ProfileRepository,
+    private val store: DriverProfileStore,
+) : ViewModel() {
 
     private val mutableState = MutableStateFlow(DriverProfileState())
 
@@ -137,7 +140,7 @@ internal class DriverProfileViewModel(private val identity: DriverIdentity, priv
     private fun paintFromCache() {
         launchGuarded(onFailure = { }) {
             val driverId = identity.driverId ?: return@launchGuarded
-            val cached = profiles.cachedProfile(driverId)
+            val cached = store.cached(driverId)
 
             if (cached.isEmpty) return@launchGuarded
 
@@ -164,7 +167,7 @@ internal class DriverProfileViewModel(private val identity: DriverIdentity, priv
     private fun refreshPhoto() {
         launchGuarded(onFailure = { }) {
             val driverId = identity.driverId ?: return@launchGuarded
-            val photo = profiles.driverPhoto(driverId)
+            val photo = store.photo(driverId)
 
             mutableState.update { it.copy(photo = photo ?: it.photo) }
         }
@@ -202,7 +205,7 @@ internal class DriverProfileViewModel(private val identity: DriverIdentity, priv
 
             // Δ MCS-27 — so the next open has it.
             driverId?.let { id ->
-                profiles.cacheIdentity(
+                store.cacheIdentity(
                     driverId = id,
                     name = profile.firstName,
                     level = standing?.standing?.level,
