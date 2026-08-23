@@ -55,6 +55,47 @@ public data class CachedDocumentImage(
 }
 
 /**
+ * One document's bytes on their way INTO the cache (Δ MCS-28).
+ *
+ * Separate from [CachedDocumentImage] rather than reused, because the two genuinely differ: what
+ * comes back carries `isStale`, which is a comparison against the clock at read time and not a
+ * property of the thing written. Folding them into one type would mean passing a staleness flag to
+ * a write that has no business being told one.
+ */
+public data class DocumentImageWrite(
+    val documentId: String,
+    val vehicleId: String?,
+    val kind: String,
+    val side: String?,
+    val contentType: String,
+    val bytes: ByteArray,
+    val version: String?,
+) {
+
+    // Same reason as `CachedDocumentImage` — a generated equals compares `ByteArray` by identity.
+    override fun equals(other: Any?): Boolean =
+        other is DocumentImageWrite &&
+            documentId == other.documentId &&
+            vehicleId == other.vehicleId &&
+            kind == other.kind &&
+            side == other.side &&
+            contentType == other.contentType &&
+            version == other.version &&
+            bytes.contentEquals(other.bytes)
+
+    override fun hashCode(): Int {
+        var result = documentId.hashCode()
+        result = 31 * result + (vehicleId?.hashCode() ?: 0)
+        result = 31 * result + kind.hashCode()
+        result = 31 * result + (side?.hashCode() ?: 0)
+        result = 31 * result + contentType.hashCode()
+        result = 31 * result + (version?.hashCode() ?: 0)
+        result = 31 * result + bytes.contentHashCode()
+        return result
+    }
+}
+
+/**
  * The driver's own documents on disk (§3.17, Δ MCS-28).
  *
  * **This is the §0.4 identity-document exception and it inherits all five of its conditions.** The
@@ -89,25 +130,16 @@ public class DocumentImageCache(private val db: DriverDb, private val retention:
     }
 
     /** Records one document's bytes, with the local deadline §0.4 condition 3 requires. */
-    public fun write(
-        documentId: String,
-        vehicleId: String?,
-        kind: String,
-        side: String?,
-        contentType: String,
-        bytes: ByteArray,
-        version: String?,
-        now: Instant,
-    ) {
+    public fun write(image: DocumentImageWrite, now: Instant) {
         db.transaction {
             db.sql.documentImagesQueries.upsert(
-                document_id = documentId,
-                vehicle_id = vehicleId,
-                kind = kind,
-                side = side,
-                content_type = contentType,
-                bytes = bytes,
-                version = version,
+                document_id = image.documentId,
+                vehicle_id = image.vehicleId,
+                kind = image.kind,
+                side = image.side,
+                content_type = image.contentType,
+                bytes = image.bytes,
+                version = image.version,
                 cached_at = now,
                 expires_at = now + retention,
             )
