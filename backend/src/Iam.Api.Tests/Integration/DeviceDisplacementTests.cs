@@ -52,12 +52,12 @@ public sealed class DeviceDisplacementTests(PostgresFixture postgres, RedisFixtu
 
         var displaced = await harness.GetAsync("/v1/users/me", first.AccessToken);
 
-        Assert.Equal(HttpStatusCode.Forbidden, displaced.StatusCode);
-
         // The code is the whole point: the apps wipe the local database on `device-revoked` and
-        // route to Login, and treat a plain 403 as an ordinary refusal to be shown as copy.
-        var problem = await IamHarness.ReadJsonAsync(displaced);
-        Assert.Equal("device-revoked", problem.GetProperty("code").GetString());
+        // route to Login, and treat a plain 403 as an ordinary refusal to be shown as copy. It
+        // travels in the `type` URI rather than a member of its own (D3' §0), which is what
+        // `ProblemDocument` exists to read — and it checks the media type and title while it is
+        // there, so this asserts a well-formed problem document and not just a status.
+        await ProblemDocument.AssertAsync(displaced, HttpStatusCode.Forbidden, "device-revoked");
     }
 
     /// <summary>The new handset is unaffected — displacement is one-directional.</summary>
