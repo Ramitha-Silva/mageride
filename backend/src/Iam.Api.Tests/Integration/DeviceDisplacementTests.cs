@@ -23,6 +23,12 @@ namespace MageRide.Iam.Tests.Integration;
 /// refusal: it is the one somebody will later "fix" into a fail-closed check and take the whole
 /// platform out with a Redis restart.
 /// </para>
+/// <para>
+/// Every test here signs in TWICE on one phone, which is what the OTP resend cooldown exists to
+/// refuse — so they take the harness that opts out of it, exactly as its own remarks invite. The
+/// hourly cap stays on; it is the per-minute cooldown that would otherwise make every one of these
+/// a test of the rate limiter.
+/// </para>
 /// </remarks>
 [Collection(IamCollection.Name)]
 public sealed class DeviceDisplacementTests(PostgresFixture postgres, RedisFixture redis)
@@ -33,7 +39,7 @@ public sealed class DeviceDisplacementTests(PostgresFixture postgres, RedisFixtu
     [Fact]
     public async Task A_sign_in_on_another_device_refuses_the_first_devices_next_request()
     {
-        await using var harness = await IamHarness.StartAsync(postgres, redis);
+        await using var harness = await IamHarness.StartWithoutResendCooldownAsync(postgres, redis);
 
         var phone = IamHarness.NextPhone();
 
@@ -58,7 +64,7 @@ public sealed class DeviceDisplacementTests(PostgresFixture postgres, RedisFixtu
     [Fact]
     public async Task The_device_that_displaced_the_other_keeps_working()
     {
-        await using var harness = await IamHarness.StartAsync(postgres, redis);
+        await using var harness = await IamHarness.StartWithoutResendCooldownAsync(postgres, redis);
 
         var phone = IamHarness.NextPhone();
 
@@ -79,7 +85,7 @@ public sealed class DeviceDisplacementTests(PostgresFixture postgres, RedisFixtu
     [Fact]
     public async Task Signing_into_the_driver_app_does_not_displace_the_same_persons_passenger_session()
     {
-        await using var harness = await IamHarness.StartAsync(postgres, redis);
+        await using var harness = await IamHarness.StartWithoutResendCooldownAsync(postgres, redis);
 
         var phone = IamHarness.NextPhone();
 
@@ -101,7 +107,7 @@ public sealed class DeviceDisplacementTests(PostgresFixture postgres, RedisFixtu
     [Fact]
     public async Task A_missing_tombstone_is_not_evidence_and_leaves_the_session_alone()
     {
-        await using var harness = await IamHarness.StartAsync(postgres, redis);
+        await using var harness = await IamHarness.StartWithoutResendCooldownAsync(postgres, redis);
 
         var phone = IamHarness.NextPhone();
 
@@ -125,7 +131,7 @@ public sealed class DeviceDisplacementTests(PostgresFixture postgres, RedisFixtu
     [Fact]
     public async Task The_displaced_device_cannot_refresh()
     {
-        await using var harness = await IamHarness.StartAsync(postgres, redis);
+        await using var harness = await IamHarness.StartWithoutResendCooldownAsync(postgres, redis);
 
         var phone = IamHarness.NextPhone();
 
