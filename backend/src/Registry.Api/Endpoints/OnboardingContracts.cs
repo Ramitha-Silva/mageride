@@ -71,7 +71,7 @@ internal static class DriverProfilePhotoLink
     public static string? For(DriverProfileResult result, IDriverPhotoLinks links) =>
         string.IsNullOrWhiteSpace(result.Profile.PhotoUrl)
             ? null
-            : links.Create(result.Profile.DriverId);
+            : links.Create(result.Profile.DriverId, result.Profile.PhotoUrl);
 }
 
 public sealed record DriverProfileSummaryResponse(

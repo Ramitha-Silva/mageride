@@ -41,14 +41,26 @@ public interface IDriverPhotoLinks
 {
     /// <summary>The relative, signed URL for one driver's profile photo.</summary>
     /// <remarks>
+    /// <para>
     /// Relative, like <c>TicketDetail.screenshotUrl</c>: this service does not know the origin it
     /// is reached on, and an app that resolves against its own configured gateway cannot be sent
     /// somewhere else by a response.
+    /// </para>
+    /// <para>
+    /// <b>The URL names the PHOTO, not just the driver.</b> <paramref name="storageUrl"/> is folded
+    /// into a short opaque <c>v</c>, so replacing a photo changes the link. Without that the URL is
+    /// stable for the life of the account and every cache in the path — the loader's, the OS's, a
+    /// CDN's — goes on serving the picture the driver just replaced. It is also what lets a
+    /// superseded link stop working, which a stable one could not.
+    /// </para>
     /// </remarks>
-    string Create(Guid driverId);
+    string Create(Guid driverId, string storageUrl);
 
-    /// <summary>Whether a presented signature is one this service issued and has not expired.</summary>
-    bool Verify(Guid driverId, string? expires, string? signature);
+    /// <summary>
+    /// Whether a presented signature is one this service issued, has not expired, and names the
+    /// photo the driver currently has.
+    /// </summary>
+    bool Verify(Guid driverId, string currentStorageUrl, string? version, string? expires, string? signature);
 }
 
 /// <inheritdoc cref="IDriverPhotoLinks"/>
@@ -94,17 +106,30 @@ public sealed class DriverPhotoLinks : IDriverPhotoLinks
         }
     }
 
-    public string Create(Guid driverId)
+    public string Create(Guid driverId, string storageUrl)
     {
         var expires = (_clock.GetUtcNow() + _options.ProfilePhotoLinkTtl).ToUnixTimeSeconds()
             .ToString(CultureInfo.InvariantCulture);
 
-        return $"/v1/drivers/{driverId}/profile-photo?expires={expires}&signature={Sign(driverId, expires)}";
+        var version = Version(storageUrl);
+
+        return $"/v1/drivers/{driverId}/profile-photo"
+            + $"?v={version}&expires={expires}&signature={Sign(driverId, version, expires)}";
     }
 
-    public bool Verify(Guid driverId, string? expires, string? signature)
+    public bool Verify(Guid driverId, string currentStorageUrl, string? version, string? expires, string? signature)
     {
-        if (string.IsNullOrWhiteSpace(expires) || string.IsNullOrWhiteSpace(signature))
+        if (string.IsNullOrWhiteSpace(version) || string.IsNullOrWhiteSpace(expires)
+            || string.IsNullOrWhiteSpace(signature))
+        {
+            return false;
+        }
+
+        // The link must name the photo the driver has NOW. A link minted for a photo since replaced
+        // is refused rather than quietly serving the new one — otherwise "here is my avatar" would
+        // be a URL that outlives every picture it was ever issued for.
+        if (!CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(version), Encoding.UTF8.GetBytes(Version(currentStorageUrl))))
         {
             return false;
         }
@@ -128,10 +153,22 @@ public sealed class DriverPhotoLinks : IDriverPhotoLinks
         // Fixed-time, so a caller cannot learn a valid signature one byte at a time from how long
         // the comparison took.
         return CryptographicOperations.FixedTimeEquals(
-            presented, Convert.FromHexString(Sign(driverId, expires)));
+            presented, Convert.FromHexString(Sign(driverId, version, expires)));
     }
 
-    private string Sign(Guid driverId, string expires) =>
+    private string Sign(Guid driverId, string version, string expires) =>
         Convert.ToHexStringLower(
-            HMACSHA256.HashData(_key, Encoding.UTF8.GetBytes($"{Purpose}|{driverId}|{expires}")));
+            HMACSHA256.HashData(_key, Encoding.UTF8.GetBytes($"{Purpose}|{driverId}|{version}|{expires}")));
+
+    /// <summary>
+    /// A short opaque stand-in for which photo this is.
+    /// </summary>
+    /// <remarks>
+    /// Keyed rather than a bare digest, so it reveals nothing about the object key it is derived
+    /// from; eight hex characters, because it only has to distinguish one driver's successive
+    /// photographs from each other and it is going in a URL a person may read out.
+    /// </remarks>
+    private string Version(string storageUrl) =>
+        Convert.ToHexStringLower(
+            HMACSHA256.HashData(_key, Encoding.UTF8.GetBytes($"{Purpose}|v|{storageUrl}")))[..8];
 }

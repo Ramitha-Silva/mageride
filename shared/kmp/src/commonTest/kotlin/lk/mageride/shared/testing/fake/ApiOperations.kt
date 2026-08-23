@@ -347,6 +347,9 @@ internal object ApiOperations {
 
         // registry-svc — driver identity, vehicles, onboarding, sharing (18)
         op<DriverProfileSummary>("getDriverProfile", ApiService.REGISTRY, "GET", "/v1/drivers/profile", 200),
+        // The image behind `DriverProfileSummary.photoUrl` (Δ MCS-25). Bytes, for the same reason
+        // `getSupportScreenshot` is: it is fetched by an image loader, not decoded into a model.
+        binary("getDriverProfilePhoto", ApiService.REGISTRY, "GET", "/v1/drivers/{driverId}/profile-photo", 200),
         op<UpsertDriverProfileResponse>(
             "upsertDriverProfile",
             ApiService.REGISTRY,

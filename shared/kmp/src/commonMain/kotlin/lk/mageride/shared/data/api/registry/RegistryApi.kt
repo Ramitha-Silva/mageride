@@ -1,5 +1,7 @@
 package lk.mageride.shared.data.api.registry
 
+import io.ktor.client.call.body
+import io.ktor.client.request.parameter
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.CapturedDocument
@@ -76,6 +78,30 @@ public interface RegistryApi {
      */
     @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getDriverProfile(): DriverProfileSummary?
+
+    /**
+     * `GET /v1/drivers/{driverId}/profile-photo` — the bytes behind the avatar (Δ MCS-25).
+     *
+     * **`DriverProfileSummary.photoUrl` is a signed link onto this, and following that URL is what
+     * a client should normally do.** Both driver apps hand it to an image loader — Coil on Android,
+     * `AsyncImage` on iOS — which is the whole reason it is shaped this way. This function exists
+     * because the operation is part of the app-facing surface and every one of those has a typed
+     * client; reach for it when you need the bytes rather than a view, and parse the three query
+     * parameters out of `photoUrl` to call it.
+     *
+     * **Unauthenticated, because the signature is the credential** — the same arrangement, for the
+     * same reason, as [lk.mageride.shared.data.api.support.SupportApi.getSupportScreenshot]. An
+     * image loader carries no bearer, and an access token in a query string is an access token in
+     * every proxy log on the way. A bad signature, an expired one, an unknown driver and a driver
+     * with no photo all answer `403`, so a forged link tells its author nothing.
+     */
+    @Throws(MageRideError::class, CancellationException::class)
+    public suspend fun getDriverProfilePhoto(
+        driverId: Ulid,
+        version: String,
+        expires: Long,
+        signature: String,
+    ): ByteArray
 
     /**
      * `PUT /v1/drivers/profile` with a JSON body — the driver identity, by upload id.
@@ -282,6 +308,19 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
     @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getDriverProfile(): DriverProfileSummary? =
         transport.apiGet(SERVICE, "getDriverProfile", "/v1/drivers/profile").decodeOrNull(transport.json)
+
+    @Throws(MageRideError::class, CancellationException::class)
+    override suspend fun getDriverProfilePhoto(
+        driverId: Ulid,
+        version: String,
+        expires: Long,
+        signature: String,
+    ): ByteArray =
+        transport.apiGet(SERVICE, "getDriverProfilePhoto", "/v1/drivers/$driverId/profile-photo") {
+            parameter("v", version)
+            parameter("expires", expires)
+            parameter("signature", signature)
+        }.body()
 
     @Throws(MageRideError::class, CancellationException::class)
     override suspend fun upsertDriverProfile(request: UpsertDriverProfileRequest): UpsertDriverProfileResponse =

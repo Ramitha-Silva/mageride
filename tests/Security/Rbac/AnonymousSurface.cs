@@ -187,6 +187,13 @@ internal static class AnonymousSurface
             "Bulk tracker-binding error report, same arrangement."),
         new("subscription GET /v1/mode-b/files/{}/{}", AnonymousCredential.SignedLink, true,
             "Mode B payment slip; HMAC under Subscription:FileLinkSigningKey."),
+        new("registry GET /v1/drivers/{}/profile-photo", AnonymousCredential.SignedLink, true,
+            "Δ MCS-25. The driver's own avatar, for an image loader that carries no bearer token; "
+            + "HMAC under Registry:ProfilePhotoLinkSigningKey. The signature names the driver, so a "
+            + "link cannot be edited into somebody else's, and the handler reads one column "
+            + "(`driver_profiles.photo_url`) that can hold nothing but a profile photo. Malformed "
+            + "id, forged or expired signature, unknown driver and no-photo all answer the same "
+            + "403, so a link nobody can use reveals no driver ids either."),
         new("support GET /v1/support/screenshots/{}", AnonymousCredential.SignedLink, true,
             "Ticket screenshot; HMAC under Support:FileLinkSigningKey."),
         new("transit GET /v1/admin/transit/gtfs/objects/{}", AnonymousCredential.SignedLink, true,

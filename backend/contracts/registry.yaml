@@ -275,6 +275,15 @@ paths:
           in: path
           required: true
           schema: { $ref: './_shared.yaml#/components/schemas/Ulid' }
+        - name: v
+          in: query
+          required: true
+          description: >-
+            Opaque stand-in for WHICH photo the link was minted for. Replacing a photo changes it,
+            which is what lets caches let go of the old one; a link naming a superseded photo is
+            refused rather than quietly serving the new one.
+          schema:
+            type: string
         - name: expires
           in: query
           required: true

@@ -121,7 +121,8 @@ public static class OnboardingEndpoints
     /// </para>
     /// <para>
     /// <b>Every refusal is the same refusal.</b> A malformed id, a forged signature, an expired
-    /// link, a driver who does not exist and a driver with no photo all answer identically.
+    /// link, a link minted for a photo since replaced, a driver who does not exist and a driver
+    /// with no photo all answer identically.
     /// Distinguishing them would let somebody holding a link they cannot use learn which driver ids
     /// are real, and "that driver exists" is itself something a forged link should not be able to
     /// ask.
@@ -129,6 +130,7 @@ public static class OnboardingEndpoints
     /// </remarks>
     private static async Task<IResult> GetProfilePhotoAsync(
         string driverId,
+        string? v,
         string? expires,
         string? signature,
         IOnboardingService onboarding,
@@ -142,15 +144,16 @@ public static class OnboardingEndpoints
         ArgumentNullException.ThrowIfNull(objects);
         ArgumentNullException.ThrowIfNull(options);
 
-        if (!Guid.TryParse(driverId, out var id) || !links.Verify(id, expires, signature))
-        {
-            throw new MageRideException(MageRideErrors.Forbidden, "That link is not valid.");
-        }
+        // The profile is read before the signature is checked, because the signature covers which
+        // photo this link was minted for and that is only knowable from the current row. The read
+        // is driver-scoped and its result is never revealed except through the one 403 below.
+        var profile = Guid.TryParse(driverId, out var id)
+            ? await onboarding.ReadProfileAsync(id, cancellationToken)
+            : null;
 
-        var profile = await onboarding.ReadProfileAsync(id, cancellationToken);
         var storageUrl = profile?.Profile.PhotoUrl;
 
-        if (string.IsNullOrWhiteSpace(storageUrl))
+        if (string.IsNullOrWhiteSpace(storageUrl) || !links.Verify(id, storageUrl, v, expires, signature))
         {
             throw new MageRideException(MageRideErrors.Forbidden, "That link is not valid.");
         }
