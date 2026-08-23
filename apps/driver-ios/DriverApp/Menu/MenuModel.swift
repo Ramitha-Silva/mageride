@@ -64,10 +64,16 @@ final class MenuModel: ObservableObject {
                 registration: live?.registrationNumber)
         }
 
+        // Δ MCS-29 — a degraded read must not ERASE what the cache just drew, and assigning a
+        // whole new struct here erased three fields at once. Each value comes from its own call:
+        // ``profile()`` is optional-try, ``standing(driverId:)`` swallows its failures by design
+        // and answers an empty standing, and a driver with no live vehicle has no plate at all. So
+        // the drawer painted the name and level off disk and blanked them a moment later, which is
+        // worse than never having painted them.
         header = DriverHeaderState(
-            name: profile?.firstName,
-            level: standing?.standing?.level,
-            registration: live?.registrationNumber,
+            name: profile?.firstName ?? header.name,
+            level: standing?.standing?.level ?? header.level,
+            registration: live?.registrationNumber ?? header.registration,
             // No app-facing read carries a driver's own star average. See ``DriverHeaderState``
             // for the four places it is not.
             rating: nil,

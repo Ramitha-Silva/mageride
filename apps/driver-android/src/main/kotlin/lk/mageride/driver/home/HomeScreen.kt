@@ -355,7 +355,7 @@ private fun HomeDashboardLayout(
         val bannersHeight = bannerBands.sumOf { it.height }
         val sheetHeight = sheetBands.sumOf { it.height }
 
-        val natural = homeMapNaturalHeight(viewport, bannersHeight.toDp(), sheetHeight.toDp())
+        val natural = homeMapNaturalHeight(viewport, sheetHeight.toDp())
         val mapHeight = natural * MAP_HEIGHT_MULTIPLIER
 
         val mapPx = mapHeight.roundToPx()
@@ -388,23 +388,33 @@ private enum class HomeBand { Banners, Sheet, Map }
  * [MAP_HEIGHT_MULTIPLIER] doubles it: whatever [viewport] has left once [banners] and [sheet] have
  * had theirs.
  *
- * Measured rather than taken as a fraction of the viewport, because both things it is measured
- * against move. The banner stack is between zero and five rows deep (daily fee, ignition,
- * auto-ended, low balance, 2nd-trip fee, error) and a Mode C standby sheet is a different height
- * from a Mode A/B journey sheet, so a fraction tuned on one handset in one of those states is
- * wrong in all the others.
+ * Measured rather than taken as a fraction of the viewport, because a Mode C standby sheet is a
+ * different height from a Mode A/B journey sheet and a fraction tuned on one handset in one of
+ * those states is wrong in all the others.
+ *
+ * **Δ MCS-29 — the banner stack is deliberately NOT subtracted, and that is the whole fix.** It
+ * used to be, which was right as arithmetic and wrong as behaviour: every banner is driven by data
+ * that arrives after the first frame (`standing.dailyFee`, the low-balance threshold, the ignition
+ * and auto-ended notices), so the map was composed tall against an empty stack and then shrank as
+ * each one appeared — between 14% and 28% on a 411×891 handset, which is exactly the "loads bigger
+ * then reduces" a driver reported from one. MCS-26 removed the *measurement* feedback loop and this
+ * is the *content* one; they look identical on a screen and have nothing else in common.
+ *
+ * A banner now pushes the map DOWN inside the scroll instead of resizing it, which costs part of
+ * the overscroll the multiplier already creates and costs the driver nothing.
  *
  * Pure, and outside the composable, because this module has no instrumentation source set: a
  * layout rule that is only ever checked by eye is a layout rule that regresses. `HomeMapHeightTest`
  * is where the three cases below are pinned.
  *
  * @param sheet A real measurement, always (Δ MCS-26). It used to be able to arrive as zero meaning
- *   *"not measured yet"*, and this function answered the plain viewport for that frame — which is
- *   the shrink a driver saw on every dashboard open. [HomeDashboardLayout] measures the sheet
- *   before it composes the map, so there is no such frame and no such case to answer.
+ *   *"not measured yet"*, and this function answered the plain viewport for that frame.
+ *   [HomeDashboardLayout] measures the sheet before it composes the map, so there is no such frame
+ *   and no such case to answer. Unlike the banners it is present from the first frame and its
+ *   height is structural rather than data-driven, which is why it is still subtracted.
  */
-internal fun homeMapNaturalHeight(viewport: Dp, banners: Dp, sheet: Dp): Dp =
-    (viewport - banners - sheet).coerceAtLeast(ControlTokens.HomeMapMinimum)
+internal fun homeMapNaturalHeight(viewport: Dp, sheet: Dp): Dp =
+    (viewport - sheet).coerceAtLeast(ControlTokens.HomeMapMinimum)
 
 /**
  * How much taller than the wireframe's `flex:1` the dashboard map is drawn.

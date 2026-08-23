@@ -169,8 +169,10 @@ struct DriverProfileScreen: View {
     private var identityCard: some View {
         DriverHeader(
             state: DriverHeaderState(
-                name: model.state.profile?.firstName,
-                level: model.state.standing.standing?.level,
+                // Δ MCS-29 — the cache is the fallback, not the source: a read that has answered
+                // wins, and until one does the driver sees the name this handset already knew.
+                name: model.state.profile?.firstName ?? model.state.cachedName,
+                level: model.state.standing.standing?.level ?? model.state.cachedLevel,
                 registration: model.state.registration,
                 // No app-facing read carries a driver's own star average — see ``DriverHeaderState``.
                 rating: nil,

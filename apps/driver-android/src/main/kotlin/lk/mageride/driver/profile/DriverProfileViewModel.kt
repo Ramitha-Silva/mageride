@@ -61,6 +61,17 @@ internal data class DriverProfileState(
      * (Δ MCS-27) — see `ProfileRepository.driverPhoto`.
      */
     val photo: ByteArray? = null,
+    /**
+     * The name and Driver Level as §3.16 last saw them (Δ MCS-29).
+     *
+     * **Separate fields rather than a synthetic [profile] and [standing].** Those are a `UserProfile`
+     * and a `JobStanding` — whole server payloads — and the cache holds two strings out of them. The
+     * first attempt at this simply did not paint them for want of somewhere to put them, and left a
+     * `standing = it.standing` self-assignment where the intent used to be; the header then drew a
+     * blank name for as long as the network took, which is the delay MCS-27 claimed to have removed.
+     */
+    val cachedName: String? = null,
+    val cachedLevel: Int? = null,
     val contact: EmergencyContact? = null,
     val standing: JobStanding = JobStanding(),
     val sheet: ProfileSheet? = null,
@@ -149,7 +160,8 @@ internal class DriverProfileViewModel(
                 it.copy(
                     registration = it.registration ?: cached.registration,
                     photo = it.photo ?: cached.photoBytes,
-                    standing = it.standing,
+                    cachedName = it.cachedName ?: cached.name,
+                    cachedLevel = it.cachedLevel ?: cached.level,
                 )
             }
         }
