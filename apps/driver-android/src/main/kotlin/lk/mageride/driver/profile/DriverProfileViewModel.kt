@@ -72,6 +72,14 @@ internal data class DriverProfileState(
      */
     val cachedName: String? = null,
     val cachedLevel: Int? = null,
+    /**
+     * Whether §3.16 answered with something (Δ MCS-32, Δ MCS-33).
+     *
+     * Not *"has the cache been consulted"* — an empty row is a consultation that learned nothing,
+     * and treating it as an answer is what drew `profile_unnamed` at every driver on their first
+     * launch after an install. See `DriverHeaderState.isResolved`.
+     */
+    val isCacheResolved: Boolean = false,
     val contact: EmergencyContact? = null,
     val standing: JobStanding = JobStanding(),
     val sheet: ProfileSheet? = null,
@@ -153,6 +161,10 @@ internal class DriverProfileViewModel(
             val driverId = identity.driverId ?: return@launchGuarded
             val cached = store.cached(driverId)
 
+            // Δ MCS-33 — an EMPTY cache resolves NOTHING. `isResolved` means "something has
+            // answered", and a handset that has never cached this driver has answered nothing: the
+            // header holds its blank until `refresh` does. Resolving here instead told every driver
+            // on their first launch after an install that they had no name.
             if (cached.isEmpty) return@launchGuarded
 
             // A read that has already answered outranks the cache.
@@ -162,6 +174,7 @@ internal class DriverProfileViewModel(
                     photo = it.photo ?: cached.photoBytes,
                     cachedName = it.cachedName ?: cached.name,
                     cachedLevel = it.cachedLevel ?: cached.level,
+                    isCacheResolved = true,
                 )
             }
         }

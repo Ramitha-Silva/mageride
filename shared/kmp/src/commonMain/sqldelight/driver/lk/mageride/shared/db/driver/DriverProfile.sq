@@ -22,8 +22,16 @@ SELECT * FROM driver_profile WHERE driver_id = ?;
 
 -- UPDATE-then-INSERT rather than an UPSERT, and not by preference: `ON CONFLICT ... DO UPDATE` is
 -- SQLite 3.24 and this module's dialect is pinned at 3.18, because minSdk 26 means Android 8.0,
--- which ships 3.19. Grouped statements run together, the UPDATE is a no-op when the row is absent
--- and the INSERT is a no-op when it is present, so the pair is one upsert either way.
+-- which ships 3.19. The UPDATE is a no-op when the row is absent and the INSERT is a no-op when it
+-- is present, so the pair is one upsert either way.
+--
+-- **Two labelled queries, NOT one grouped statement, and the difference was a shipped defect**
+-- (Δ MCS-33). Written as `upsertIdentity:` with both statements under one label, SQLDelight emitted
+-- the UPDATE and silently DROPPED the INSERT — no warning, a clean build, and a generated file with
+-- the word `INSERT` nowhere in it. So the UPDATE matched nothing for a driver with no row yet, the
+-- table stayed empty for ever, and every read answered an empty profile: SCR-DA/DI-029 and -036
+-- opened on `profile_unnamed` and no avatar on every launch, which is the defect MCS-27, -29, -31
+-- and -32 each tried to fix from the screen end. Do not fold these back into one label.
 --
 -- `INSERT OR IGNORE` suppresses every constraint and not only the primary key. That is safe here
 -- and nowhere near a general licence: `driver_id` is the only constraint this table has, and a
@@ -33,13 +41,16 @@ SELECT * FROM driver_profile WHERE driver_id = ?;
 -- columns: the name and the avatar arrive from different calls at different times, and a name
 -- refresh must not blank an avatar that is already on screen. `coalesce` is the same rule within
 -- the row — a read that answered a name but not a level leaves the level alone.
-upsertIdentity:
+updateIdentity:
 UPDATE driver_profile
    SET display_name = coalesce(:displayName, display_name),
        level        = coalesce(:level, level),
        registration = coalesce(:registration, registration),
        synced_at    = :syncedAt
  WHERE driver_id = :driverId;
+
+-- The other half. Run second and in the same transaction as `updateIdentity`, by `writeIdentity`.
+insertIdentity:
 INSERT OR IGNORE INTO driver_profile (driver_id, display_name, level, registration, synced_at)
 VALUES (:driverId, :displayName, :level, :registration, :syncedAt);
 
@@ -47,13 +58,16 @@ VALUES (:driverId, :displayName, :level, :registration, :syncedAt);
 -- link's opaque `v`: it changes when and only when the photograph does, which is what tells a later
 -- read whether the bytes it already holds are still the right ones. Replaced outright rather than
 -- coalesced — a photo read that answered is the whole answer.
-upsertPhoto:
+updatePhoto:
 UPDATE driver_profile
    SET photo_url     = :photoUrl,
        photo_version = :photoVersion,
        photo_bytes   = :photoBytes,
        synced_at     = :syncedAt
  WHERE driver_id = :driverId;
+
+-- The other half. Run second and in the same transaction as `updatePhoto`, by `writePhoto`.
+insertPhoto:
 INSERT OR IGNORE INTO driver_profile (driver_id, photo_url, photo_version, photo_bytes, synced_at)
 VALUES (:driverId, :photoUrl, :photoVersion, :photoBytes, :syncedAt);
 

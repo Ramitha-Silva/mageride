@@ -25,8 +25,22 @@ class HomeMapHeightTest {
     @Test
     fun the_map_is_a_fixed_share_of_one_screenful() {
         // 0.82 of 891 — where the old arithmetic landed once it had settled, on the handset this
-        // was reported from. See `homeMapHeight`.
-        assertEquals(730.62.dp.value, homeMapHeight(viewport).value, 0.01f)
+        // was reported from — less the sheet peek. See `homeMapHeight`.
+        assertEquals(630.62.dp.value, homeMapHeight(viewport).value, 0.01f)
+    }
+
+    /**
+     * The go-online switch is reachable without scrolling, which is what the peek is for (Δ MCS-33).
+     *
+     * Stated as "the map ends a control's height above the fold" rather than as the number itself,
+     * so the assertion still means something if the fraction is ever tuned again.
+     */
+    @Test
+    fun the_sheet_starts_before_the_fold_by_a_control_height() {
+        assertTrue(
+            viewport - homeMapHeight(viewport) >= ControlTokens.HomeMapSheetPeek,
+            "the first control in the sheet has to be on screen when the dashboard opens",
+        )
     }
 
     /**

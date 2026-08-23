@@ -53,6 +53,13 @@ internal class MenuViewModel(
             val driverId = identity.driverId ?: return@launch
             val cached = runCatching { store.cached(driverId) }.getOrNull() ?: return@launch
 
+            // Δ MCS-32/33 — an EMPTY cache resolves NOTHING. `isResolved` means "something has
+            // answered", and a handset that has never cached this driver has answered nothing: the
+            // header holds its blank until a read does. Resolving here instead told every driver on
+            // their first launch after an install that they had no name, which is `profile_unnamed`
+            // — the copy for a driver who really has not set one.
+            if (cached.isEmpty) return@launch
+
             if (cached.isEmpty) return@launch
 
             // `update` rather than `value =`: a network read that has already answered outranks the
@@ -63,6 +70,7 @@ internal class MenuViewModel(
                     level = it.level ?: cached.level,
                     registration = it.registration ?: cached.registration,
                     photo = it.photo ?: cached.photoBytes,
+                    isResolved = true,
                 )
             }
         }
@@ -119,6 +127,11 @@ internal class MenuViewModel(
                         // No app-facing read carries a driver's own star average. See
                         // `DriverHeaderState` for the four places it is not.
                         rating = null,
+                        // Δ MCS-32 — a server answered, so the header may draw a conclusion.
+                        // Unconditional, unlike the cache above: a read that came back with no
+                        // first name IS a driver who has not set one, and `profile_unnamed` is
+                        // what the wireframe draws for that.
+                        isResolved = true,
                     )
                 }
             } catch (cause: CancellationException) {

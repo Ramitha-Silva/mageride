@@ -66,6 +66,11 @@ public data class CachedDriverProfile(
  *
  * **Every method blocks**, like everything else over SQLDelight's Android and Native drivers. Call
  * them off the main thread.
+ *
+ * **Each write is two statements in one transaction, and `DriverProfile.sq` says why** — the
+ * grouped-statement form this was written with compiled cleanly and generated only the UPDATE,
+ * so nothing was ever inserted and every read answered an empty profile (Δ MCS-33).
+ * `DriverProfileCacheTest` is the round trip that would have caught it, and now does.
  */
 public class DriverProfileCache(private val db: DriverDb) {
 
@@ -91,16 +96,24 @@ public class DriverProfileCache(private val db: DriverDb) {
      */
     public fun writeIdentity(driverId: String, name: String?, level: Int?, registration: String?, at: Instant) {
         db.transaction {
-            db.sql.driverProfileQueries.upsertIdentity(
+            db.sql.driverProfileQueries.updateIdentity(
                 displayName = name,
                 // `coalesce(:level, level)` is an expression, and an expression has no column to
                 // carry `AS Int` — so the generated parameter is the raw SQLite `Long?`. Widening
                 // here rather than dropping the adapter on the column, because `select` answering a
-                // Driver Level as an `Int` is what every caller of it wants.
+                // Driver Level as an `Int` is what every caller of it wants. `insertIdentity` binds
+                // the column directly and therefore takes the `Int` unwidened.
                 level = level?.toLong(),
                 registration = registration,
                 syncedAt = at,
                 driverId = driverId,
+            )
+            db.sql.driverProfileQueries.insertIdentity(
+                driverId = driverId,
+                displayName = name,
+                level = level,
+                registration = registration,
+                syncedAt = at,
             )
         }
     }
@@ -108,12 +121,19 @@ public class DriverProfileCache(private val db: DriverDb) {
     /** Records a photograph whose bytes are actually in hand, and which one it is. */
     public fun writePhoto(driverId: String, version: String?, bytes: ByteArray, at: Instant) {
         db.transaction {
-            db.sql.driverProfileQueries.upsertPhoto(
+            db.sql.driverProfileQueries.updatePhoto(
                 photoUrl = null,
                 photoVersion = version,
                 photoBytes = bytes,
                 syncedAt = at,
                 driverId = driverId,
+            )
+            db.sql.driverProfileQueries.insertPhoto(
+                driverId = driverId,
+                photoUrl = null,
+                photoVersion = version,
+                photoBytes = bytes,
+                syncedAt = at,
             )
         }
     }

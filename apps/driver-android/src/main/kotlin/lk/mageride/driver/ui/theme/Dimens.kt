@@ -155,6 +155,16 @@ internal object ControlTokens {
      */
     val HomeMapMinimum: Dp = 160.dp
 
+    /**
+     * How much of SCR-DA-010's sheet is on screen before the driver scrolls (Δ MCS-33).
+     *
+     * The go-online switch is the first control in that sheet and the one thing the dashboard
+     * exists to offer, so a driver starting a shift should not have to scroll to reach it. This is
+     * the height of that switch and its row, subtracted from the map above it — reported from a
+     * handset, where the map filled the screen and the toggle sat just under the fold.
+     */
+    val HomeMapSheetPeek: Dp = 100.dp
+
     /** SCR-DA-014's 15-second countdown ring (`.ring`, `90px`) and its stroke. */
     val CountdownRing: Dp = 96.dp
     val CountdownStroke: Dp = 8.dp

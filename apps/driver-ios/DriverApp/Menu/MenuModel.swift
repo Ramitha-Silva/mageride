@@ -42,7 +42,10 @@ final class MenuModel: ObservableObject {
             level: header.level ?? cached.level?.int32Value,
             registration: header.registration ?? cached.registration,
             rating: header.rating,
-            photo: header.photo ?? cached.photoBytes.map { IosBytesKt.nsDataOf(bytes: $0) as Data })
+            photo: header.photo ?? cached.photoBytes.map { IosBytesKt.nsDataOf(bytes: $0) as Data },
+            // Δ MCS-32 — the cache answered with something, so the header may draw it. The guard
+            // above is what keeps an EMPTY cache from resolving anything.
+            isResolved: true)
     }
 
     func load() async {
@@ -77,7 +80,12 @@ final class MenuModel: ObservableObject {
             // No app-facing read carries a driver's own star average. See ``DriverHeaderState``
             // for the four places it is not.
             rating: nil,
-            photo: header.photo
+            photo: header.photo,
+            // Δ MCS-32 — a read that ANSWERED lets the header draw a conclusion, including
+            // `profile_unnamed` for a driver who really has not set a name. `profile` is an
+            // optional-try, so `nil` here is a failed read rather than a nameless driver — which
+            // must keep whatever the cache resolved rather than claiming an answer of its own.
+            isResolved: profile != nil || header.isResolved
         )
     }
 }

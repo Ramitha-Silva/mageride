@@ -98,7 +98,13 @@ internal fun DriverHeader(
                 horizontalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.xxs),
             ) {
                 Text(
-                    text = state.name ?: stringResource(R.string.profile_unnamed),
+                    // Nothing until something has answered — see `isResolved`. The row keeps its
+                    // height from the avatar beside it, so this does not move the layout.
+                    text = if (state.isResolved) {
+                        state.name ?: stringResource(R.string.profile_unnamed)
+                    } else {
+                        ""
+                    },
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
@@ -168,6 +174,20 @@ internal data class DriverHeaderState(
     val registration: String? = null,
     val rating: Double? = null,
     val photo: ByteArray? = null,
+    /**
+     * Whether anything has answered yet — the cache, or a read (Δ MCS-32).
+     *
+     * **A loading state and an empty one are different, and drawing them the same way is the whole
+     * defect this closes.** `profile_unnamed` is the wireframe's copy for a driver who has not set
+     * a name; rendering it before anything had answered told every driver on every open that they
+     * had no name, and then corrected itself a moment later. Reported from a handset three times.
+     *
+     * **No amount of making the cache faster could have fixed it, which is why two attempts did
+     * not.** The state starts empty and Compose draws the first frame synchronously, so a
+     * coroutine — however quick, however warm the database — cannot beat it. The answer was never
+     * to win the race; it is to not draw a conclusion that has not been reached.
+     */
+    val isResolved: Boolean = false,
 )
 
 /**

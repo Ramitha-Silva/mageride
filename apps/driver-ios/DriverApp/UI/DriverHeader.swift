@@ -39,6 +39,22 @@ struct DriverHeaderState {
     var registration: String?
     var rating: Double?
     var photo: Data?
+
+    /// Whether anything has answered yet — the cache, or a read (Δ MCS-32).
+    ///
+    /// **A loading state and an empty one are different, and drawing them the same way is the whole
+    /// defect this closes.** `profile_unnamed` is the wireframe's copy for a driver who has not set
+    /// a name; rendering it before anything had answered told every driver on every open that they
+    /// had no name, and then corrected itself a moment later. Reported from a handset.
+    ///
+    /// **No amount of making the cache faster could have fixed it.** The state starts empty and the
+    /// first frame is drawn synchronously, so a task — however quick, however warm the database —
+    /// cannot beat it. The answer was never to win the race; it is to not draw a conclusion that
+    /// has not been reached.
+    ///
+    /// An **empty** cache does not set this (Δ MCS-33): a handset that has never cached this driver
+    /// has answered nothing, and only a read can conclude that a driver has no name.
+    var isResolved = false
 }
 
 /// The avatar, the name and level, and the vehicle and rating line.
@@ -82,7 +98,9 @@ struct DriverHeader<Trailing: View>: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: MageRideSpacing.xxs) {
-                    Text(state.name ?? "profile_unnamed".localised)
+                    // Nothing until something has answered — see `isResolved`. The row keeps its
+                    // height from the avatar beside it, so this does not move the layout.
+                    Text(state.isResolved ? (state.name ?? "profile_unnamed".localised) : "")
                         .mageFont(.title)
                         .foregroundStyle(MageRideColor.onSurface)
                         .lineLimit(1)

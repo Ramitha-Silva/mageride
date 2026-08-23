@@ -408,9 +408,15 @@ private enum class HomeBand { Banners, Sheet, Map }
  *
  * The sheet is not subtracted at all now. It sits below the map inside the scroll and is reached by
  * scrolling, which is what the surrounding `verticalScroll` has been for since MCS-24.
+ *
+ * **[ControlTokens.HomeMapSheetPeek] then takes 100dp back off it** (Δ MCS-33). Settling the
+ * height fixed the shrinking and left the map a screenful tall, which put the go-online switch —
+ * the first control in the sheet, and the one thing a driver starting a shift is looking for —
+ * just under the fold. A fixed subtraction rather than a smaller fraction because what has to fit
+ * is a control of a fixed height, not a share of the screen.
  */
-internal fun homeMapHeight(viewport: Dp): Dp =
-    (viewport * MAP_VIEWPORT_FRACTION).coerceAtLeast(ControlTokens.HomeMapMinimum)
+internal fun homeMapHeight(viewport: Dp): Dp = (viewport * MAP_VIEWPORT_FRACTION - ControlTokens.HomeMapSheetPeek)
+    .coerceAtLeast(ControlTokens.HomeMapMinimum)
 
 /**
  * The share of one screenful the map takes.

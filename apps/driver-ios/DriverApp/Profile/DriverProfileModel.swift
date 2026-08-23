@@ -53,6 +53,13 @@ struct DriverProfileState {
     /// delay the cache was added to remove.
     var cachedName: String?
     var cachedLevel: Int32?
+
+    /// Whether §3.16 answered with **something** (Δ MCS-32, Δ MCS-33).
+    ///
+    /// Not *"has the cache been consulted"* — an empty row is a consultation that learned nothing,
+    /// and treating it as an answer draws `profile_unnamed` at every driver on their first launch
+    /// after an install. See ``DriverHeaderState/isResolved``.
+    var isCacheResolved = false
     var contact: EmergencyContact?
     var standing = JobStanding()
     var sheet: ProfileSheet?
@@ -154,6 +161,7 @@ final class DriverProfileModel: ObservableObject {
         state.photo = state.photo ?? cached.photoBytes.map { IosBytesKt.nsDataOf(bytes: $0) as Data }
         state.cachedName = state.cachedName ?? cached.name
         state.cachedLevel = state.cachedLevel ?? cached.level?.int32Value
+        state.isCacheResolved = true
     }
 
     func refresh() async {
