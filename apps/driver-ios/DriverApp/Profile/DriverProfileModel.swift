@@ -43,6 +43,16 @@ struct DriverProfileState {
     /// writes. Bytes rather than a URL so the avatar paints off disk on the frame this screen
     /// opens (Δ MCS-27) — see ``ProfileRepository/driverPhoto(driverId:)``.
     var photo: Data?
+
+    /// The name and Driver Level as section 3.16 last saw them (Δ MCS-29).
+    ///
+    /// **Separate fields rather than a synthetic ``profile`` and ``standing``.** Those are a
+    /// `UserProfile` and a `JobStanding` — whole server payloads — and the cache holds two values
+    /// out of them. The first attempt at this simply did not paint them for want of somewhere to
+    /// put them, so the header drew a blank name for as long as the network took, which is the
+    /// delay the cache was added to remove.
+    var cachedName: String?
+    var cachedLevel: Int32?
     var contact: EmergencyContact?
     var standing = JobStanding()
     var sheet: ProfileSheet?
@@ -142,6 +152,8 @@ final class DriverProfileModel: ObservableObject {
         // A read that has already answered outranks the cache.
         state.registration = state.registration ?? cached.registration
         state.photo = state.photo ?? cached.photoBytes.map { IosBytesKt.nsDataOf(bytes: $0) as Data }
+        state.cachedName = state.cachedName ?? cached.name
+        state.cachedLevel = state.cachedLevel ?? cached.level?.int32Value
     }
 
     func refresh() async {
