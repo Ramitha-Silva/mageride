@@ -407,6 +407,35 @@ public data class VehicleDocument(
 )
 
 /**
+ * One of the driver's own documents, WITH a link to its image (`GET /v1/drivers/documents`).
+ *
+ * **Δ MCS-28 — the difference from [VehicleDocument] is the whole point of this type.** That one
+ * has carried a kind, a status and an expiry since C029 and no URL at all, so SCR-DA/DI-026 could
+ * tell a driver their insurance expired in March and had no way to show it to them.
+ *
+ * @property vehicleId `null` for the driving licence, which belongs to the person rather than to
+ *   any vehicle (AL-27) — and which is how a screen decides where to draw it: the null ones go on
+ *   SCR-DA/DI-029 and the rest onto the card of the vehicle they name.
+ * @property imageUrl A relative, signed, expiring link to the bytes. Resolve it against the gateway
+ *   origin and follow it as given; it changes between reads and needs no bearer token.
+ */
+@Serializable
+public data class DriverDocument(
+    val docId: Ulid,
+    val kind: DocumentKind,
+    val status: DocumentStatus,
+    val imageUrl: String,
+    val vehicleId: Ulid? = null,
+    val expiresAt: Timestamp? = null,
+)
+
+/** 200 body of `GET /v1/drivers/documents` (Δ MCS-28). */
+@Serializable
+public data class DriverDocumentListResponse(
+    val items: List<DriverDocument> = emptyList(),
+)
+
+/**
  * A vehicle with everything the owner, an assigned driver or an internal role may see
  * (`registry.yaml#/components/schemas/VehicleDetail` — `allOf(VehicleSummary, …)`, flattened).
  *

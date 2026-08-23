@@ -243,6 +243,109 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
 
+  /v1/drivers/documents:
+    get:
+      operationId: listDriverDocuments
+      summary: Every document this driver may look at, each with a signed link to its image.
+      description: |
+        **Δ MCS-28.** `VehicleDocument` has carried `docId`, `kind`, `status` and `expiresAt` since
+        C029 and **no URL at all**, so SCR-DA/DI-026 could tell a driver their insurance expired in
+        March and had no way to show it to them, and SCR-DA/DI-029 could not show a driver the
+        licence they had uploaded.
+
+        The driver's own identity documents (`vehicleId` absent) and the documents of every vehicle
+        they own or are assigned to. **The entitlement is a join, not a filter:** it goes through
+        `registry.driver_eligible_vehicles`, which is what "may operate" already means for
+        `select-live`, for dispatch's standby gate and for trip-state-svc.
+
+        Driver-scoped in its own SQL, so a document belonging to somebody else is **absent** rather
+        than refused — telling the two apart would leak whose vehicle a document id names.
+      tags: [drivers]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The documents, oldest vehicle-less first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DriverDocument'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
+
+  /v1/drivers/documents/{documentId}/image:
+    get:
+      operationId: getDriverDocumentImage
+      summary: The bytes behind one document's signed link.
+      description: |
+        **Δ MCS-28.** Same arrangement as `getDriverProfilePhoto` and for the same reason: the caller
+        is an image view, which carries no bearer token, and an access token in a query string is an
+        access token in every proxy log on the way.
+
+        **Unlike the avatar, the signature is not the only lock.** The read is entitlement-scoped in
+        its own SQL, so a signing key that ever leaked would still not open a document belonging to
+        somebody else. An avatar is a face; these are an NIC and a driving licence number, and the
+        difference is worth a second check.
+
+        Every refusal is the same `403` — a forged or expired signature, a document that does not
+        exist, and one that is not this driver's.
+      tags: [drivers]
+      security: []
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema: { $ref: './_shared.yaml#/components/schemas/Ulid' }
+        - name: d
+          in: query
+          required: true
+          description: The driver the link was minted for; the signature covers it.
+          schema: { $ref: './_shared.yaml#/components/schemas/Ulid' }
+        - name: v
+          in: query
+          required: true
+          description: >-
+            Opaque stand-in for WHICH image the link was minted for. A re-uploaded document changes
+            it, which is what lets caches let go of the old one.
+          schema:
+            type: string
+        - name: expires
+          in: query
+          required: true
+          description: Unix seconds at which the signature stops verifying.
+          schema:
+            type: string
+        - name: signature
+          in: query
+          required: true
+          description: Lower-case hex HMAC-SHA256 issued by registry-svc.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The image bytes.
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+        '302':
+          description: |
+            The object store can serve the bytes directly, so the caller is redirected to a
+            short-lived presigned URL (D-36).
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404':
+          description: The link verified but the bytes are gone — a filesystem store whose pod was replaced.
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [forbidden]
+
   /v1/drivers/{driverId}/profile-photo:
     get:
       operationId: getDriverProfilePhoto
@@ -1290,6 +1393,32 @@ components:
           enum: [pending_verification, verified, rejected, superseded]
         rejectionReason: { type: string, nullable: true }
         verifiedAt: { type: string, format: date-time, nullable: true }
+
+    DriverDocument:
+      type: object
+      required: [docId, kind, status, imageUrl]
+      description: >-
+        Δ MCS-28. `VehicleDocument` with the one thing it has never carried — a way to see the
+        document.
+      properties:
+        docId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          type: string
+          enum: [driving_license, registration, permit, insurance, revenue_license]
+        status:
+          type: string
+          enum: [VALID, EXPIRING, EXPIRED, REJECTED]
+        expiresAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        imageUrl:
+          type: string
+          format: uri
+          description: >-
+            A relative, signed, expiring link onto `getDriverDocumentImage`. Resolve it against the
+            gateway origin and follow it as given; it changes between reads and needs no bearer.
 
     DriverProfileSummary:
       type: object

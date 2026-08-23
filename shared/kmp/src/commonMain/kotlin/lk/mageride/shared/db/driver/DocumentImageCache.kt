@@ -30,16 +30,15 @@ public data class CachedDocumentImage(
 
     // `ByteArray` is identity-compared by a generated equals, which would make two reads of one
     // document unequal and re-emit state on every refresh.
-    override fun equals(other: Any?): Boolean =
-        other is CachedDocumentImage &&
-            documentId == other.documentId &&
-            vehicleId == other.vehicleId &&
-            kind == other.kind &&
-            side == other.side &&
-            contentType == other.contentType &&
-            version == other.version &&
-            isStale == other.isStale &&
-            bytes.contentEquals(other.bytes)
+    override fun equals(other: Any?): Boolean = other is CachedDocumentImage &&
+        documentId == other.documentId &&
+        vehicleId == other.vehicleId &&
+        kind == other.kind &&
+        side == other.side &&
+        contentType == other.contentType &&
+        version == other.version &&
+        isStale == other.isStale &&
+        bytes.contentEquals(other.bytes)
 
     override fun hashCode(): Int {
         var result = documentId.hashCode()
@@ -73,15 +72,14 @@ public data class DocumentImageWrite(
 ) {
 
     // Same reason as `CachedDocumentImage` — a generated equals compares `ByteArray` by identity.
-    override fun equals(other: Any?): Boolean =
-        other is DocumentImageWrite &&
-            documentId == other.documentId &&
-            vehicleId == other.vehicleId &&
-            kind == other.kind &&
-            side == other.side &&
-            contentType == other.contentType &&
-            version == other.version &&
-            bytes.contentEquals(other.bytes)
+    override fun equals(other: Any?): Boolean = other is DocumentImageWrite &&
+        documentId == other.documentId &&
+        vehicleId == other.vehicleId &&
+        kind == other.kind &&
+        side == other.side &&
+        contentType == other.contentType &&
+        version == other.version &&
+        bytes.contentEquals(other.bytes)
 
     override fun hashCode(): Int {
         var result = documentId.hashCode()

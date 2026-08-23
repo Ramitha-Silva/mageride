@@ -206,13 +206,14 @@ class FakeApiBackendTest {
          * **205** since MCS-25's `getDriverProfilePhoto` — the third binary read that does have a
          * client, and the driver's own avatar.
          */
-        const val EXPECTED_OPERATIONS = 205
+        const val EXPECTED_OPERATIONS = 207
 
         /**
          * The reads that answer with bytes, sorted — a `List` rather than a sorted `Set` because
          * `sortedSetOf` is a JVM-only extension and this file is `commonTest`.
          */
-        val BINARY_OPERATIONS = listOf("getDriverProfilePhoto", "getModeBFile", "getSupportScreenshot")
+        val BINARY_OPERATIONS =
+            listOf("getDriverDocumentImage", "getDriverProfilePhoto", "getModeBFile", "getSupportScreenshot")
 
         /** 204 (no payload), 302 (payload is a header), 200 (payload is bytes). */
         val NON_JSON_STATUSES = setOf(200, 204, 302)

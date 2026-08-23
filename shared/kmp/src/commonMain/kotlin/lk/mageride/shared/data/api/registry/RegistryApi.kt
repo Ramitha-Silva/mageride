@@ -28,6 +28,7 @@ import lk.mageride.shared.data.models.registry.BindVehicleDeviceResponse
 import lk.mageride.shared.data.models.registry.CreateShareGrantRequest
 import lk.mageride.shared.data.models.registry.CreateShareGrantResponse
 import lk.mageride.shared.data.models.registry.DriverPayoutProfile
+import lk.mageride.shared.data.models.registry.DriverDocumentListResponse
 import lk.mageride.shared.data.models.registry.DriverProfileSummary
 import lk.mageride.shared.data.models.registry.OnboardingCorrections
 import lk.mageride.shared.data.models.registry.OnboardingStep
@@ -95,6 +96,33 @@ public interface RegistryApi {
      * every proxy log on the way. A bad signature, an expired one, an unknown driver and a driver
      * with no photo all answer `403`, so a forged link tells its author nothing.
      */
+    /**
+     * `GET /v1/drivers/documents` — every document this driver may look at (Δ MCS-28).
+     *
+     * Their own identity documents and the documents of every vehicle they own or are assigned to,
+     * each with a signed link to its image. Driver-scoped on the server in its own SQL, so a
+     * document belonging to somebody else is **absent** rather than refused — telling the two apart
+     * would leak whose vehicle a document id names.
+     */
+    @Throws(MageRideError::class, CancellationException::class)
+    public suspend fun listDriverDocuments(): DriverDocumentListResponse
+
+    /**
+     * `GET /v1/drivers/documents/{documentId}/image` — the bytes behind one of those links.
+     *
+     * Unauthenticated for the same reason as [getDriverProfilePhoto]: the caller is an image view
+     * and carries no bearer. Unlike that one, the server ALSO re-checks entitlement — an avatar is
+     * a face, and these are an NIC and a driving licence number.
+     */
+    @Throws(MageRideError::class, CancellationException::class)
+    public suspend fun getDriverDocumentImage(
+        documentId: Ulid,
+        driverId: Ulid,
+        version: String,
+        expires: Long,
+        signature: String,
+    ): ByteArray
+
     @Throws(MageRideError::class, CancellationException::class)
     public suspend fun getDriverProfilePhoto(
         driverId: Ulid,
@@ -308,6 +336,25 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
     @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getDriverProfile(): DriverProfileSummary? =
         transport.apiGet(SERVICE, "getDriverProfile", "/v1/drivers/profile").decodeOrNull(transport.json)
+
+    @Throws(MageRideError::class, CancellationException::class)
+    override suspend fun listDriverDocuments(): DriverDocumentListResponse =
+        transport.apiGet(SERVICE, "listDriverDocuments", "/v1/drivers/documents").decode()
+
+    @Throws(MageRideError::class, CancellationException::class)
+    override suspend fun getDriverDocumentImage(
+        documentId: Ulid,
+        driverId: Ulid,
+        version: String,
+        expires: Long,
+        signature: String,
+    ): ByteArray =
+        transport.apiGet(SERVICE, "getDriverDocumentImage", "/v1/drivers/documents/$documentId/image") {
+            parameter("d", driverId)
+            parameter("v", version)
+            parameter("expires", expires)
+            parameter("signature", signature)
+        }.body()
 
     @Throws(MageRideError::class, CancellationException::class)
     override suspend fun getDriverProfilePhoto(
