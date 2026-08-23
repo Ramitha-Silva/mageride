@@ -1,4 +1,5 @@
 using System.Text.Json;
+using MageRide.Registry.Configuration;
 using MageRide.Registry.Domain;
 using MageRide.Registry.Onboarding;
 using MageRide.Registry.Vehicles;
