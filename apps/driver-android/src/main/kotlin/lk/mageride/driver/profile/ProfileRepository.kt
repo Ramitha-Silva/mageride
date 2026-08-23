@@ -1,5 +1,8 @@
 package lk.mageride.driver.profile
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import lk.mageride.driver.di.DriverDatabase
 import lk.mageride.driver.jobs.JobStanding
 import lk.mageride.driver.jobs.JobsRepository
 import lk.mageride.driver.onboarding.OnboardingPreferences
@@ -13,7 +16,10 @@ import lk.mageride.shared.data.models.iam.EmergencyContactInput
 import lk.mageride.shared.data.models.iam.LanguagePreference
 import lk.mageride.shared.data.models.iam.UpdateProfileRequest
 import lk.mageride.shared.data.models.iam.UserProfile
+import lk.mageride.shared.db.driver.CachedDriverProfile
+import lk.mageride.shared.db.driver.DriverProfileCache
 import lk.mageride.shared.domain.auth.AuthSessionManager
+import kotlin.time.Clock
 
 /**
  * SCR-DA-029's data — the profile, its preferences, its emergency contact and the way out.
@@ -35,6 +41,7 @@ internal class ProfileRepository(
     private val preferences: OnboardingPreferences,
     private val registry: RegistryApi,
     private val gatewayOrigin: String,
+    private val database: DriverDatabase,
 ) {
 
     /** `GET /v1/users/me` — name, photo, language and the notification switch map. */
@@ -57,6 +64,58 @@ internal class ProfileRepository(
      * having to remember to.
      */
     suspend fun driverPhotoUrl(): String? = absoluteUrl(gatewayOrigin, registry.getDriverProfile()?.photoUrl)
+
+    // ---------------------------------------------------------------------------------------
+    // The first-frame cache (Δ MCS-27, mobile_db_schema.md §3.16)
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * What the headers should draw right now, before a single call has answered.
+     *
+     * Blocking work on [Dispatchers.IO]: SQLDelight's Android driver is synchronous, and this is
+     * called from a view model's `init`.
+     */
+    suspend fun cachedProfile(driverId: Ulid): CachedDriverProfile =
+        onCache { it.read(driverId.toString()) }
+
+    /** Records what a completed read answered, so the next open has it. */
+    suspend fun cacheIdentity(driverId: Ulid, name: String?, level: Int?, registration: String?) {
+        onCache { it.writeIdentity(driverId.toString(), name, level, registration, Clock.System.now()) }
+    }
+
+    /**
+     * The driver's photograph as BYTES, from the cache when they are current and from the network
+     * when they are not.
+     *
+     * **Bytes rather than a URL, which is the whole point of §3.16.** The signed link carries an
+     * `expires` that changes on every profile read, so a URL-keyed image cache misses every time
+     * and re-downloads a photograph the handset already holds. The link's `v` says *which* photo it
+     * is; when that has not changed, nothing is fetched at all and the avatar paints from disk.
+     */
+    suspend fun driverPhoto(driverId: Ulid): ByteArray? {
+        val id = driverId.toString()
+        val link = registry.getDriverProfile()?.photoUrl ?: return onCache { it.read(id) }.photoBytes
+        val query = signedLinkParameters(link)
+        val version = query["v"]
+
+        if (!onCache { it.needsPhoto(id, version) }) return onCache { it.read(id) }.photoBytes
+
+        val expires = query["expires"]?.toLongOrNull() ?: return null
+        val signature = query["signature"] ?: return null
+        val bytes = registry.getDriverProfilePhoto(driverId, version.orEmpty(), expires, signature)
+
+        onCache { it.writePhoto(id, version, bytes, Clock.System.now()) }
+
+        return bytes
+    }
+
+    /** D-26: the next driver to sign in on this handset must not see the last one's face. */
+    suspend fun forgetCachedProfile() {
+        onCache { it.clear() }
+    }
+
+    private suspend fun <T> onCache(block: (DriverProfileCache) -> T): T =
+        withContext(Dispatchers.IO) { block(DriverProfileCache(database.get())) }
 
     /** `GET /v1/me/emergency-contacts` — who D-33's SOS SMS goes to (AL-13). */
     suspend fun emergencyContacts(): List<EmergencyContact> = iam.listEmergencyContacts().items
@@ -147,3 +206,17 @@ internal fun absoluteUrl(gatewayOrigin: String, path: String?): String? {
         else -> gatewayOrigin.trimEnd('/') + "/" + trimmed.removePrefix("/")
     }
 }
+
+/**
+ * The query of a signed link, as a map (Δ MCS-27).
+ *
+ * `getDriverProfilePhoto` takes `v`, `expires` and `signature` as typed arguments, and the only
+ * place they exist is inside the URL the profile read handed back — so something has to take them
+ * apart again. Deliberately tolerant: a link missing a parameter yields a map missing a key, and the
+ * caller answers that by not fetching rather than by throwing at a driver.
+ */
+internal fun signedLinkParameters(url: String): Map<String, String> =
+    url.substringAfter('?', "")
+        .split('&')
+        .filter { it.contains('=') }
+        .associate { it.substringBefore('=') to it.substringAfter('=') }

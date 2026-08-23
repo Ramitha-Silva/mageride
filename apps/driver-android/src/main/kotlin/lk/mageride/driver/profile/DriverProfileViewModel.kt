@@ -57,9 +57,10 @@ internal data class DriverProfileState(
      * The driver's own photograph, absolute and ready to load (Δ MCS-25).
      *
      * Not [profile]'s `photoUrl`: that is `iam.users.photo_url`, which Profile Setup never writes.
-     * See `ProfileRepository.driverPhotoUrl`.
+     * Bytes rather than a URL so the avatar paints off disk on the frame this screen opens
+     * (Δ MCS-27) — see `ProfileRepository.driverPhoto`.
      */
-    val photoUrl: String? = null,
+    val photo: ByteArray? = null,
     val contact: EmergencyContact? = null,
     val standing: JobStanding = JobStanding(),
     val sheet: ProfileSheet? = null,
@@ -121,8 +122,34 @@ internal class DriverProfileViewModel(private val identity: DriverIdentity, priv
     val state: StateFlow<DriverProfileState> = mutableState.asStateFlow()
 
     init {
+        // Δ MCS-27 — what the handset already knows, before a single call is made.
+        paintFromCache()
         refresh()
         refreshPhoto()
+    }
+
+    /**
+     * The §3.16 cache, drawn first.
+     *
+     * SCR-DA-029 opened on an empty header and filled in after three reads. This is the frame in
+     * between, and on a bad connection it is most of the time the driver spends looking at it.
+     */
+    private fun paintFromCache() {
+        launchGuarded(onFailure = { }) {
+            val driverId = identity.driverId ?: return@launchGuarded
+            val cached = profiles.cachedProfile(driverId)
+
+            if (cached.isEmpty) return@launchGuarded
+
+            // A read that has already answered outranks the cache.
+            mutableState.update {
+                it.copy(
+                    registration = it.registration ?: cached.registration,
+                    photo = it.photo ?: cached.photoBytes,
+                    standing = it.standing,
+                )
+            }
+        }
     }
 
     /**
@@ -136,9 +163,10 @@ internal class DriverProfileViewModel(private val identity: DriverIdentity, priv
      */
     private fun refreshPhoto() {
         launchGuarded(onFailure = { }) {
-            val photoUrl = profiles.driverPhotoUrl()
+            val driverId = identity.driverId ?: return@launchGuarded
+            val photo = profiles.driverPhoto(driverId)
 
-            mutableState.update { it.copy(photoUrl = photoUrl ?: it.photoUrl) }
+            mutableState.update { it.copy(photo = photo ?: it.photo) }
         }
     }
 
@@ -169,6 +197,16 @@ internal class DriverProfileViewModel(private val identity: DriverIdentity, priv
                     contact = contacts.firstOrNull(EmergencyContact::isPrimary) ?: contacts.firstOrNull(),
                     standing = standing ?: it.standing,
                     registration = live?.registrationNumber ?: it.registration,
+                )
+            }
+
+            // Δ MCS-27 — so the next open has it.
+            driverId?.let { id ->
+                profiles.cacheIdentity(
+                    driverId = id,
+                    name = profile.firstName,
+                    level = standing?.standing?.level,
+                    registration = live?.registrationNumber,
                 )
             }
         }

@@ -4,10 +4,6 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import androidx.core.content.getSystemService
-import coil3.ImageLoader
-import coil3.PlatformContext
-import coil3.SingletonImageLoader
-import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,9 +25,7 @@ import org.koin.core.logger.Level
  * five-year-old handset feels every millisecond of `Application.onCreate`, and the two things
  * below are here because they genuinely cannot be anywhere else.
  */
-internal class DriverApplication :
-    Application(),
-    SingletonImageLoader.Factory {
+internal class DriverApplication : Application() {
 
     /**
      * Start-up work that outlives any Activity.
@@ -41,25 +35,6 @@ internal class DriverApplication :
      * die with the process, which is exactly what an Application-held scope does.
      */
     private val startUpScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
-    /**
-     * The one image loader in this app (Δ MCS-25) — SCR-DA-029's and SCR-DA-036's avatar.
-     *
-     * **The fetcher is registered rather than left to discovery.** `coil-network-okhttp` can
-     * register itself through a `ServiceLoader`, and a build that quietly loses that step is a
-     * build where every avatar silently fails to load — which looks exactly like the placeholder
-     * this change exists to replace. Naming it costs four lines and cannot regress.
-     *
-     * OkHttp because it is already here: `ktor-client-okhttp` is the engine `:shared` uses on this
-     * platform, so this shares a stack rather than adding one.
-     *
-     * **No auth interceptor, and it must stay that way.** registry-svc signs the URL (MCS-25)
-     * precisely so a loader can follow it without one; attaching the bearer token here would put
-     * it in a query-adjacent header on a request that does not need it.
-     */
-    override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
-        .components { add(OkHttpNetworkFetcherFactory()) }
-        .build()
 
     override fun onCreate() {
         super.onCreate()

@@ -1,5 +1,7 @@
 package lk.mageride.driver.ui.component
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,17 +12,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.foundation.Image
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
-import coil3.compose.AsyncImage
 import lk.mageride.driver.R
 import lk.mageride.driver.home.DashboardLabels
 import lk.mageride.driver.ui.Symbols
@@ -67,9 +72,14 @@ internal fun DriverHeader(
                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
 
-                if (state.photoUrl != null) {
-                    AsyncImage(
-                        model = state.photoUrl,
+                // Decoded once per distinct photograph rather than per recomposition — a header
+                // redraws whenever the level or the plate arrives, and re-decoding a JPEG on each
+                // of those would be the jank this change exists to remove.
+                val avatar = remember(state.photo) { state.photo?.toImageBitmap() }
+
+                if (avatar != null) {
+                    Image(
+                        bitmap = avatar,
                         // Decorative: the driver's name is on the very next line, and a screen
                         // reader announcing "photo of Nimal" before reading "Nimal" is noise.
                         contentDescription = null,
@@ -137,7 +147,7 @@ internal fun DriverHeader(
  *   *passenger* is shown about the driver of *their* ride. C070's menu header and C074's profile
  *   card each reached that conclusion independently and each drew an em dash. This carries the
  *   parameter so that the day a read exists, one type gains a value and both screens show it.
- * @property photoUrl The driver's own photograph, absolute and ready to load (Δ MCS-25).
+ * @property photo The driver's own photograph, as bytes (Δ MCS-25, Δ MCS-27).
  *
  *   **This is registry-svc's, not `GET /v1/users/me`'s.** It used to be a `hasPhoto` flag fed from
  *   `UserProfile.photoUrl`, and that field is null for every driver who onboarded in this app:
@@ -145,15 +155,20 @@ internal fun DriverHeader(
  *   §`getDriverProfile`). The photograph AL-27 *requires* is the one registry-svc stored, and it
  *   now arrives as a signed link a loader can follow with no credential of its own.
  *
- *   `null` draws the glyph, which is the state before the read answers and for a driver whose photo
- *   PDPA erasure has cleared.
+ *   **Bytes rather than a URL (Δ MCS-27).** They come off disk, so the avatar is on screen in the
+ *   frame the header opens instead of a network round trip later — which was the complaint. A URL
+ *   could not have done it: the signed link's `expires` changes on every profile read, so every
+ *   image cache that keys on the URL misses every time.
+ *
+ *   `null` draws the glyph, which is the state for a driver this handset has not cached and for one
+ *   whose photo PDPA erasure has cleared.
  */
 internal data class DriverHeaderState(
     val name: String? = null,
     val level: Int? = null,
     val registration: String? = null,
     val rating: Double? = null,
-    val photoUrl: String? = null,
+    val photo: ByteArray? = null,
 )
 
 /**
@@ -172,3 +187,13 @@ private fun secondLine(state: DriverHeaderState): String {
 
 /** One decimal place, `4.8`. A rating is a number, not copy — the same rule as `L3`. */
 private fun stars(rating: Double): String = String.format(Locale.ROOT, "%.1f", rating)
+
+/**
+ * A stored photograph as something Compose can draw, or `null` if it will not decode.
+ *
+ * Null rather than a throw: the bytes came off this handset's own disk, so a failure here means a
+ * truncated write or a file the platform decoder does not recognise — and the right answer to both
+ * is the glyph the avatar already falls back to, not a crash on the driver's home screen.
+ */
+private fun ByteArray.toImageBitmap(): ImageBitmap? =
+    runCatching { BitmapFactory.decodeByteArray(this, 0, size)?.asImageBitmap() }.getOrNull()

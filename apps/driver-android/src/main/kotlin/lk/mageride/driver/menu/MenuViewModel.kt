@@ -31,8 +31,37 @@ internal class MenuViewModel(private val identity: DriverIdentity, private val p
     val header: StateFlow<DriverHeaderState> = mutableState.asStateFlow()
 
     init {
+        // Δ MCS-27 — the cache FIRST, and synchronously enough that the drawer's first frame has a
+        // name in it. Everything below is a refresh behind something already on screen.
+        paintFromCache()
         refresh()
         refreshPhoto()
+    }
+
+    /**
+     * What the handset already knows, drawn before a single call is made (§3.16).
+     *
+     * The drawer used to open on *"Your name"* over a placeholder glyph and fill in a second later,
+     * every time, on whatever connection the driver happened to have. This is that second.
+     */
+    private fun paintFromCache() {
+        viewModelScope.launch {
+            val driverId = identity.driverId ?: return@launch
+            val cached = runCatching { profiles.cachedProfile(driverId) }.getOrNull() ?: return@launch
+
+            if (cached.isEmpty) return@launch
+
+            // `update` rather than `value =`: a network read that has already answered outranks the
+            // cache, and on a fast connection it genuinely can arrive first.
+            mutableState.update {
+                it.copy(
+                    name = it.name ?: cached.name,
+                    level = it.level ?: cached.level,
+                    registration = it.registration ?: cached.registration,
+                    photo = it.photo ?: cached.photoBytes,
+                )
+            }
+        }
     }
 
     /**
@@ -44,9 +73,10 @@ internal class MenuViewModel(private val identity: DriverIdentity, private val p
      */
     private fun refreshPhoto() {
         viewModelScope.launch {
-            val photoUrl = runCatching { profiles.driverPhotoUrl() }.getOrNull() ?: return@launch
+            val driverId = identity.driverId ?: return@launch
+            val photo = runCatching { profiles.driverPhoto(driverId) }.getOrNull() ?: return@launch
 
-            mutableState.update { it.copy(photoUrl = photoUrl) }
+            mutableState.update { it.copy(photo = photo) }
         }
     }
 
@@ -58,6 +88,13 @@ internal class MenuViewModel(private val identity: DriverIdentity, private val p
                 val driverId = identity.driverId
                 val standing = driverId?.let { id -> profiles.standing(id) }
                 val live = identity.liveVehicle().live
+
+                profiles.cacheIdentity(
+                    driverId = driverId,
+                    name = profile.firstName,
+                    level = standing?.standing?.level,
+                    registration = live?.registrationNumber,
+                )
 
                 mutableState.update {
                     it.copy(

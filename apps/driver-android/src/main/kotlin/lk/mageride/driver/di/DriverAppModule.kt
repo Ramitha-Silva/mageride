@@ -385,6 +385,8 @@ private fun Module.trackerAndProfileBindings() {
             // is null for every driver who onboarded in this app.
             registry = get(),
             gatewayOrigin = get<DriverEnvironment>().apiBaseUrl,
+            // Δ MCS-27 — §3.16, so both headers paint before a call is made.
+            database = get(),
         )
     }
     single { RideHistoryRepository(query = get(), ride = get(), tripState = get()) }

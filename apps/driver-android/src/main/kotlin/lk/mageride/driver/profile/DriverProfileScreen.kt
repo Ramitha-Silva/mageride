@@ -219,7 +219,7 @@ private fun IdentityCard(state: DriverProfileState, onEdit: () -> Unit, modifier
             registration = state.registration,
             // No app-facing read carries a driver's own star average — see DriverHeaderState.
             rating = null,
-            photoUrl = state.photoUrl,
+            photo = state.photo,
         ),
         modifier = modifier.padding(vertical = MageRideTheme.spacing.xs),
         trailing = { IconButton(onClick = onEdit) { EditGlyph() } },

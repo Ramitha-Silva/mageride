@@ -338,15 +338,6 @@ dependencies {
     // camera. See the catalogue note before swapping it for an `-android-embedded` artifact.
     implementation(libs.zxing.core)
 
-    // Δ MCS-25 — the driver's own avatar on SCR-DA-029 and SCR-DA-036, and the first image loader
-    // in this repository. The OkHttp fetcher rather than the Ktor one: `ktor-client-okhttp` is
-    // already the engine :shared uses here, so this adds a fetcher and not a second HTTP stack.
-    //
-    // The URL it loads carries no bearer token and needs none — registry-svc signs it (MCS-25),
-    // which is what lets a loader with no auth of its own follow it.
-    implementation(libs.coil.compose)
-    implementation(libs.coil.network.okhttp)
-
     testImplementation(libs.kotlin.testjunit)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
