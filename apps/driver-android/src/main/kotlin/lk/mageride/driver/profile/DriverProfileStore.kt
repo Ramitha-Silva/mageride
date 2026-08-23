@@ -45,10 +45,10 @@ internal interface DriverProfileStore {
 internal class DbDriverProfileStore(private val registry: RegistryApi, private val database: DriverDatabase) :
     DriverProfileStore {
 
-    override suspend fun cached(driverId: Ulid): CachedDriverProfile = onCache { it.read(driverId.toString()) }
+    override suspend fun cached(driverId: Ulid): CachedDriverProfile = onCache { it.read(driverId) }
 
     override suspend fun cacheIdentity(driverId: Ulid, name: String?, level: Int?, registration: String?) {
-        onCache { it.writeIdentity(driverId.toString(), name, level, registration, Clock.System.now()) }
+        onCache { it.writeIdentity(driverId, name, level, registration, Clock.System.now()) }
     }
 
     /**
@@ -60,12 +60,11 @@ internal class DbDriverProfileStore(private val registry: RegistryApi, private v
      * photo it is; when that has not changed nothing is fetched and the avatar paints from disk.
      */
     override suspend fun photo(driverId: Ulid): ByteArray? {
-        val id = driverId.toString()
         val link = registry.getDriverProfile()?.photoUrl
 
-        val fetched = link?.let { fetch(driverId, id, signedLinkParameters(it)) }
+        val fetched = link?.let { fetch(driverId, signedLinkParameters(it)) }
 
-        return fetched ?: onCache { it.read(id) }.photoBytes
+        return fetched ?: onCache { it.read(driverId) }.photoBytes
     }
 
     override suspend fun forget() {
@@ -79,7 +78,7 @@ internal class DbDriverProfileStore(private val registry: RegistryApi, private v
      * Null-on-anything rather than branching per case: the caller's answer to all of them is the
      * same, which is to draw whatever is already on disk.
      */
-    private suspend fun fetch(driverId: Ulid, id: String, query: Map<String, String>): ByteArray? {
+    private suspend fun fetch(driverId: Ulid, query: Map<String, String>): ByteArray? {
         val version = query["v"]
         val expires = query["expires"]?.toLongOrNull()
         val signature = query["signature"]
@@ -87,13 +86,13 @@ internal class DbDriverProfileStore(private val registry: RegistryApi, private v
         // One condition rather than three guards, because the answer to all of them is identical:
         // leave the bytes on disk alone. `needsPhoto` is asked LAST so a malformed link costs no
         // database read at all.
-        val worthFetching = expires != null && signature != null && onCache { it.needsPhoto(id, version) }
+        val worthFetching = expires != null && signature != null && onCache { it.needsPhoto(driverId, version) }
 
         return if (!worthFetching) {
             null
         } else {
             registry.getDriverProfilePhoto(driverId, version.orEmpty(), expires, signature)
-                .also { bytes -> onCache { cache -> cache.writePhoto(id, version, bytes, Clock.System.now()) } }
+                .also { bytes -> onCache { cache -> cache.writePhoto(driverId, version, bytes, Clock.System.now()) } }
         }
     }
 
