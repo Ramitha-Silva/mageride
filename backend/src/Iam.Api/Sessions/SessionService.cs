@@ -265,16 +265,48 @@ public sealed class SessionService(
             var database = redis.GetDatabase();
             var keys = sessionIds.Select(id => (RedisKey)RedisKeys.RefreshToken(id.ToString())).ToArray();
             await database.KeyDeleteAsync(keys).WaitAsync(cancellationToken);
+        }
+        catch (RedisException ex)
+        {
+            logger.LogWarning(ex, "Could not drop {Count} revoked session mirrors from Redis", sessionIds.Count);
+        }
+    }
 
-            // Δ MCS-30 — and a tombstone each, which is what actually ends the displaced device's
-            // session. Dropping the mirror above only stops it REFRESHING; its access token stayed
-            // valid for up to `AccessTokenLifetime` because nothing outside this service reads
-            // session state, so a phone that had just been signed out of could go on accepting
-            // rides for half an hour.
-            //
-            // The TTL is that same lifetime plus the clock skew the validator already allows: a
-            // tombstone must outlive every token it exists to kill, and once the last one has
-            // expired on its own there is nothing left for it to do.
+    /// <summary>
+    /// Marks sessions as DISPLACED — ended because somebody signed in elsewhere (AL-08, Δ MCS-30).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Only displacement, and keeping it out of <see cref="ForgetAsync"/> is the point.</b>
+    /// Every revocation drops the refresh mirror; only this one means "another device took your
+    /// session". Tombstoning every revocation made a second logout answer <c>403 device-revoked</c>
+    /// where the contract promises an idempotent <c>204</c>, and would have told somebody who had
+    /// just tapped Log out that they were signed in on another device — then wiped their local
+    /// database with that as the reason.
+    /// </para>
+    /// <para>
+    /// Dropping the mirror only stops a device REFRESHING. Its access token stays valid until it
+    /// expires, because nothing outside this service reads session state — so without this a phone
+    /// the account had just been signed out of could go on accepting rides for up to
+    /// <c>AccessTokenLifetime</c>. That window is worth closing for a device that was replaced and
+    /// not for one whose owner chose to leave.
+    /// </para>
+    /// <para>
+    /// The TTL is that lifetime plus the clock skew the validator already allows: a tombstone must
+    /// outlive every token it exists to kill, and once the last one has expired on its own there is
+    /// nothing left for it to do.
+    /// </para>
+    /// </remarks>
+    private async Task DisplaceAsync(IReadOnlyList<Guid> sessionIds, CancellationToken cancellationToken)
+    {
+        if (sessionIds.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var database = redis.GetDatabase();
             var lifetime = _options.AccessTokenLifetime + TokenSkew;
 
             await Task.WhenAll(sessionIds.Select(id =>
@@ -283,12 +315,12 @@ public sealed class SessionService(
         }
         catch (RedisException ex)
         {
-            // Best effort, deliberately, and the consequence is worth naming: without the
-            // tombstone the displaced device keeps its access token until it expires, which is
-            // exactly the behaviour this replaced. Refusing the sign-in instead would let a Redis
-            // outage stop drivers signing in at all, which is worse than a bounded overlap.
+            // Best effort, and the consequence is worth naming: without the tombstone the displaced
+            // device keeps its access token until it expires, which is exactly the behaviour this
+            // replaced. Refusing the sign-in instead would let a Redis outage stop drivers signing
+            // in at all, which is a great deal worse than a bounded overlap.
             logger.LogWarning(
-                ex, "Could not tombstone {Count} revoked sessions in Redis; they expire with their access tokens",
+                ex, "Could not tombstone {Count} displaced sessions; they expire with their access tokens",
                 sessionIds.Count);
         }
     }
