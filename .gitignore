@@ -205,3 +205,17 @@ acceptance/sg/out/
 infra/sg/secrets/
 infra/sg/certs/
 infra/sg/.env
+
+# Untracked working files that must never be committed (Δ MCS-25 — they were, once).
+# Credentials, commercial documents and handset screenshots live in the repo root during
+# development; a bare `git add -A` swept them into a commit and onto the remote.
+SMSAPI.txt
+Protect main.json
+MageRide_Tracker.xlsx
+*_Government_Proposal*.md
+*_Gov_Proposal_*
+Government_proposal.*
+RAMITHA-FINAL.docx
+e[0-9].jpeg
+e[0-9].jpg
+design[0-9].jpeg
