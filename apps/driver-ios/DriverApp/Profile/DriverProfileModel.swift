@@ -173,7 +173,7 @@ final class DriverProfileModel: ObservableObject {
                     await profiles.cacheIdentity(
                         driverId: driverId,
                         name: state.profile?.firstName,
-                        level: state.standing.standing?.level?.int32Value,
+                        level: state.standing.standing?.level,
                         registration: state.registration)
                 }
             }

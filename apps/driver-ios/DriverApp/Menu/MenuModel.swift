@@ -60,7 +60,7 @@ final class MenuModel: ObservableObject {
             await profiles.cacheIdentity(
                 driverId: driverId,
                 name: profile?.firstName,
-                level: standing?.standing?.level?.int32Value,
+                level: standing?.standing?.level,
                 registration: live?.registrationNumber)
         }
 
