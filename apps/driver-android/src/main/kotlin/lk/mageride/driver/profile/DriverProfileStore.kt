@@ -83,16 +83,20 @@ internal class DbDriverProfileStore(
      */
     private suspend fun fetch(driverId: Ulid, id: String, query: Map<String, String>): ByteArray? {
         val version = query["v"]
+        val expires = query["expires"]?.toLongOrNull()
+        val signature = query["signature"]
 
-        if (!onCache { it.needsPhoto(id, version) }) return null
+        // One condition rather than three guards, because the answer to all of them is identical:
+        // leave the bytes on disk alone. `needsPhoto` is asked LAST so a malformed link costs no
+        // database read at all.
+        val worthFetching = expires != null && signature != null && onCache { it.needsPhoto(id, version) }
 
-        val expires = query["expires"]?.toLongOrNull() ?: return null
-        val signature = query["signature"] ?: return null
-        val bytes = registry.getDriverProfilePhoto(driverId, version.orEmpty(), expires, signature)
-
-        onCache { it.writePhoto(id, version, bytes, Clock.System.now()) }
-
-        return bytes
+        return if (!worthFetching) {
+            null
+        } else {
+            registry.getDriverProfilePhoto(driverId, version.orEmpty(), expires, signature)
+                .also { bytes -> onCache { cache -> cache.writePhoto(id, version, bytes, Clock.System.now()) } }
+        }
     }
 
     /**
