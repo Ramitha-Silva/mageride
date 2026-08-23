@@ -1,3 +1,4 @@
+using MageRide.Shared.Caching;
 using MageRide.Shared.Errors;
 using MageRide.Shared.Http;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -8,7 +9,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using StackExchange.Redis;
 
 namespace MageRide.Shared.Auth;
 
@@ -141,7 +144,79 @@ public static class AuthServiceCollectionExtensions
                     string.IsNullOrEmpty(context.ErrorDescription) ? null : context.ErrorDescription);
             },
             OnForbidden = context => WriteProblemAsync(context.HttpContext, MageRideErrors.Forbidden, null),
+
+            // Δ MCS-30 — AL-08's displacement, enforced on the request rather than at the refresh.
+            OnTokenValidated = RefuseRevokedSessionAsync,
         };
+    }
+
+    /// <summary>
+    /// Refuses a token whose session has been revoked by a sign-in on another device (AL-08).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Without this, revocation only bit at the next refresh.</b> iam-svc revokes the old
+    /// session inside the same transaction that opens the new one, and drops its Redis mirror — but
+    /// nothing outside iam-svc reads session state, so the displaced device's access token stayed
+    /// valid until it expired. Up to thirty minutes, during which a phone the account had just
+    /// been signed out of could still accept rides.
+    /// </para>
+    /// <para>
+    /// <b>Absence of a tombstone is not evidence of anything, and this fails OPEN.</b> Redis is
+    /// best-effort across this platform — registry-svc's own rule is that an outage "degrades
+    /// coordination rather than refusing requests" — so a missing key, an unreachable server or a
+    /// restarted one all leave the request alone. Only a key that is *present* rejects, and a
+    /// present key can only have been written by a revocation. The alternative, treating absence as
+    /// revocation, would sign every driver on the platform out of a Redis restart.
+    /// </para>
+    /// <para>
+    /// The cost is one string GET per authenticated request against the same Redis every rate-limit
+    /// decision already reaches.
+    /// </para>
+    /// </remarks>
+    private static async Task RefuseRevokedSessionAsync(TokenValidatedContext context)
+    {
+        var jti = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+
+        // No `jti` means a token this check cannot speak about — the internal service tokens, for
+        // one, which carry no session at all. Not this middleware's business to refuse.
+        if (string.IsNullOrEmpty(jti))
+        {
+            return;
+        }
+
+        var redis = context.HttpContext.RequestServices.GetService<IConnectionMultiplexer>();
+
+        if (redis is null)
+        {
+            return;
+        }
+
+        bool revoked;
+        try
+        {
+            revoked = await redis.GetDatabase().KeyExistsAsync(RedisKeys.RevokedSession(jti));
+        }
+        catch (RedisException)
+        {
+            // Fail open. See the remarks: a Redis outage must not be an outage of the platform.
+            return;
+        }
+
+        if (!revoked)
+        {
+            return;
+        }
+
+        // `Fail` rather than writing the response here: it takes the request out of the
+        // authenticated path and leaves `OnChallenge` to render it, which is the one place this
+        // file writes a problem document.
+        context.Fail("device-revoked");
+
+        await WriteProblemAsync(
+            context.HttpContext,
+            MageRideErrors.DeviceRevoked,
+            "This account was signed in on another device.");
     }
 
     private static async Task WriteProblemAsync(HttpContext context, ErrorCode error, string? detail)

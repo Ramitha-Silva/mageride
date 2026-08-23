@@ -55,6 +55,16 @@ public sealed class SessionService(
 {
     private readonly TokenOptions _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
 
+    /// <summary>
+    /// How far past an access token's own expiry a revocation tombstone is kept (Δ MCS-30).
+    /// </summary>
+    /// <remarks>
+    /// The JWT validator allows a little clock skew, so a token can still be accepted slightly
+    /// after its stated expiry. A tombstone that expired exactly on time would leave that sliver
+    /// unguarded, which is the one window this whole mechanism exists to close.
+    /// </remarks>
+    private static readonly TimeSpan TokenSkew = TimeSpan.FromMinutes(5);
+
     public async Task<IssuedSession> IssueAsync(
         SessionPrincipal principal,
         Guid deviceRowId,
@@ -254,10 +264,31 @@ public sealed class SessionService(
             var database = redis.GetDatabase();
             var keys = sessionIds.Select(id => (RedisKey)RedisKeys.RefreshToken(id.ToString())).ToArray();
             await database.KeyDeleteAsync(keys).WaitAsync(cancellationToken);
+
+            // Δ MCS-30 — and a tombstone each, which is what actually ends the displaced device's
+            // session. Dropping the mirror above only stops it REFRESHING; its access token stayed
+            // valid for up to `AccessTokenLifetime` because nothing outside this service reads
+            // session state, so a phone that had just been signed out of could go on accepting
+            // rides for half an hour.
+            //
+            // The TTL is that same lifetime plus the clock skew the validator already allows: a
+            // tombstone must outlive every token it exists to kill, and once the last one has
+            // expired on its own there is nothing left for it to do.
+            var lifetime = _options.AccessTokenLifetime + TokenSkew;
+
+            await Task.WhenAll(sessionIds.Select(id =>
+                database.StringSetAsync(RedisKeys.RevokedSession(id.ToString()), "1", lifetime)))
+                .WaitAsync(cancellationToken);
         }
         catch (RedisException ex)
         {
-            logger.LogWarning(ex, "Could not drop {Count} revoked session mirrors from Redis", sessionIds.Count);
+            // Best effort, deliberately, and the consequence is worth naming: without the
+            // tombstone the displaced device keeps its access token until it expires, which is
+            // exactly the behaviour this replaced. Refusing the sign-in instead would let a Redis
+            // outage stop drivers signing in at all, which is worse than a bounded overlap.
+            logger.LogWarning(
+                ex, "Could not tombstone {Count} revoked sessions in Redis; they expire with their access tokens",
+                sessionIds.Count);
         }
     }
 }
