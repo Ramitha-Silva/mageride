@@ -101,6 +101,17 @@ public interface IRideTimerRepository
     /// </summary>
     Task<int> CountBacklogAsync(
         NpgsqlConnection connection, TimeSpan olderThan, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// <em>Whose</em> timers are behind the <see cref="CountBacklogAsync"/> gauge, same predicate.
+    /// </summary>
+    /// <remarks>
+    /// ADD §13.4's runbook trigger fires on a number; the first thing it asks for is the rides to
+    /// look at. Answering from the same SQL is what stops the runbook and the alert disagreeing.
+    /// Not on the scrape path — the gauge stays an indexed <c>count(*)</c>.
+    /// </remarks>
+    Task<IReadOnlyCollection<Guid>> BacklogRideIdsAsync(
+        NpgsqlConnection connection, TimeSpan olderThan, CancellationToken cancellationToken);
 }
 
 /// <inheritdoc cref="IRideTimerRepository"/>
@@ -239,20 +250,37 @@ public sealed class RideTimerRepository : IRideTimerRepository
             cancellationToken: cancellationToken));
     }
 
+    /// <summary>ADD §13.4's predicate, written once so the gauge and the runbook cannot drift.</summary>
+    private const string BacklogPredicate =
+        """
+        FROM rides.timers
+         WHERE kind = ANY(@Kinds)
+           AND fired_at IS NULL
+           AND fire_at < now() - make_interval(secs => @Seconds)
+        """;
+
     public async Task<int> CountBacklogAsync(
         NpgsqlConnection connection, TimeSpan olderThan, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
 
         return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
-            """
-            SELECT count(*)::int FROM rides.timers
-             WHERE kind = ANY(@Kinds)
-               AND fired_at IS NULL
-               AND fire_at < now() - make_interval(secs => @Seconds);
-            """,
+            $"SELECT count(*)::int {BacklogPredicate};",
             new { Kinds = OwnedKinds, Seconds = olderThan.TotalSeconds },
             cancellationToken: cancellationToken));
+    }
+
+    public async Task<IReadOnlyCollection<Guid>> BacklogRideIdsAsync(
+        NpgsqlConnection connection, TimeSpan olderThan, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        var ids = await connection.QueryAsync<Guid>(new CommandDefinition(
+            $"SELECT DISTINCT ride_id {BacklogPredicate};",
+            new { Kinds = OwnedKinds, Seconds = olderThan.TotalSeconds },
+            cancellationToken: cancellationToken));
+
+        return [.. ids];
     }
 
     /// <summary>

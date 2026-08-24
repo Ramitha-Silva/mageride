@@ -221,6 +221,18 @@ public interface IRideRepository
     Task<int> CountStuckAsync(
         NpgsqlConnection connection, string state, TimeSpan age, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// <em>Which</em> rides are behind the <see cref="CountStuckAsync"/> gauge, same predicate.
+    /// </summary>
+    /// <remarks>
+    /// A gauge reading <c>rides_stuck{state="Accepted"} = 7</c> tells on-call that something is
+    /// wrong and nothing about where to look; this is the next question, and answering it from the
+    /// same SQL is what stops the diagnostic and the alert disagreeing. It is deliberately NOT on
+    /// the scrape path — the gauge stays an indexed <c>count(*)</c>.
+    /// </remarks>
+    Task<IReadOnlyCollection<Guid>> StuckRideIdsAsync(
+        NpgsqlConnection connection, string state, TimeSpan age, CancellationToken cancellationToken);
+
     /// <summary>Outbox rows for this ride that the dispatcher has not published yet (saga diagnostics).</summary>
     Task<int> CountPendingOutboxAsync(
         NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid rideId, CancellationToken cancellationToken);
@@ -896,22 +908,43 @@ public sealed class RideRepository : IRideRepository
             cancellationToken: cancellationToken));
     }
 
+    /// <summary>
+    /// ADD §13.3.1's predicate, written once so the gauge and the diagnostic cannot drift.
+    /// </summary>
+    /// <remarks>
+    /// <c>updated_at</c> is the instant the ride entered its state — every transition writes it —
+    /// and reading it is cheaper than joining <c>rides.transitions</c> on the scrape path.
+    /// </remarks>
+    private const string StuckPredicate =
+        """
+        FROM rides.rides
+         WHERE state = @State
+           AND updated_at < now() - make_interval(secs => @Seconds)
+        """;
+
     public async Task<int> CountStuckAsync(
         NpgsqlConnection connection, string state, TimeSpan age, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
 
         // ADD §13.3.1: `count(rides WHERE state=S AND age > T)`, where age is time in the state.
-        // `updated_at` is that instant — every transition writes it — and it is cheaper than
-        // joining rides.transitions on the scrape path.
         return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
-            """
-            SELECT count(*)::int FROM rides.rides
-             WHERE state = @State
-               AND updated_at < now() - make_interval(secs => @Seconds);
-            """,
+            $"SELECT count(*)::int {StuckPredicate};",
             new { State = state, Seconds = age.TotalSeconds },
             cancellationToken: cancellationToken));
+    }
+
+    public async Task<IReadOnlyCollection<Guid>> StuckRideIdsAsync(
+        NpgsqlConnection connection, string state, TimeSpan age, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        var ids = await connection.QueryAsync<Guid>(new CommandDefinition(
+            $"SELECT id {StuckPredicate} ORDER BY updated_at;",
+            new { State = state, Seconds = age.TotalSeconds },
+            cancellationToken: cancellationToken));
+
+        return [.. ids];
     }
 
     public async Task<int> CountPendingOutboxAsync(
