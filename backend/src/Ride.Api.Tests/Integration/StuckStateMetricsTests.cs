@@ -11,10 +11,25 @@ namespace MageRide.Ride.Tests.Integration;
 /// The R-20 stuck-state business SLOs (ADD §13.3.1) and the §13.4 timer-backlog runbook trigger.
 /// </summary>
 /// <remarks>
-/// Every count is asserted as a <em>delta</em> against a baseline taken first: the whole suite
-/// shares one database, so a gauge that is global by design will legitimately be counting other
-/// tests' rides. What matters is that the rule picks up the ride this test made stuck and ignores
-/// the one it made fresh.
+/// <para>
+/// <b>Every assertion is about THIS test's ride, by id — never about a count.</b> The gauge is
+/// global by design and the suite shares one database with no cleanup, so a ride any other test
+/// left in a short-window state drifts into "stuck" the moment its window elapses and stays there.
+/// </para>
+/// <para>
+/// A delta against a baseline does not survive that, which is what these tests used to assert and
+/// why they were flaky: <c>Accepted</c>'s window is sixty seconds, so a foreign ride that was 55 s
+/// old when the baseline was taken is 65 s old by the final read, and <c>baseline + 1</c> comes
+/// back as <c>baseline + 2</c>. Observed in CI on 2026-08-23 as <c>Expected: 6, Actual: 7</c>.
+/// Widening the tolerance would have hidden the rule instead of pinning it — a gauge that counted
+/// every ride would pass a <c>&gt;= baseline + 1</c> assertion perfectly.
+/// </para>
+/// <para>
+/// Membership has no such window: <c>StuckRideIds</c> either contains the ride this test aged or
+/// it does not, whatever every other ride on the platform is doing. It runs the same SQL predicate
+/// as the gauge (one <c>const</c> in the repository), so this still pins ADD §13.3.1 rather than a
+/// copy of it.
+/// </para>
 /// </remarks>
 [Collection<RideCollection>]
 public sealed class StuckStateMetricsTests(PostgresFixture postgres)
@@ -60,17 +75,22 @@ public sealed class StuckStateMetricsTests(PostgresFixture postgres)
         var observer = harness.Services.GetRequiredService<StuckStateObserver>();
         var rule = StuckStateObserver.Rules.Single(candidate => candidate.State == state);
 
-        var baseline = observer.CountStuck(rule);
-
         // A ride that has only just got here is healthy, however tight the window.
         var fresh = await harness.DriveToAsync(state);
-        Assert.Equal(baseline, observer.CountStuck(rule));
+        Assert.DoesNotContain(fresh.RideId, observer.StuckRideIds(rule));
 
         // Age it past the threshold. `updated_at` is when the ride entered the state, which is what
         // ADD §13.3.1 means by "age".
         await AgeAsync(harness, fresh.RideId, rule.Age + TimeSpan.FromSeconds(30));
 
-        Assert.Equal(baseline + 1, observer.CountStuck(rule));
+        Assert.Contains(fresh.RideId, observer.StuckRideIds(rule));
+
+        // The gauge the alert actually reads is the count over that same set, so it has to have
+        // moved with it — asserted as "at least", because another test's ride crossing its own
+        // window between these two lines is legitimate and is not this test's business.
+        Assert.True(
+            observer.CountStuck(rule) >= 1,
+            "the gauge counts the set, so a ride in the set means a non-zero gauge");
     }
 
     /// <summary>
@@ -86,10 +106,9 @@ public sealed class StuckStateMetricsTests(PostgresFixture postgres)
         await using var harness = await RideHarness.StartAsync(postgres, MetricsOn);
 
         var observer = harness.Services.GetRequiredService<StuckStateObserver>();
-        var baseline = observer.CountBacklog();
 
         var ride = await harness.DriveToAsync("Accepted");
-        Assert.Equal(baseline, observer.CountBacklog());
+        Assert.DoesNotContain(ride.RideId, observer.BacklogRideIds());
 
         await using (var connection = await harness.OpenAsync())
         {
@@ -100,7 +119,7 @@ public sealed class StuckStateMetricsTests(PostgresFixture postgres)
                 new { RideId = ride.RideId });
         }
 
-        Assert.Equal(baseline, observer.CountBacklog());
+        Assert.DoesNotContain(ride.RideId, observer.BacklogRideIds());
 
         await using (var connection = await harness.OpenAsync())
         {
@@ -109,11 +128,11 @@ public sealed class StuckStateMetricsTests(PostgresFixture postgres)
                 new { RideId = ride.RideId });
         }
 
-        Assert.Equal(baseline + 1, observer.CountBacklog());
+        Assert.Contains(ride.RideId, observer.BacklogRideIds());
 
         // And a swept timer leaves the backlog, so the alert clears on its own.
         await harness.SweepTimersAsync();
-        Assert.Equal(baseline, observer.CountBacklog());
+        Assert.DoesNotContain(ride.RideId, observer.BacklogRideIds());
     }
 
     /// <summary>
@@ -129,7 +148,6 @@ public sealed class StuckStateMetricsTests(PostgresFixture postgres)
 
         var observer = harness.Services.GetRequiredService<StuckStateObserver>();
         var rule = StuckStateObserver.Rules.Single(candidate => candidate.State == RideStates.Accepted);
-        var baseline = observer.CountStuck(rule);
 
         var ride = await harness.DriveToAsync("Accepted");
 
@@ -142,7 +160,7 @@ public sealed class StuckStateMetricsTests(PostgresFixture postgres)
 
         await AgeAsync(harness, ride.RideId, TimeSpan.FromDays(30));
 
-        Assert.Equal(baseline, observer.CountStuck(rule));
+        Assert.DoesNotContain(ride.RideId, observer.StuckRideIds(rule));
     }
 
     /// <summary>

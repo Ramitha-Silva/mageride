@@ -488,8 +488,16 @@ internal sealed class FleetHealthHarness : IAsyncDisposable
             """);
     }
 
+    /// <summary>
+    /// A number no other seed in this run has used — see <c>RideHarness.NextPhone</c> for why this
+    /// is a counter and not <c>Random.Shared</c> (<c>users_phone_key</c> is UNIQUE and the database
+    /// is shared and never truncated).
+    /// </summary>
     private static string NextPhone() =>
-        $"+9477{Random.Shared.Next(1_000_000, 9_999_999).ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        "+9477" + (Interlocked.Increment(ref _phoneCounter) % 10_000_000)
+            .ToString("D7", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static long _phoneCounter;
 
     private static string NextPlate() =>
         $"FH-{Interlocked.Increment(ref _plateCounter).ToString(System.Globalization.CultureInfo.InvariantCulture)}";

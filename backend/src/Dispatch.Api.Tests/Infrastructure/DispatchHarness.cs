@@ -1170,8 +1170,15 @@ internal sealed class DispatchHarness : IAsyncDisposable
     private static HttpClient NewClient(WebApplication app) =>
         new() { BaseAddress = new Uri(BaseAddressOf(app)), Timeout = TimeSpan.FromSeconds(60) };
 
+    /// <summary>
+    /// A number no other seed in this run has used — see <c>RideHarness.NextPhone</c> for why this
+    /// is a counter and not <c>Random.Shared</c> (<c>users_phone_key</c> is UNIQUE and the database
+    /// is shared and never truncated).
+    /// </summary>
     private static string NextPhone() =>
-        "+9477" + Random.Shared.NextInt64(1_000_000, 9_999_999).ToString(CultureInfo.InvariantCulture);
+        "+9477" + (Interlocked.Increment(ref _phoneCounter) % 10_000_000).ToString("D7", CultureInfo.InvariantCulture);
+
+    private static long _phoneCounter;
 }
 
 /// <summary>A driver plus the one vehicle they were seeded with.</summary>

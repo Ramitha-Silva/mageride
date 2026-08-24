@@ -86,14 +86,44 @@ public sealed class StuckStateObserver : IDisposable
     {
         ArgumentNullException.ThrowIfNull(rule);
 
-        return Measure(async (connection, rides, _, cancellationToken) =>
-            await rides.CountStuckAsync(connection, rule.State, rule.Age, cancellationToken));
+        return Measure(
+            async (connection, rides, _, cancellationToken) =>
+                await rides.CountStuckAsync(connection, rule.State, rule.Age, cancellationToken),
+            fallback: 0);
     }
 
     /// <summary>Overdue timers this service owns (ADD §13.4's runbook trigger).</summary>
     public int CountBacklog() =>
-        Measure(async (connection, _, timers, cancellationToken) =>
-            await timers.CountBacklogAsync(connection, BacklogWindow, cancellationToken));
+        Measure(
+            async (connection, _, timers, cancellationToken) =>
+                await timers.CountBacklogAsync(connection, BacklogWindow, cancellationToken),
+            fallback: 0);
+
+    /// <summary>
+    /// <em>Which</em> rides are behind one gauge — the question on-call asks second.
+    /// </summary>
+    /// <remarks>
+    /// Not on the scrape path: the gauge stays an indexed <c>count(*)</c> and this is a separate
+    /// call over the same predicate. It is also what lets a test assert about the ride it made
+    /// stuck rather than about a global tally — the gauge counts every ride on the platform, so a
+    /// count taken before and after cannot tell this ride's arrival from any other ride's.
+    /// </remarks>
+    public IReadOnlyCollection<Guid> StuckRideIds(StuckStateRule rule)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+
+        return Measure(
+            async (connection, rides, _, cancellationToken) =>
+                await rides.StuckRideIdsAsync(connection, rule.State, rule.Age, cancellationToken),
+            fallback: Array.Empty<Guid>());
+    }
+
+    /// <summary>Whose timers are behind the §13.4 backlog gauge.</summary>
+    public IReadOnlyCollection<Guid> BacklogRideIds() =>
+        Measure(
+            async (connection, _, timers, cancellationToken) =>
+                await timers.BacklogRideIdsAsync(connection, BacklogWindow, cancellationToken),
+            fallback: Array.Empty<Guid>());
 
     public void Dispose()
     {
@@ -112,8 +142,9 @@ public sealed class StuckStateObserver : IDisposable
     /// scrape interval, against one indexed count. A query that fails reports 0 and logs: a broken
     /// gauge must not take the whole scrape (and with it every other service's metrics) down.
     /// </remarks>
-    private int Measure(
-        Func<Npgsql.NpgsqlConnection, IRideRepository, IRideTimerRepository, CancellationToken, Task<int>> query)
+    private T Measure<T>(
+        Func<Npgsql.NpgsqlConnection, IRideRepository, IRideTimerRepository, CancellationToken, Task<T>> query,
+        T fallback)
     {
         try
         {
@@ -135,8 +166,8 @@ public sealed class StuckStateObserver : IDisposable
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "A stuck-state gauge could not be measured; reporting 0 for this scrape");
-            return 0;
+            _logger.LogWarning(exception, "A stuck-state measurement failed; reporting the empty answer for this scrape");
+            return fallback;
         }
     }
 }
