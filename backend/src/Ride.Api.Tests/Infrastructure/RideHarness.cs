@@ -769,8 +769,23 @@ internal sealed class RideHarness : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// A number no other seed in this run has used.
+    /// </summary>
+    /// <remarks>
+    /// <b>A counter, not <c>Random.Shared</c>, and the difference is a flaky suite.</b>
+    /// <c>iam.users.phone</c> is UNIQUE and this collection shares one database that nothing ever
+    /// truncates, so every user seeded by every test in the run accumulates. A random draw from
+    /// seven digits collides on the birthday bound long before the pool is exhausted — a few
+    /// hundred users is already a couple of percent per run — and it surfaces as
+    /// <c>23505 duplicate key value violates unique constraint "users_phone_key"</c> in whichever
+    /// test happened to draw second. Seen on 2026-08-24 in <c>SagaStateTests</c>.
+    /// <c>IamHarness</c> and <c>ReputationHarness</c> already mint theirs this way.
+    /// </remarks>
     private static string NextPhone() =>
-        "+9477" + Random.Shared.NextInt64(1_000_000, 9_999_999).ToString(CultureInfo.InvariantCulture);
+        "+9477" + (Interlocked.Increment(ref _phoneCounter) % 10_000_000).ToString("D7", CultureInfo.InvariantCulture);
+
+    private static long _phoneCounter;
 
     private static void Authorize(HttpRequestMessage request, string? bearer)
     {
