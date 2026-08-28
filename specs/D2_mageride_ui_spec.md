@@ -78,6 +78,15 @@ _Canonical vehicle types (AL-09; MAP-03): "car"→**sedan**; +truck/mini_truck (
 **Typography** — Android: Material 3 type scale, font **Outfit** (display/headline) + **Inter** (body);
 iOS: **SF Pro** with **Dynamic Type** (mapped roles). Sizes are the shared design contract:
 
+> **Script-scoped display faces — web only** (Δ 2026-08-28 (MCS-34)). Neither Outfit nor Inter
+> carries Sinhala or Tamil glyphs, so on the **web surfaces** those subsets fall through to the
+> system face. At body sizes that is correct and stays. At **display sizes** it is visibly
+> unfinished, so web surfaces additionally load **Noto Sans Sinhala** and **Noto Sans Tamil**,
+> `unicode-range`-scoped to their own scripts and applied to the **Display / Headline** roles only;
+> Latin still resolves to Outfit, and body copy is unchanged. **Android (Compose) and iOS (SwiftUI)
+> are unaffected** — both already resolve Sinhala and Tamil from the platform type stack and need no
+> font added.
+
 | Role | Android M3 token | iOS Dynamic Type | px / pt | Weight |
 |---|---|---|---|---|
 | Display | `displaySmall` | `.largeTitle` | 32 | 700 |
@@ -1488,6 +1497,21 @@ All in-scope items ✅ — **document NOT `[INCOMPLETE]`.**
 | Section AP (`admin-portal`) | Intro line now mandates Tailwind CSS via the shared preset | AL-52 |
 | Section FP (`fleet-portal`) | Intro line now mandates Tailwind CSS via the shared preset | AL-52 |
 | SCR-WT-001…006 (`public-bff` pages) | Reuse the same Tailwind preset/pipeline for visual consistency (no separate CSS stack) | AL-52 |
+| `www.mageride.lk` (informational site) | Same preset/pipeline. **Motion is CSS keyframes + the Web Animations API — no motion library** (Δ 2026-08-28, MCS-34) | AL-52 |
+
+> **Δ 2026-08-28 (MCS-34) — two script-scoped display faces, web only.** §0.2's type stack gains
+> **Noto Sans Sinhala** and **Noto Sans Tamil**, `unicode-range`-scoped and applied to the
+> **Display / Headline** roles on **web surfaces only**; Outfit and Inter are unchanged for Latin and
+> for body copy, and **Compose / SwiftUI are untouched** (both resolve these scripts from the
+> platform type stack). Self-hosted and subset in the build, per the same strict-CSP reasoning that
+> put no CDN `<link>` in the render path of `passenger.mageride.lk`.
+>
+> **AL-52 is not widened by this.** `check-al52.mjs` bans 18 packages and 6 prefixes;
+> `framer-motion` / `motion` is on **neither list** and would pass the checker while still violating
+> AL-52's stated intent — *CSS compiled at build time by PostCSS, no runtime style injection*. The
+> banned list is deliberately **not** extended to cover it: that would be a platform-wide styling
+> change made for one marketing surface. The fence lives in C134's manifest entry and is made
+> greppable by its own `test/fences.test.ts`.
 
 ## Δ Addendum — Discussion 2026-07-22 #2 (GTFS Dataset Manager `SCR-AP-016`, US-28.1…28.3)
 

@@ -21867,3 +21867,44 @@ be green now. A suite nothing runs is a suite that rots — this one accumulated
 non-terminating class before anyone ran it once. Wiring `xcodebuild … test` into the leg is the
 change that closes it, and it is now cheap to argue for: the suites are green, so the leg would go
 red only on a real regression.
+
+- **Component:** C134 www-informational-site — S01 (MCS-34 governance,
+  `build/prompts/C134-www/S01-governance-mcs34.md`) — 2026-08-28
+- **Status:** DONE — `grep -c "four surfaces" specs/user-requirements-document.md` = 0;
+  `grep -rn "www.mageride.lk" specs/ | wc -l` = 7; `grep -c "SCR-WW" build/screen_coverage.md` = 0;
+  `git diff --stat` = the 3 spec files only. The generator was **not** run — `build/manifest.yaml`
+  and `build/screen_coverage.md` are untouched. No application code; `portals/www/` does not exist
+  yet (S03).
+- **Notes:**
+  **Decisions taken.** D1 **national-infrastructure-led** mission — *"one live picture of how the
+  country moves"* — chosen as a **framing, not published copy**; it carries a coverage claim
+  ("every bus, every train") that is false on launch day, so S07 owes an honest qualifier beneath
+  the hero and is unblocked only on that basis. D2 **si + en first**, Tamil deferred to the next
+  release → S13 conditional (the `ta` table still exists and still type-checks, so a missing key
+  stays a compile error). D3 store URLs **not live** → `/download` is an email-notify page with
+  **no form**, links are placeholder resource keys. D4 `/contact` **email-only, no phone**, and the
+  address itself is a placeholder — the user has not chosen between a domain mailbox and the
+  account address. D5 Terms/Privacy **supplied by counsel later**; every C134 session structures and
+  translates and **authors no legal text**. D3/D4/D5 each owe a `docs/production/go-live-checklist.md`
+  row. D6–D10 carry the planning recommendation uncontested: container over Pages, fleet guide in a
+  second phase (S23), no 4th breakpoint, no `SCR-WW-###` IDs (coverage stays 202/202), wireframe-
+  derived imagery now.
+  **Three plan corrections.** (a) *"four surfaces" is in **five** URD places, not three.*
+  `docs/www-site-plan.md`, `C134-www/README.md` §5 and S01 all name lines 69 / 608 / 1227; grep also
+  returns **line 5** (v2.2 entry in the version header) and **line 615 (US-11.8)**. Editing three of
+  five would have failed S01's own verify and left the document self-contradictory. (b) *US-11.8
+  could not have its number incremented.* It reads "All four surfaces share the same backend and
+  **identity service**" — `www` authenticates nobody, so "all five" would have introduced a **new
+  false statement** in a change set whose purpose is removing one. It is scoped to the four product
+  surfaces with `www` explicitly excluded. (c) ***`MageRide_Government_Proposal.md` does not exist in
+  this repo.*** `docs/www-site-plan.md` §0.4 and `S07-content-vision-mission.md` both cite it as a
+  vision source and quote it; `find` turns up no such file and that sentence appears only inside
+  the plan and S07 themselves. **S07 has one real source — URD §1** — and should be read that way.
+  **Left open deliberately.** `specs/MageRide_Functional_Walkthrough.md:42` still says "four
+  surfaces"; S01's diff is fenced to three spec files, and the phrase is scoped there as "the four
+  'apps' people use", which a marketing site is not. Revisit when that document is next touched.
+  **Prompt contradiction, resolved and flagged.** S01's Verify says `build/progress.md` must be
+  unchanged; its own Handoff section, `C134-www/README.md` §1 and CLAUDE.md all require this append.
+  Read the Verify line as its context intends — *the generator was not run* — which is what the
+  companion assertions about `manifest.yaml` and `screen_coverage.md` are really testing. This
+  entry is hand-written and additive; it is the thing a regeneration would destroy, not create.

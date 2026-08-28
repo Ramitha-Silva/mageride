@@ -59,12 +59,18 @@ canonical layout below.
 | `voip` *(opt)* | `livekit/livekit-server` + `coturn` | 1 GB/0.5 | 7880, 7881, 3478/UDP, 50000-50100/UDP | VoIP SFU + TURN (host UDP, NOT via HAProxy) |
 | `admin-portal` *(opt)* | Next.js Node24-alpine | 512 MB/0.25 | 3001 | Admin Portal `admin.mageride.lk` — back-office for all six internal roles (AL-02; or Vercel/CF Pages) |
 | `fleet-portal` *(opt)* | Next.js Node24-alpine | 512 MB/0.25 | 3002 | Fleet Portal `fleet.mageride.lk` (AL-03; or Vercel/CF Pages) |
+| `www-site` *(opt)* | Next.js Node24-alpine | 512 MB/0.25 | 3004 | Public informational site `www.mageride.lk` — marketing + how-to-use guides; **public, unauthenticated, no personal data, no API dependency at request time** (renders with the whole backend down). Δ 2026-08-28 (MCS-34) |
 | `nominatim` *(opt)* | `mediagis/nominatim:4.4` | **8 GB/1.0** | 8080 | geocoder — **host on separate VPS** (D-14) |
 | `monitoring` *(opt)* | `prom/prometheus` + `grafana` | 1 GB/0.5 | 9090, 3000 | metrics |
 | `osm-pipeline` *(batch)* | custom | 2 GB/1.0 (transient) | — | weekly tile/geocoder refresh (D-15) |
 
-> A **24 GB / 6 vCPU Contabo VPS-30** runs core 10 + voip + admin-portal + fleet-portal + monitoring (~18.9 GB) with
-> ~5 GB OS headroom; Nominatim on a separate cheap 8 GB VPS; osm-pipeline runs on schedule and exits.
+> A **24 GB / 6 vCPU Contabo VPS-30** runs core 10 + voip + admin-portal + fleet-portal + www-site + monitoring
+> (**~19.4 GB** — Δ 2026-08-28 (MCS-34): +512 MB for `www-site`) with **~4.6 GB** OS headroom; Nominatim on a
+> separate cheap 8 GB VPS; osm-pipeline runs on schedule and exits.
+>
+> **Eviction order if the box is tight: `www-site` leaves first.** It is the only container in the
+> table whose absence costs no platform function — no passenger, driver, fleet or internal user loses
+> a capability when the marketing site is down, and nothing else in the stack depends on it being up.
 
 ### 2.2 Dockerfile template (.NET 10 LTS service)   [NEW]
 ```dockerfile
@@ -275,6 +281,14 @@ spec:
       - { path: /hubs, pathType: Prefix, backend: { service: { name: fanout-svc, port: { number: 80 } } } }
       - { path: /,     pathType: Prefix, backend: { service: { name: api-gateway, port: { number: 80 } } } } }
 ```
+**Host list (Δ 2026-08-28 (MCS-34)).** The example above carries `api.mageride.lk` only; the portal
+hosts live in `infra/k8s/base/ingress/` and are `admin.mageride.lk`, `fleet.mageride.lk`,
+`passenger.mageride.lk` and — new with C134 — **`www.mageride.lk`**, with the **`mageride.lk` apex
+301-redirecting to it** so the canonical host is unambiguous for search engines and certificate
+issuance. The informational site's rule needs no `/hubs` path and no `api-gateway` backend: it is a
+static Next.js container that calls no API at request time, so its ingress entry is a single prefix
+route to the `www-site` service and its TLS host joins `mr-tls`.
+
 **ConfigMap/Secret:** `common-config` (ConfigMap, §4.1 non-secret), `<svc>-secret` (Secret, §4.2
 secrets) — sourced from Vault via External Secrets Operator (§13). **PVC:** `provisioning-ca-data`
 (step-ca, T-02), `pgdata`, `redpandadata`, `emqxdata`.
