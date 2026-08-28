@@ -10,7 +10,8 @@
 #                         fleet/admin-bff/public-bff/analytics
 #   4a Android apps ..... Driver + Passenger (shell + 8 screen groups each)
 #   4b iOS apps ......... parity-fenced to 4a; every verify_cmd runs on macOS
-#   4c Portals .......... Tailwind preset, Admin Portal, Fleet Portal, Web Passenger subview
+#   4c Portals .......... Tailwind preset, Admin Portal, Fleet Portal, Web Passenger subview,
+#                         www informational site
 #   5  Integration ...... contract tests, observability, E2E flows, CI/CD, replica deploy,
 #                         day-0 GTFS full-feed load
 #   6  Hardening ........ security/ASVS, anti-spoof, load, chaos, SG acceptance, DOKS readiness
@@ -4016,6 +4017,46 @@ components:
     - Lighthouse mobile passes with no horizontal scroll at 375 px
   verify_cmd: "npm --prefix portals run lint --workspace web-passenger && npm --prefix portals run test --workspace web-passenger && npm --prefix portals run build --workspace web-passenger"
   est_sessions: 2
+
+- id: C134
+  name: www-informational-site
+  wave: 4c
+  depends_on: [C103]
+  stack: portals/www/CLAUDE.md
+  screens: []
+  spec_anchors:
+    - specs/user-requirements-document.md#1-product-vision
+    - specs/MageRide_Functional_Walkthrough.md#1-platform-overview
+    - specs/D2_mageride_ui_spec.md#0-2-mageride-design-tokens
+    - specs/D1_mageride_user_flows.md
+  scope: |
+    The public informational site at www.mageride.lk — vision & mission, the three transport
+    modes, a screen showcase derived from the approved wireframes, and complete how-to-use
+    guides for passengers and drivers. The fifth surface (MCS-34). ADD: [AL-52].
+  fences:
+    - "Tailwind CSS is the SOLE styling system (AL-52). No animation library that injects styles at runtime — motion is CSS keyframes + the Web Animations API. Framer Motion would pass check-al52.mjs and is still excluded."
+    - "No API call at request time. This surface must render with the whole backend down — no fetch, no NEXT_PUBLIC_*, no live map, no vehicle count."
+    - "No cookies, no analytics that sets one, no personal data collected on any page. There is no contact form."
+    - "Every user-facing string is an si/ta/en resource. No literal in JSX."
+    - "Claims no SCR-* ID (MCS-34, decision D9). screen_coverage.md stays 202/202."
+  deliverables:
+    - portals/www — a Next.js 16 workspace member consuming @mageride/tailwind-preset, @mageride/ui and @mageride/i18n
+    - a sliding hero and a CSS/WAAPI motion layer with prefers-reduced-motion as a first-class path
+    - ~70 wireframe-derived screen images composited into device frames, committed and size-gated
+    - vision, mission and values as public copy, every factual claim carrying a spec anchor
+    - a 16-chapter passenger guide and an 18-chapter driver guide, si/ta/en
+    - full SEO — hreflang, JSON-LD (Organization, WebSite, SoftwareApplication ×2, FAQPage, HowTo per chapter), sitemap
+    - deployment as the fourth portal container — catalog entry, ingress host, apex 301, replica service
+  definition_of_done:
+    - every user-facing string is an si/ta/en resource and check-i18n-parity.mjs is green
+    - the hero meets the APG carousel pattern and is fully keyboard-operable
+    - prefers-reduced-motion disables autoplay and every transform-based effect
+    - 34+ guide chapters cover every passenger and driver capability across URD Epics 1-27
+    - test/fences.test.ts proves no network call at request time — the site renders with the backend down
+    - Lighthouse >=95 performance / 100 accessibility / >=95 SEO on /, /drivers and one guide chapter, in all three locales
+    - generate_manifests.py --check is clean and the ingress serves www.mageride.lk with the apex 301
+  verify_cmd: "npm --prefix portals run lint && npm --prefix portals run build --workspace @mageride/www && npm --prefix portals run test --workspace @mageride/www"
+  est_sessions: 22
 
 # ============================================================================
 # WAVE 5 — INTEGRATION

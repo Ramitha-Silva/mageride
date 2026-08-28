@@ -149,7 +149,7 @@ gates = {
     "3": "every business service test suite green; ledger balances in all money tests",
     "4a": "both Android apps build and every owned SCR-* screen matches its wireframe",
     "4b": "both iOS apps build and test **on macOS**; parity with 4a confirmed screen-for-screen",
-    "4c": "all three web surfaces lint + test + build; zero runtime CSS-in-JS in any bundle",
+    "4c": "all four web surfaces lint + test + build; zero runtime CSS-in-JS in any bundle",
     "5": "contract suite green against the deployed replica — **two exceptions granted 2026-08-12**: E2E in-process only, and the day-0 GTFS feed is an external dependency (see Planner findings). **C133's go-live gate still requires the feed.**",
     "6": "no open high/critical security findings; load, chaos and SG acceptance reports signed off",
 }
