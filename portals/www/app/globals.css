@@ -1,0 +1,1212 @@
+/*
+ * The informational site's entire stylesheet.
+ *
+ * AL-52: Tailwind is the sole styling system, the D2 §0.2 tokens arrive through
+ * the shared preset, and CSS is compiled at build time by PostCSS inside
+ * `npm run build`. There is no second stylesheet, no CSS module and no runtime
+ * style injection anywhere in this application — and on this surface that extends
+ * to **no motion library** (MCS-34): `framer-motion` and `motion/react` are not on
+ * `banned-styling-packages.json` and would pass `check-al52.mjs` clean, so the
+ * fence is held by `scripts/check-bundle.mjs` and `test/fences.test.ts` instead.
+ * Motion here is CSS keyframes plus the Web Animations API (S04).
+ *
+ * The two imports are the whole setup — no `tailwind.config.js`, because a v4 JS
+ * config *merges* `screens` instead of replacing them and D2's 375px `sm:` would
+ * quietly go back to being Tailwind's 640px one
+ * (`portals/tailwind-preset/README.md`). MCS-34 D8 declined a fourth breakpoint
+ * for this surface and caps it at `max-w-[1200px]` instead, so D2's three widths
+ * are the only three widths.
+ */
+
+@import 'tailwindcss';
+@import '@mageride/tailwind-preset/theme.css';
+
+/*
+ * `@mageride/ui` ships from `dist/`, which the root `.gitignore` ignores, so
+ * Tailwind's automatic source detection skips it and every shared primitive would
+ * render unstyled. Pointed at `src/` rather than `dist/` deliberately: the class
+ * strings are identical in both, and `src/` is tracked — so this line does not
+ * depend on a build having already run.
+ */
+@source '../../ui/src/**/*.tsx';
+
+/*
+ * ---------------------------------------------------------------------------
+ * Registered custom properties (S04).
+ *
+ * At the top level and not inside a layer, deliberately. `@property` is a
+ * *registration* — it gives a custom property a type, an initial value and an
+ * inheritance rule — and it is not a style rule, so it has no cascade position
+ * for `@layer` to order. Putting it in a layer would suggest it competes with
+ * something. It does not.
+ *
+ * Registration is what makes a custom property **animatable at all**: an
+ * unregistered one is an untyped token the browser cannot interpolate, so
+ * `Element.animate()` over it snaps rather than counts, and `@keyframes` over it
+ * does nothing. Every one of the three below is animated or transitioned.
+ * ---------------------------------------------------------------------------
+ */
+
+/*
+ * The parallax offset. `<length>` and not a raw token so that a bad write from
+ * `src/components/motion/Parallax.tsx` is *ignored* by the browser and the
+ * mockup sits still, rather than invalidating the whole `transform` and dropping
+ * the element to an untransformed position mid-scroll.
+ */
+@property --mr-www-parallax-y {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+/*
+ * The stat counter's value. `<integer>` is what `counter()` needs to render it,
+ * and it is what lets `Element.animate()` tween 0 → 1250 in the compositor's own
+ * units instead of in JavaScript with a `setState` per frame.
+ */
+@property --mr-www-count {
+  syntax: '<integer>';
+  inherits: false;
+  initial-value: 0;
+}
+
+/*
+ * The aurora's alpha. `inherits: true` on purpose: the two blobs are `::before`
+ * and `::after`, and a non-inherited property resolves to its *initial* value on
+ * a pseudo-element rather than to the value set on the originating element — so
+ * a page that tuned the alpha on `.mr-aurora` would find the blobs ignoring it.
+ */
+@property --mr-www-aurora-alpha {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 20%;
+}
+
+/*
+ * The carousel dot's autoplay progress, 0 → 1 (S14).
+ *
+ * `<number>` and not `<percentage>`, because it is consumed by `scaleX()`, which
+ * takes a number — and because a registered `<number>` is *interpolable*, which is
+ * the entire reason this is a custom property and not an inline width written by a
+ * `setInterval`. `Element.animate()` hands the tween to the compositor; the
+ * alternative writes a style on every frame from the main thread, on a page whose
+ * budget (A34) assumes a 3G-throttled mid-range Android.
+ *
+ * `initial-value: 1` and not `0`: the resting state of the active dot is **full**.
+ * A reader with autoplay paused, or with reduced motion on, sees a solid pill
+ * rather than an empty outline waiting for a timer that will never start.
+ */
+@property --mr-www-carousel-progress {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+
+@layer base {
+  /*
+   * Tells the browser which palette its own controls, scrollbars and form widgets
+   * should use. Not a D2 token and not a colour — a hint, and the one thing that
+   * stops a dark page from drawing a white scrollbar down its side.
+   */
+  :root {
+    color-scheme: light;
+  }
+
+  :root:has(.dark),
+  .dark {
+    color-scheme: dark;
+  }
+
+  /*
+   * The two families D2 §0.2 names, composed with the script face the page's own
+   * language needs (S04, A13).
+   *
+   * D2 names Outfit (display) and Inter (body) and **neither carries a Sinhala or
+   * a Tamil glyph**, which `portals/web-passenger/app/layout.tsx` says in its own
+   * words. On a token-gated utility page falling through to the reader's system
+   * face is fine. On a hero setting 48–72px Sinhala it is a visibly unfinished
+   * page beside the English cut, so this surface adds Noto Sans Sinhala and Noto
+   * Sans Tamil (`app/[locale]/layout.tsx`).
+   *
+   * **The order is the whole mechanism.** `next/font` emits a `unicode-range` per
+   * subset, so a Latin codepoint is drawn by Outfit or Inter — which is why a
+   * brand name, a URL and a number keep the design system's face inside a Sinhala
+   * page — and a Sinhala codepoint, which those two do not cover, falls through to
+   * the next family in the list. Nothing selects a face per *string*; the browser
+   * selects per *character*, which is the only thing that works on a line reading
+   * "MageRide යනු …".
+   *
+   * The preset publishes `--font-display: var(--mr-font-outfit, 'Outfit'), …`, so
+   * `--mr-font-outfit` is its documented injection point and this is a legitimate
+   * value to inject — the token is not being redefined, it is being *supplied*.
+   * The two `next/font` faces bind to `--mr-font-*-latin` rather than to
+   * `--mr-font-outfit` directly because `--mr-font-outfit: var(--mr-font-outfit),
+   * …` would be a cycle and would resolve to nothing at all.
+   *
+   * `html[lang='si']` is (0,1,1) and beats `next/font`'s own (0,1,0) class, so the
+   * order of the two in the stylesheet cannot decide the outcome. Each `var()`
+   * carries the plain family name as a fallback, so a missing `next/font` class
+   * degrades to the installed face rather than making the whole declaration
+   * invalid.
+   */
+  html {
+    --mr-font-outfit: var(--mr-font-outfit-latin, 'Outfit');
+    --mr-font-inter: var(--mr-font-inter-latin, 'Inter');
+  }
+
+  html[lang='si'] {
+    --mr-font-outfit: var(--mr-font-outfit-latin, 'Outfit'),
+      var(--mr-font-sinhala, 'Noto Sans Sinhala');
+    --mr-font-inter: var(--mr-font-inter-latin, 'Inter'),
+      var(--mr-font-sinhala, 'Noto Sans Sinhala');
+  }
+
+  html[lang='ta'] {
+    --mr-font-outfit: var(--mr-font-outfit-latin, 'Outfit'),
+      var(--mr-font-tamil, 'Noto Sans Tamil');
+    --mr-font-inter: var(--mr-font-inter-latin, 'Inter'),
+      var(--mr-font-tamil, 'Noto Sans Tamil');
+  }
+
+  /*
+   * The same composition, per **element**, for text in a script the page is not
+   * written in (S14).
+   *
+   * The rules above key on `<html lang>`, which is right for page copy and wrong
+   * for the two components that deliberately render another script on every page:
+   * the locale switcher's endonyms (සිංහල · English) and the footer's language
+   * band, which shows one sentence in all three at once. Measured before this
+   * existed: on `/en` both the Sinhala and the Tamil band lines resolved to
+   * `Inter, ui-sans-serif` — no script face — and on `/si` the Tamil line resolved
+   * to the Sinhala stack. Two of three scripts in a system fallback, on the one
+   * component whose whole job is to show all three.
+   *
+   * Keyed on the **BCP-47 tag** (`si-LK`), because that is what `HREFLANG` puts on
+   * those elements and what A33 wants on mixed-script content — a screen reader
+   * switches voice on the same attribute a browser picks a face from.
+   *
+   * `app/[locale]/layout.tsx` now applies all four `next/font` variable classes on
+   * every page so these have something to resolve. That costs no bandwidth on its
+   * own: a face is fetched only when a glyph it covers is actually rendered.
+   *
+   * ## These set `font-family` itself, and two earlier attempts did not work
+   *
+   * Both failures are worth recording, because both *look* right and neither
+   * changes a pixel.
+   *
+   * **Attempt 1 — override `--mr-font-inter` on the element.** A custom property's
+   * variables are substituted on the element that **declares** the property, not
+   * on the one that uses it. The preset declares
+   * `--font-body: var(--mr-font-inter, 'Inter'), …` at `:root`, so it resolves
+   * there against `:root`'s value and descendants inherit the already-substituted
+   * result. Measured: the element's `--mr-font-inter` computed correctly to
+   * `"Inter", …, "Noto Sans Sinhala"` while `--font-body` still read
+   * `"Inter", …, ui-sans-serif`.
+   *
+   * **Attempt 2 — override `--font-body` on the element.** Closer, and still inert,
+   * because **`font-family` is an inherited property**. `body` carries the only
+   * `font-family` declaration in the subtree (`font-body` → `font-family:
+   * var(--font-body)`); it resolves at `body` and every descendant inherits the
+   * *computed family*, never re-reading the variable. A `<p>` with no
+   * `font-family` of its own has nothing to substitute into.
+   *
+   * So the rule has to declare `font-family` on the element, which is what these
+   * do. The `html[lang]` rules above avoid all of this because `html` **is**
+   * `:root` — they change the value in the same place the preset resolves it.
+   *
+   * **Scope:** both current call sites (the switcher's endonyms, the band's
+   * sentences) are body text, so these compose the *body* stack. An element
+   * carrying a foreign `lang` that should be set in the display face would need
+   * its own rule; none exists today, and adding one is a two-line addition here
+   * rather than a rethink.
+   */
+  [lang='si-LK'] {
+    font-family:
+      var(--mr-font-inter-latin, 'Inter'), var(--mr-font-sinhala, 'Noto Sans Sinhala'),
+      ui-sans-serif, system-ui, sans-serif;
+  }
+
+  [lang='ta-LK'] {
+    font-family:
+      var(--mr-font-inter-latin, 'Inter'), var(--mr-font-tamil, 'Noto Sans Tamil'),
+      ui-sans-serif, system-ui, sans-serif;
+  }
+
+  body {
+    @apply bg-background text-on-surface font-body antialiased;
+  }
+
+  /*
+   * The focus ring is the same everywhere. A33 sets WCAG 2.2 AA as this surface's
+   * target, and a per-component ring is how one control ends up without one.
+   *
+   * **`secondary`, not `primary`, and it was measured (S19).** A focus indicator is
+   * a non-text UI component, so SC 1.4.11 asks for 3:1 against what is adjacent to
+   * it — and with `outline-offset-2` what is adjacent is the page background. D2's
+   * `primary` (#FF6D00) against white is **2.82:1**: it fails, by a margin small
+   * enough that nothing automated flags it and large enough to matter to the reader
+   * it is for. `secondary` measures **6.47:1** in light and **10.94:1** in dark.
+   *
+   * This is the same finding as `.mr-on-primary` below, in its most consequential
+   * place: the ring is the only thing a keyboard reader has.
+   */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-secondary;
+  }
+}
+
+/*
+ * ===========================================================================
+ * The marketing scale (S04 · A10)
+ *
+ * `@mageride/tailwind-preset` is built for **product UI** and is a platform-wide
+ * contract Compose and SwiftUI read from the same D2 §0.2 table. A marketing site
+ * needs four things it has no token for, and every one of them is *composed here*
+ * from a value the preset already publishes. **Nothing below adds a token**, and
+ * a session that concludes a real token is needed raises a change set rather than
+ * editing `portals/tailwind-preset/src/tokens.ts`.
+ *
+ * Two rules the numbers all obey:
+ *
+ *   1. **Every endpoint is on D2's 4px grid.** In `rem` at the default root size
+ *      that is every multiple of `0.25rem`, so the grid survives the unit change
+ *      exactly.
+ *   2. **Every ramp runs 375px → 1024px**, which are D2 §AP/§FP's own outermost
+ *      breakpoints (`BREAKPOINTS.mobile` and `BREAKPOINTS.desktop`). No fourth
+ *      width enters the system to make the fluid range work — MCS-34 D8 declined
+ *      one, and content caps at `max-w-[1200px]` instead. Above 1024px every
+ *      value below is held at its maximum by `clamp()`, which is what a cap
+ *      *means*.
+ *
+ * The preferred term is `<rem> + <vw>` rather than `vw` alone: a pure-viewport
+ * size ignores the reader's text-size setting, and WCAG 2.2 SC 1.4.4 is a stated
+ * target (A33). The `rem` term is what makes browser text zoom reach a hero.
+ * ===========================================================================
+ */
+
+@layer utilities {
+  :root {
+    /*
+     * Display type above D2's largest role.
+     *
+     * `text-display` is 32px/40px and is the biggest thing D2 §0.2 names. A hero
+     * wants 48–72. Two steps, and the smaller one's *floor* is D2's `display`
+     * exactly — so on a 375px phone the marketing scale and the design system
+     * agree, and the extra size is something the page grows into on a wider
+     * screen rather than something it asserts on the smallest one.
+     *
+     *   --mr-www-text-hero      40px → 72px   (2.5rem → 4.5rem)
+     *   --mr-www-leading-hero   44px → 80px   (2.75rem → 5rem)
+     *   --mr-www-text-hero-sm   32px → 48px   (2rem → 3rem)   ← 32 is `display`
+     *   --mr-www-leading-hero-sm 40px → 56px  (2.5rem → 3.5rem) ← 40 is its leading
+     *
+     * The slope of each ramp is (max − min) / (1024 − 375) expressed in `vw`, and
+     * the constant is the min less the slope at 375px. So `text-hero` is
+     * 32px / 649px = 4.931vw, offset by 40 − 4.931% × 375 = 21.51px = 1.344rem.
+     *
+     * The leading is a second `clamp()` on the same ramp rather than a unitless
+     * ratio, because D2 states line heights as absolute values on the 4px grid
+     * and a ratio would land between grid stops everywhere except the ends.
+     */
+    --mr-www-text-hero: clamp(2.5rem, 1.344rem + 4.931vw, 4.5rem);
+    --mr-www-leading-hero: clamp(2.75rem, 1.45rem + 5.547vw, 5rem);
+    --mr-www-text-hero-sm: clamp(2rem, 1.422rem + 2.465vw, 3rem);
+    --mr-www-leading-hero-sm: clamp(2.5rem, 1.922rem + 2.465vw, 3.5rem);
+
+    /*
+     * Section rhythm.
+     *
+     * D2's largest spacing step is `xxl` = 48px, which is a *component* gap;
+     * marketing sections want 96–128. Both new maxima are exact multiples of the
+     * 4px grid (96 = 24 × 4, 128 = 32 × 4) and both minima are D2 steps: 48px is
+     * `xxl` itself and 64px is `xl` doubled.
+     *
+     *   --mr-www-section     48px → 96px    (3rem → 6rem)
+     *   --mr-www-section-lg  64px → 128px   (4rem → 8rem)
+     */
+    --mr-www-section: clamp(3rem, 1.267rem + 7.396vw, 6rem);
+    --mr-www-section-lg: clamp(4rem, 1.689rem + 9.861vw, 8rem);
+
+    /*
+     * Motion timing.
+     *
+     * **D2 §0.2 prints no duration and no easing curve for any platform**, so
+     * unlike everything above these are not composed from anything — they are
+     * this surface's, spelled once so that nine primitives cannot each invent
+     * their own. They are deliberately not colours, sizes or spacing, which is
+     * the family of thing the token fence is about; if the platform ever wants a
+     * shared motion vocabulary that is a change set against D2, not a quiet
+     * addition here.
+     */
+    --mr-www-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --mr-www-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+    --mr-www-reveal-duration: 480ms;
+    --mr-www-reveal-stagger: 80ms;
+  }
+
+  /*
+   * -------------------------------------------------------------------------
+   * 1 · Display type
+   *
+   * Size, leading and weight only — no family. That is how the preset's own
+   * `text-display` behaves (`--text-display--font-weight` is part of the token),
+   * so `font-display` still chooses the face and these compose with it exactly
+   * as `text-display` does. Weight 700 is D2's `display` weight, unchanged.
+   *
+   * `letter-spacing` is the one setting here with no D2 provenance in either
+   * direction: D2 prints no tracking for any role. At 32px and below its default
+   * is right; at 72px the same tracking reads loose. `-0.02em` is *relative* to
+   * the font size, so it adds no absolute value to the system, and it is scoped
+   * to the two utilities that exceed D2's largest role. Recorded in
+   * `portals/www/CLAUDE.md` as an addition rather than a derivation.
+   * -------------------------------------------------------------------------
+   */
+  .text-hero {
+    font-size: var(--mr-www-text-hero);
+    line-height: var(--mr-www-leading-hero);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .text-hero-sm {
+    font-size: var(--mr-www-text-hero-sm);
+    line-height: var(--mr-www-leading-hero-sm);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  /*
+   * -------------------------------------------------------------------------
+   * 1a · Indic leading for the two display utilities (S12)
+   *
+   * **This is not a token change and it is not a new value in the system.** It
+   * re-states the two *leading* ramps above, for the two `<html lang>`s whose
+   * script needs them, in the layer S12 says a fix like this belongs in. The
+   * font sizes, the weight, the tracking, the 4px grid and the 375→1024px ramp
+   * are all untouched; `portals/tailwind-preset/src/tokens.ts` is untouched.
+   *
+   * **What was measured, at 375px, in a real browser.** D2 §0.2's roles were set
+   * for Latin, and Outfit's ink at 40px is 37px tall in a 44px line box — 7px of
+   * clearance. Noto Sans Sinhala's ink at the same size is **51px**, because the
+   * script stacks vowel signs above the headline and below the baseline in the
+   * same em. So the ink is 7px *taller than its own line box*, and two stacked
+   * hero lines overlap: measured at 6px of inline-box overlap on a two-line
+   * Sinhala headline. Across the whole ramp:
+   *
+   *            font/leading      Latin ink    Sinhala ink    Tamil ink
+   *   hero      40/44  @375        37  ok        51  −7 ✗      49  −5 ✗
+   *   hero      72/80  @1024+      67  ok        89  −9 ✗      85  −5 ✗
+   *   hero-sm   32/40  @375        30  ok        41  −1 ✗      39   +1 ~
+   *   hero-sm   48/56  @1024+      45  ok        60  −4 ✗      57  −1 ✗
+   *
+   * **Why Tamil is here too.** S13 owns the Tamil *copy* and this is not copy —
+   * it is a layout defect that is already on the page in every language, and
+   * `not-found.tsx` and `error.tsx` render all three scripts in one document, so
+   * a Sinhala-only fix would leave two blocks set differently on the same page.
+   * One rule, both scripts: Sinhala is the binding constraint and Tamil clears it
+   * with room to spare, which is cheaper than two ramps that have to be kept in
+   * step. Measured, not assumed.
+   *
+   * **The new endpoints, on the grid, on the same ramp.**
+   *
+   *   --mr-www-leading-hero      56px → 96px   (3.5rem → 6rem)    was 44 → 80
+   *   --mr-www-leading-hero-sm   44px → 64px   (2.75rem → 4rem)   was 40 → 56
+   *
+   * 56 = 14 × 4, 96 = 24 × 4, 44 = 11 × 4, 64 = 16 × 4. Slope is
+   * (max − min) / 649px in `vw` and the constant is the min less the slope at
+   * 375px, exactly as the Latin ramps above are built — so hero is
+   * 40px / 649px = 6.163vw offset by 56 − 6.163% × 375 = 32.89px = 2.055rem.
+   * Every endpoint leaves ≥ 3px of clearance for Sinhala and ≥ 5px for Tamil.
+   *
+   * **One deliberate divergence, recorded rather than hidden.** `text-hero-sm`'s
+   * Latin floor is `text-display` *exactly* (32/40), which S04 chose so that at
+   * 375px the marketing scale and D2 agree. On a Sinhala page that floor is the
+   * thing that collides, so here they no longer agree: 32/44. The agreement was
+   * worth having and it was worth giving up for a script the leading does not
+   * fit — and D2's `display` role has the same 1px problem on the four product
+   * surfaces, which is a change set against D2 and not something to paper over
+   * on one marketing page. Recorded in the S12 handoff.
+   * -------------------------------------------------------------------------
+   */
+  html[lang='si'],
+  html[lang='ta'] {
+    --mr-www-leading-hero: clamp(3.5rem, 2.055rem + 6.163vw, 6rem);
+    --mr-www-leading-hero-sm: clamp(2.75rem, 2.028rem + 3.082vw, 4rem);
+  }
+
+  /*
+   * -------------------------------------------------------------------------
+   * 2 · Section rhythm
+   * -------------------------------------------------------------------------
+   */
+  .py-section {
+    padding-block: var(--mr-www-section);
+  }
+
+  .py-section-lg {
+    padding-block: var(--mr-www-section-lg);
+  }
+
+  .gap-section {
+    gap: var(--mr-www-section);
+  }
+
+  /*
+   * The single-axis variants (S16).
+   *
+   * **Added because seven call sites across S14–S16 were already using them and
+   * silently getting nothing.** `pt-section`, `pb-section`, `pb-section-lg` and
+   * `mt-section` are not Tailwind utilities and are not derivable from the
+   * `--mr-www-*` properties by the engine — those are plain custom properties, not
+   * `--spacing-*` theme entries — so `class="pt-section"` compiled to no rule at
+   * all. Nothing warned: an unknown class is not an error in Tailwind, in the
+   * TypeScript, or in any check this component runs. The symptom was a heading
+   * sitting hard against the cards above it on `/drivers`, found by looking at a
+   * screenshot.
+   *
+   * These add no value to the system: they are the same two `clamp()`s the block
+   * above already publishes, applied on one edge instead of two. A band that wants
+   * space above a heading but not below it is the ordinary case, and the missing
+   * half of the pair is why it was reached for seven times.
+   */
+  .pt-section {
+    padding-top: var(--mr-www-section);
+  }
+
+  .pb-section {
+    padding-bottom: var(--mr-www-section);
+  }
+
+  .pt-section-lg {
+    padding-top: var(--mr-www-section-lg);
+  }
+
+  .pb-section-lg {
+    padding-bottom: var(--mr-www-section-lg);
+  }
+
+  .mt-section {
+    margin-top: var(--mr-www-section);
+  }
+
+  .mb-section {
+    margin-bottom: var(--mr-www-section);
+  }
+
+  /*
+   * -------------------------------------------------------------------------
+   * Print (S17 §3)
+   *
+   * **A driver in a three-wheeler with no data plan is a real reader of the
+   * driver guide.** That is the whole brief, and it makes the print sheet a
+   * feature rather than a courtesy: the chapter has to survive being printed at
+   * an internet café and carried in a pocket.
+   *
+   * The two utility names follow `portals/web-passenger/app/globals.css`'s
+   * precedent (`print-hidden` / `print-plain`) so a reader of either surface meets
+   * one vocabulary. What is new here is the `@page` block and the rules below it,
+   * because that surface prints one card and this one prints a document.
+   *
+   * What comes off: the header, the footer, the chapter rail, the on-page TOC, the
+   * pager, the "read next" links and the lightbox. Every one is navigation — it
+   * addresses a place the paper cannot go.
+   *
+   * What stays, and is the reason for each rule:
+   *
+   *   - **the step numbers**, which is why they are real elements rather than a
+   *     `list-style` marker (see `ChapterBody`) — a generated marker is not
+   *     reliably printed;
+   *   - **the callout labels**, because the tint is the first thing a cheap
+   *     printer loses and the word is then the only signal left (WCAG 1.4.1, and
+   *     the reason the label is a resource rather than a colour);
+   *   - **the images**, capped so a 416px plate does not take a page each;
+   *   - **the URL after every remaining link**, because a printed link that says
+   *     "the fee chapter" and nothing else is a dead end on paper.
+   * -------------------------------------------------------------------------
+   */
+  .print-hidden {
+    @media print {
+      display: none !important;
+    }
+  }
+
+  .print-plain {
+    @media print {
+      border-color: currentColor !important;
+      box-shadow: none !important;
+      background: transparent !important;
+    }
+  }
+
+  /*
+   * -------------------------------------------------------------------------
+   * Text on `primary` — **the one D2 pairing with no single safe token**, and
+   * the largest accessibility finding of S19.
+   *
+   * ## The measurement
+   *
+   * D2 §0.2 pairs `primary` with `on-primary`. In light that is **#FFFFFF on
+   * #FF6D00 = 2.82:1** — it fails SC 1.4.3 at every size, and it fails SC 1.4.11's
+   * 3:1 for a non-text component too. `primary` as *text* on `background` measures
+   * the same 2.82:1, so the orange is unusable as ink on a light page in any role.
+   *
+   * **The dark palette is fine.** `on-primary` #4A2300 on `primary` #FFB68A is
+   * 8.04:1, and `primary` as text on `background` is 10.89:1. Every failure here is
+   * light-mode only, which is why a single replacement token does not exist: the
+   * two appearances need text at opposite ends of the ramp.
+   *
+   * ## The fix, composed from D2 and adding nothing
+   *
+   * `on-primary-container` (#2B1100) on `primary` measures **6.29:1** in light.
+   * In dark, `on-primary` (#4A2300) on `primary` (#FFB68A) measures **8.04:1**.
+   * Both are existing tokens; this utility just picks the right one per appearance,
+   * reading `--mr-color-*` — the raw properties the preset flips on `.dark` —
+   * exactly as `.mr-aurora` does, so it follows the theme with no `dark:` variant
+   * at any call site.
+   *
+   * **Nothing here is a new colour**, which is the rule
+   * `portals/www/CLAUDE.md` states about the preset: it is a platform-wide contract
+   * Compose and SwiftUI read from the same table, and inventing a darker orange
+   * would make this site's buttons differ from the apps'.
+   *
+   * ## What this does NOT fix, and what owes a change set
+   *
+   * **The four product surfaces have the same defect on the same tokens.**
+   * `primary` + `on-primary` is D2's own pairing, it is what `@mageride/ui`'s
+   * `Button` renders, and Compose and SwiftUI read it from the same table. This
+   * utility fixes `www` and nothing else. Filing a micro-change-set against
+   * D2 §0.2 — either a darker `primary` or an `on-primary` that is not white — is
+   * the real repair, and it is the same call S12 made about D2's Sinhala leading:
+   * fix this surface's own compositions, record the platform-wide one, do not
+   * quietly fork a shared token.
+   * -------------------------------------------------------------------------
+   */
+  .mr-on-primary {
+    color: var(--mr-color-on-primary-container);
+  }
+
+  .dark .mr-on-primary {
+    color: var(--mr-color-on-primary);
+  }
+}
+
+@media print {
+  @page {
+    margin: 16mm;
+  }
+
+  /*
+   * Paper is white and ink is expensive. The dark appearance in particular would
+   * print a solid black page, so the whole document is forced light regardless of
+   * what the reader was looking at on screen.
+   */
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    color-scheme: light !important;
+  }
+
+  /* The chrome. `main` keeps its content; everything around it goes. */
+  header,
+  footer {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+
+  /*
+   * A printed screenshot is an illustration, not the page. Capped so a chapter of
+   * nine steps does not become nine pages, and kept from splitting across a page
+   * break with the step it belongs to.
+   */
+  img {
+    max-width: 60mm !important;
+    height: auto !important;
+  }
+
+  li,
+  figure,
+  aside,
+  table {
+    break-inside: avoid;
+  }
+
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+
+  /*
+   * The URL after a link, so a printed cross-reference is followable. Scoped to
+   * the reading column: doing it document-wide would print an address after every
+   * nav item, and the nav is hidden anyway.
+   *
+   * `[href^='/']` only — an in-page anchor (`#step-3`) prints as a fragment that
+   * means nothing on paper.
+   */
+  article a[href^='/']::after {
+    content: ' (' attr(href) ')';
+    font-size: 0.85em;
+    word-break: break-all;
+  }
+
+  /*
+   * Every `<details>` prints open (S18).
+   *
+   * `/faq` is twenty-one native disclosures and it ships closed, which is right on
+   * screen and useless on paper: printed as-is it is twenty-one questions and not
+   * one answer. Measured before this rule — `checkVisibility()` said 0 of 21
+   * answers were rendered under print media — and 21 of 21 after.
+   *
+   * **Two declarations, because two engines hide it two different ways.** Current
+   * Chromium and Safari hide the content with `content-visibility` on the
+   * `::details-content` pseudo-element; older engines give the slot `display: none`.
+   * Neither rule is redundant, and a browser that does not know
+   * `::details-content` simply drops that one.
+   *
+   * CSS cannot set the `open` attribute, so this reveals the content rather than
+   * opening the element — the marker below therefore has to go, or every answer
+   * prints under a `+` that says it is collapsed.
+   */
+  details::details-content {
+    content-visibility: visible;
+    block-size: auto;
+  }
+
+  details > :not(summary) {
+    display: block;
+  }
+
+  summary [aria-hidden] {
+    display: none;
+  }
+}
+
+@layer utilities {
+  /*
+   * -------------------------------------------------------------------------
+   * 3 · The aurora backdrop
+   *
+   * Built from `primary`, `primary-container` and `secondary-container` at one
+   * declared alpha. **No new hex enters the system**: the three are read as
+   * `--mr-color-*`, which are the raw properties the preset flips on `.dark`, so
+   * the backdrop follows the appearance with no `dark:` variant anywhere.
+   * `color-mix(… , transparent)` is what turns a token into a wash without
+   * writing a fifth value for it.
+   *
+   * **What the compositor owns and what it does not.** The infinite loop animates
+   * `transform` alone, which is composited, and the blobs are promoted with
+   * `will-change`. The alpha is a registered `@property` because that is what
+   * makes it interpolable at all — it is transitioned, not run in the loop, so
+   * the repaint it costs happens on an appearance change rather than every frame.
+   * -------------------------------------------------------------------------
+   */
+  .mr-aurora {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    background-image: radial-gradient(
+      60% 60% at 50% 0%,
+      color-mix(in oklab, var(--mr-color-primary-container) var(--mr-www-aurora-alpha), transparent),
+      transparent 70%
+    );
+  }
+
+  .mr-aurora::before,
+  .mr-aurora::after {
+    content: '';
+    position: absolute;
+    width: 60%;
+    aspect-ratio: 1;
+    border-radius: 9999px;
+    /* 64px = 16 × the 4px grid. */
+    filter: blur(64px);
+    will-change: transform;
+  }
+
+  .mr-aurora::before {
+    inset-block-start: -10%;
+    inset-inline-start: -10%;
+    background: color-mix(in oklab, var(--mr-color-primary) var(--mr-www-aurora-alpha), transparent);
+    animation: mr-aurora-drift-a 32s var(--mr-www-ease-in-out) infinite alternate;
+  }
+
+  .mr-aurora::after {
+    inset-block-start: 10%;
+    inset-inline-end: -15%;
+    background: color-mix(
+      in oklab,
+      var(--mr-color-secondary-container) var(--mr-www-aurora-alpha),
+      transparent
+    );
+    animation: mr-aurora-drift-b 40s var(--mr-www-ease-in-out) infinite alternate;
+  }
+
+  @keyframes mr-aurora-drift-a {
+    from {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    to {
+      transform: translate3d(12%, 8%, 0) scale(1.15);
+    }
+  }
+
+  @keyframes mr-aurora-drift-b {
+    from {
+      transform: translate3d(0, 0, 0) scale(1.1);
+    }
+    to {
+      transform: translate3d(-10%, 12%, 0) scale(0.95);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /*
+     * The wash stays — it is colour, not movement, and removing it would make
+     * the reduced-motion page a different design rather than a calmer one. The
+     * drift stops, and `will-change` is dropped with it so two blurred layers
+     * are not held on the GPU for an animation that is not running.
+     */
+    .mr-aurora::before,
+    .mr-aurora::after {
+      animation: none;
+      will-change: auto;
+    }
+  }
+
+  /*
+   * -------------------------------------------------------------------------
+   * 4 · Scroll reveal — fade, rise, stagger
+   *
+   * `IntersectionObserver` flips one attribute; CSS does the rest. The per-child
+   * delay is `--i` multiplied by the stagger step, so a nine-card grid needs one
+   * observer and nine integers rather than nine timers.
+   *
+   * **The hidden state is inside `@media (scripting: enabled)`, and that is the
+   * load-bearing line.** This site's whole promise is that it renders with the
+   * platform down; a reader with JavaScript off must not be handed a page of
+   * `opacity: 0`. With no script there is nothing to flip the attribute, so
+   * there is no hidden state to flip out of.
+   * -------------------------------------------------------------------------
+   */
+  .mr-reveal {
+    transition:
+      opacity var(--mr-www-reveal-duration) var(--mr-www-ease-out)
+        calc(var(--i, 0) * var(--mr-www-reveal-stagger)),
+      transform var(--mr-www-reveal-duration) var(--mr-www-ease-out)
+        calc(var(--i, 0) * var(--mr-www-reveal-stagger));
+  }
+
+  @media (scripting: enabled) {
+    .mr-reveal[data-mr-revealed='false'] {
+      opacity: 0;
+      /* 16px = 4 × the 4px grid. */
+      transform: translate3d(0, 16px, 0);
+    }
+
+    .mr-reveal[data-mr-revealed='false'][data-mr-variant='fade'] {
+      transform: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /*
+     * Opacity only, and faster. The rise is a transform and transforms are the
+     * thing reduced motion is asking about; a fade is not, and keeping it means
+     * the reveal still reads as content arriving rather than as a page that
+     * renders in one lump.
+     */
+    .mr-reveal {
+      transition: opacity 200ms linear calc(var(--i, 0) * 40ms);
+    }
+
+    .mr-reveal[data-mr-revealed='false'] {
+      transform: none;
+    }
+  }
+
+  /*
+   * -------------------------------------------------------------------------
+   * 5 · Parallax
+   *
+   * `src/components/motion/Parallax.tsx` writes `--mr-www-parallax-y` from an
+   * `rAF`-batched scroll handler. **It writes a variable and never a rule** —
+   * that distinction is the whole reason this is inside AL-52 and a motion
+   * library is not. The rule below is compiled by PostCSS at build like every
+   * other rule in this file; what changes at runtime is one typed value.
+   * -------------------------------------------------------------------------
+   */
+  .mr-parallax {
+    transform: translate3d(0, var(--mr-www-parallax-y), 0);
+    will-change: transform;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /*
+     * Inert, and inert on both sides: the component does not attach its scroll
+     * listener at all under reduced motion, so nothing is being written and this
+     * rule makes sure nothing already written still applies.
+     */
+    .mr-parallax {
+      transform: none;
+      will-change: auto;
+    }
+  }
+
+  /*
+   * -------------------------------------------------------------------------
+   * 6 · Stat counters
+   *
+   * `Element.animate()` interpolates the registered `--mr-www-count`, and
+   * `counter()` renders it. No React state, no frame callback, no re-render —
+   * the number is counted by the same engine that runs the transitions.
+   *
+   * The visible digits are generated content and generated content is not
+   * reliably announced, so `StatCounter` also renders the finished, locale-
+   * formatted value in an `sr-only` span. The animated half is `aria-hidden`.
+   * `counter()` cannot group thousands; the announced value can, and does.
+   *
+   * **No `prefers-reduced-motion` block, and it would be a no-op if there were
+   * one.** A count is either an `Element.animate()` call or no call at all;
+   * `StatCounter` reads the setting and writes the final value outright instead,
+   * so there is no CSS state to undo. An empty `@media` block written here to
+   * look complete would be worse than its absence — it would read as a reduced
+   * path that had been thought about and left blank.
+   * -------------------------------------------------------------------------
+   */
+  /*
+   * **The reset is on the element and the `counter()` is on the pseudo-element,
+   * and the split is not stylistic.** A `counter-reset` declared on `::after` is
+   * not in scope for a `counter()` in that same `::after`'s own `content`: the
+   * counter resolves to its initial value and the number renders a permanent
+   * `0`, with the custom property animating correctly the whole time and the
+   * computed style reporting the right value. Verified in Chromium against both
+   * spellings side by side, because it is invisible from the DOM.
+   */
+  .mr-counter-value {
+    counter-reset: mr-www-count var(--mr-www-count);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .mr-counter-value::after {
+    content: counter(mr-www-count);
+  }
+
+  /*
+   * -------------------------------------------------------------------------
+   * 7 · Sticky "how it works"
+   *
+   * `position: sticky` plus one `IntersectionObserver`. **Zero JS animation** —
+   * the scrolling is the browser's own, and the only thing that changes is which
+   * step is at full opacity.
+   *
+   * No `prefers-reduced-motion` block, on purpose and not by omission: nothing
+   * here transforms, and opacity is what the reduced path *is* elsewhere in this
+   * file. Removing the fade would leave a step list that snaps between states,
+   * which is not calmer.
+   * -------------------------------------------------------------------------
+   */
+  .mr-sticky-media {
+    position: sticky;
+    /* 96px = D2's `xxl` doubled — the section rhythm's own smaller step. */
+    top: var(--mr-www-sticky-top, 6rem);
+  }
+
+  /*
+   * **0.8, not 0.45 — measured in S19, and this is a contrast fix rather than a
+   * taste change.**
+   *
+   * At 0.45 an inactive step's heading composited to `#98999a` on white
+   * (**2.85:1**) and its body to `#abacae` (**2.27:1**). Both fail SC 1.4.3
+   * outright, and the text is not decorative — it is the next three steps of "how
+   * it works", which a reader scrolls *towards*. **Opacity is the one way to fail
+   * contrast without ever writing a failing colour**: every token here is fine and
+   * the composite is not, which is exactly why S19 says to measure rather than to
+   * trust the palette.
+   *
+   * The value was chosen by measuring, not guessed. The binding pair is
+   * `on-surface-variant` on `surface-variant`, the darkest background this band
+   * sits on:
+   *
+   * | opacity | on-surface / bg | on-surface-variant / surface-variant |
+   * |---|---|---|
+   * | 0.45 | 2.86 | **2.18** |
+   * | 0.70 | 6.30 | **3.76** |
+   * | 0.72 | 6.75 | **3.94** |
+   * | 0.80 | 8.98 | **4.79** |
+   *
+   * 0.72 was the first attempt and it fails — 4.28:1 for body text on
+   * `background`, under the line by enough to matter. 0.8 clears every pairing in
+   * both appearances (dark's worst is 5.84:1). The active step is still visibly the
+   * emphasised one; the inactive ones are now legible rather than suggested.
+   */
+  .mr-sticky-step {
+    opacity: 0.8;
+    transition: opacity 320ms var(--mr-www-ease-out);
+  }
+
+  .mr-sticky-step[data-mr-active='true'] {
+    opacity: 1;
+  }
+
+  /*
+   * The inactive step's index, and **the reason it is a colour swap rather than
+   * more opacity** (S19).
+   *
+   * Raising `.mr-sticky-step` from 0.45 to 0.8 fixed the heading (8.98:1) and the
+   * body (5.29:1) and left one ink short: the step number is `text-secondary`,
+   * #0061A4, which is a comfortable 6.47:1 at full strength and **4.25:1 once 0.8
+   * of it composites over white**. Measured, in light; dark clears everything here
+   * with room to spare.
+   *
+   * The tempting fix is 0.85, and it is the wrong one. Opacity is the *only* thing
+   * distinguishing an active step from an inactive one in this component, and the
+   * floor the three inks impose is 0.83 — so "passes AA" and "reads as dimmed"
+   * cannot both be true of an opacity, and pushing the number up until the audit
+   * goes quiet would silently delete the effect the component exists for.
+   *
+   * So the accent leaves the opacity's reach instead. An inactive index is
+   * `on-surface-variant`, which composites to 5.29:1 at the same 0.8, and the
+   * result is *more* differentiation rather than less: the active step's number is
+   * blue and the rest are grey, on top of the dimming that was already there.
+   *
+   * Specificity is deliberate — (0,2,1) against a Tailwind utility's (0,1,0), in
+   * the same layer, so `text-secondary` on the span stays the active colour and
+   * this wins only while the step is inactive.
+   */
+  .mr-sticky-step[data-mr-active='false'] .mr-sticky-step-index {
+    color: var(--mr-color-on-surface-variant);
+  }
+  /*
+   * **Reduced motion collapses this to a plain vertical list** (S15 §3).
+   *
+   * S04 left this section without a reduced-motion block, reasoning that nothing
+   * in it transforms. That is true and it is not the whole problem: a *pinned*
+   * panel with its fade removed is still a panel the reader scrolls past while it
+   * stays put, and "the page did not move when I scrolled" is precisely the
+   * complaint the setting exists to answer. So the media column stops being
+   * sticky, and every step goes to full opacity rather than only the active one —
+   * which is what "a plain vertical list of four steps" means.
+   *
+   * **It has to sit after the rules it overrides.** A media query adds no
+   * specificity, so `@media { .mr-sticky-media { position: static } }` placed
+   * *above* `.mr-sticky-media { position: sticky }` loses on source order and does
+   * nothing at all — which is exactly how it was written first, and it took a
+   * browser reporting `position: sticky` under forced reduced motion to catch it.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    .mr-sticky-media {
+      position: static;
+    }
+
+    .mr-sticky-step {
+      opacity: 1;
+    }
+  }
+
+
+  /*
+   * -------------------------------------------------------------------------
+   * 8 · The sliding hero
+   *
+   * `scroll-snap-type: x mandatory` gives swipe, momentum, and a snap for free,
+   * from the platform's own scroller. The component adds three things the
+   * scroller has no opinion about: an autoplay timer, arrow keys, and an
+   * `IntersectionObserver` that tells the dots which slide is showing.
+   *
+   * `scroll-behavior` is deliberately **not** set here. The component passes
+   * `behavior` to `scrollTo()` explicitly, because a CSS smooth scroll would
+   * apply to the autoplay advance under reduced motion too — and the point is
+   * that under reduced motion there is no advance to smooth.
+   * -------------------------------------------------------------------------
+   */
+  .mr-carousel-track {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .mr-carousel-track::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mr-carousel-slide {
+    flex: 0 0 100%;
+    scroll-snap-align: center;
+  }
+
+  .mr-carousel-dot {
+    position: relative;
+    overflow: hidden;
+    transition:
+      width 240ms var(--mr-www-ease-out),
+      background-color 240ms var(--mr-www-ease-out);
+  }
+
+  /*
+   * The active dot's autoplay progress (S14).
+   *
+   * The dot itself is the *track* and this is the *fill*, scaled horizontally by
+   * the registered property above. `transform` and not `width`, because a width
+   * animation lays out and paints on every frame while a transform composites —
+   * and because a registered `<number>` driving `scaleX()` is a value the
+   * compositor can interpolate without the main thread.
+   *
+   * On an inactive dot the pseudo-element is not drawn at all: the fill would be
+   * an animation running behind something the reader is not looking at, N − 1
+   * times over.
+   */
+  .mr-carousel-dot[data-mr-active='true']::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform-origin: left center;
+    transform: scaleX(var(--mr-www-carousel-progress));
+    background-color: var(--mr-color-primary);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /*
+     * **The autoplay stops.** That is `HeroCarousel`'s job — it reads
+     * `matchMedia` at mount and never starts the timer, and it stops one already
+     * running if the setting changes mid-visit. A CSS-only defence would leave a
+     * carousel that still advances, just without a transition, which is the same
+     * vestibular problem with the animation taken out of it.
+     *
+     * What CSS can do is stop the dot from growing, which is a transform-like
+     * width change beside content that has just moved.
+     */
+    .mr-carousel-dot {
+      transition: background-color 240ms linear;
+    }
+
+    /*
+     * And pin the fill full. There is no timer to track under reduced motion, so
+     * the property never animates; this makes the resting state explicit rather
+     * than relying on the `@property` initial value surviving a future edit.
+     */
+    .mr-carousel-dot[data-mr-active='true']::after {
+      transform: scaleX(1);
+    }
+  }
+
+  /*
+   * -------------------------------------------------------------------------
+   * 9 · Marquee
+   *
+   * One `@keyframes` translating a duplicated track by exactly half its width,
+   * so the seam lands where the copy begins. The duplicate is `aria-hidden`.
+   * -------------------------------------------------------------------------
+   */
+  .mr-marquee {
+    overflow: hidden;
+  }
+
+  .mr-marquee-track {
+    display: flex;
+    width: max-content;
+    animation: mr-marquee var(--mr-www-marquee-duration, 40s) linear infinite;
+  }
+
+  .mr-marquee:hover .mr-marquee-track,
+  .mr-marquee:focus-within .mr-marquee-track {
+    animation-play-state: paused;
+  }
+
+  @keyframes mr-marquee {
+    from {
+      transform: translate3d(0, 0, 0);
+    }
+    to {
+      transform: translate3d(-50%, 0, 0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /*
+     * Not merely stopped — a stopped marquee is a strip whose right-hand half is
+     * unreachable. The track becomes a normal horizontal scroller and the
+     * duplicate is removed, so a reader who cannot take the movement can still
+     * reach every item, once.
+     */
+    .mr-marquee {
+      overflow-x: auto;
+    }
+
+    .mr-marquee-track {
+      animation: none;
+    }
+
+    .mr-marquee-track [data-mr-marquee-clone='true'] {
+      display: none;
+    }
+  }
+
+  /*
+   * -------------------------------------------------------------------------
+   * 10 · Route draw and map markers
+   *
+   * Inline SVG, `stroke-dasharray` and `@keyframes`. No JS at all — the
+   * component measures nothing, because `--mr-www-route-length` is a number the
+   * path is authored with rather than one `getTotalLength()` reports.
+   * -------------------------------------------------------------------------
+   */
+  .mr-route-line {
+    stroke-dasharray: var(--mr-www-route-length);
+    stroke-dashoffset: var(--mr-www-route-length);
+    animation: mr-route-draw 2400ms var(--mr-www-ease-in-out) forwards;
+  }
+
+  .mr-route-marker {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: mr-marker-pulse 2400ms var(--mr-www-ease-out) infinite;
+  }
+
+  @keyframes mr-route-draw {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  @keyframes mr-marker-pulse {
+    0% {
+      transform: scale(0.6);
+      opacity: 0.9;
+    }
+    70% {
+      transform: scale(1.6);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1.6);
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /*
+     * `animation: none` alone would be a bug, not a reduced variant: the line's
+     * resting state is `stroke-dashoffset: var(--mr-www-route-length)`, which is
+     * an invisible path. The reduced reader gets the **finished** route — drawn,
+     * complete, still — and a marker that is present rather than pulsing.
+     */
+    .mr-route-line {
+      animation: none;
+      stroke-dashoffset: 0;
+    }
+
+    .mr-route-marker {
+      animation: none;
+      opacity: 0.35;
+      transform: scale(1.2);
+    }
+  }
+}

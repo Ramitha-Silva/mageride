@@ -1,17 +1,18 @@
 # =====================================================================================
 # MageRide — Next.js portal image (C010, D7' §2.1 + Δ 2026-07-23).
 #
-# One template for the three web surfaces, selected by build argument:
+# One template for the four web surfaces, selected by build argument:
 #   admin           Admin Portal, admin.mageride.lk, port 3001  (AL-02, C104)
 #   fleet           Fleet Portal, fleet.mageride.lk, port 3002  (AL-03, C111)
 #   web-passenger   Passenger Web subview /public/track/*       (AL-44, C117)
+#   www             Public informational site, www.mageride.lk, port 3004 (MCS-34, C134)
 #
 #   docker build -f infra/docker/Dockerfile.portal --build-arg PORTAL=admin --build-arg PORT=3001 \
 #     -t mageride/admin-portal:dev .
 #
 # Build context is the REPOSITORY ROOT: portals/ is one npm workspace
-# (`portals/package.json` -> tailwind-preset, admin, fleet, web-passenger), so a portal
-# cannot be installed without the lockfile and the shared preset above it.
+# (`portals/package.json` -> tailwind-preset, admin, fleet, web-passenger, www), so a
+# portal cannot be installed without the lockfile and the shared preset above it.
 #
 # Node 24-alpine, not 20: Node 20 reached EOL in April 2026 (micro-change-set 2026-07-23,
 # mirrored in D7' §1/§2.1 and the replica's portal containers).
@@ -21,7 +22,7 @@
 #
 # --- Requires `output: 'standalone'` in next.config -----------------------------------
 # The runner stage copies Next.js's standalone bundle, which is the only output that does
-# not need node_modules at runtime. C104 / C111 / C117 must set it; without it the build
+# not need node_modules at runtime. C104 / C111 / C117 / C134 must set it; without it the build
 # succeeds and the runtime stage has no server.js to start, which this Dockerfile turns
 # into a build-time error rather than a crash-looping container.
 # =====================================================================================
@@ -38,10 +39,11 @@ WORKDIR /repo
 #
 # EVERY member, not only the ones being built: `npm ci` resolves the whole workspace from
 # the lockfile in one pass, and the lockfile carries a link entry per member. Omit one and
-# the install fails for a portal that does not even depend on it. All seven of
+# the install fails for a portal that does not even depend on it. All eight of
 # `portals/package.json`'s `workspaces` are listed here and the set must be kept in step
 # with it — eslint-config, i18n and ui were added after this file was first written, and
-# admin and fleet both depend on @mageride/i18n and @mageride/ui.
+# admin and fleet both depend on @mageride/i18n and @mageride/ui. www (C134) is the
+# eighth and depends on all three shared packages.
 COPY ["portals/package.json", "portals/package-lock.json", "./portals/"]
 COPY ["portals/eslint-config/package.json", "./portals/eslint-config/"]
 COPY ["portals/tailwind-preset/package.json", "./portals/tailwind-preset/"]
@@ -50,6 +52,7 @@ COPY ["portals/ui/package.json", "./portals/ui/"]
 COPY ["portals/admin/package.json", "./portals/admin/"]
 COPY ["portals/fleet/package.json", "./portals/fleet/"]
 COPY ["portals/web-passenger/package.json", "./portals/web-passenger/"]
+COPY ["portals/www/package.json", "./portals/www/"]
 
 WORKDIR /repo/portals
 RUN npm ci
@@ -59,7 +62,7 @@ FROM ${NODE_IMAGE} AS build
 ARG PORTAL
 WORKDIR /repo/portals
 
-RUN test -n "$PORTAL" || (echo "error: --build-arg PORTAL=<admin|fleet|web-passenger> is required" >&2; exit 1)
+RUN test -n "$PORTAL" || (echo "error: --build-arg PORTAL=<admin|fleet|web-passenger|www> is required" >&2; exit 1)
 
 COPY --from=deps /repo/portals/node_modules ./node_modules
 COPY ["portals/", "./"]

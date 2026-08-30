@@ -693,6 +693,38 @@ services:
         limits: { memory: 512M, cpus: "0.25" }
     networks: [internal]
 
+  # Optional — www-site (www.mageride.lk, MCS-34 / C134).      384 MB / 0.25 vCPU
+  www-site:
+    <<: *restart
+    profiles: [portals]
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.portal
+      args:
+        PORTAL: www
+        PORT: "3004"
+    image: ${REPLICA_REGISTRY:-mageride}/www-site:${REPLICA_TAG:-replica}
+    # NO `environment:` block at all, and the absence is the point rather than an omission.
+    #
+    # No `MAGERIDE_API_BASE_URL`: this surface makes no request at render time (MCS-34's fourth
+    # negative), so it has no gateway to name. The two portals above both REQUIRE that variable
+    # and answer 503 without it; this one would have nothing to do with it, and giving it one
+    # is the first step to breaking the promise. Its own fences refuse to read *any* environment
+    # variable — `portals/www/test/fences.test.ts` fails on `process.env.` anywhere in the
+    # source, and `scripts/check-bundle.mjs` fails if the public prefix reaches a client chunk.
+    # The Dockerfile already sets NODE_ENV, TZ, PORT and the telemetry flag.
+    #
+    # No `depends_on: app-services` either, for the same reason — **this is the one container in
+    # this file that is healthy while the platform is down**, which is exactly what it is for.
+    # `smoke.sh` §9 stops `app-services` and asserts the site still answers 200 through the edge.
+    #
+    # 384 MB rather than the portals' 512: it holds no session, opens no upstream connection and
+    # renders no map. The same number as the DOKS manifest's limit, from the same catalog entry.
+    deploy:
+      resources:
+        limits: { memory: 384M, cpus: "0.25" }
+    networks: [internal]
+
   # ===================================================================================
   # NOT HERE, and named rather than stubbed:
   #

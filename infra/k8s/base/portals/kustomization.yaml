@@ -10,3 +10,4 @@ resources:
   - admin-portal.yaml
   - fleet-portal.yaml
   - web-passenger.yaml
+  - www-site.yaml

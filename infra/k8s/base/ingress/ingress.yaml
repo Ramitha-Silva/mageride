@@ -9,7 +9,12 @@
 #
 #   mr-ingress          api.mageride.lk/            -> api-gateway   (REST, 262 operations)
 #   mr-ingress-hubs     api.mageride.lk/hubs        -> fanout-svc    (WSS, R-06/D-23)
-#   mr-ingress-portals  admin. / fleet. / passenger.-> the three Next.js surfaces
+#   mr-ingress-portals  admin. / fleet. / passenger. / www. -> the four Next.js surfaces
+#   mr-ingress-apex     mageride.lk                 -> 301 to www.   (MCS-34, C134)
+#
+# FOUR now, and the fourth is the same argument as the first split: `permanent-redirect` is
+# an object-scoped annotation, so putting the apex redirect on the portals object would 301
+# the admin console to the marketing site.
 #
 # WHAT IS NOT HERE, and must never be: MQTT. 8883 (tracker mTLS) and 8084 (mobile WSS) are
 # L4 and are published by a LoadBalancer Service in the overlay. infra/CLAUDE.md: "MQTT
@@ -125,6 +130,13 @@ spec:
       secretName: mr-tls-fleet
     - hosts: [passenger.mageride.lk]
       secretName: mr-tls-passenger
+    # MCS-34's public informational site, and it follows the `passenger.` precedent rather
+    # than the two back-office ones: unauthenticated public traffic, so its own key. It is
+    # also the only host here that is *meant* to be crawled and linked, which makes it the
+    # most-presented certificate on the platform — one more reason not to have it be the
+    # same key that serves the admin console.
+    - hosts: [www.mageride.lk]
+      secretName: mr-tls-www
   rules:
     # AL-02 — back-office for all six internal roles, no MFA anywhere (AL-37).
     - host: admin.mageride.lk
@@ -150,3 +162,58 @@ spec:
             pathType: Prefix
             backend:
               service: { name: web-passenger, port: { number: 80 } }
+    # MCS-34 — the public informational site. The only host on this object with no upstream
+    # behind it: `www-site` renders from typed content modules and answers with the whole
+    # platform down, so a 502 here means the pod is gone, never that a backend is sick.
+    - host: www.mageride.lk
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: www-site, port: { number: 80 } }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mr-ingress-apex
+  namespace: mageride
+  labels:
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    # A FOURTH object, for one redirect, and it has to be its own — which is the same
+    # reason this file already held three rather than one. ingress-nginx annotations are
+    # OBJECT-scoped, not path-scoped: `permanent-redirect` on `mr-ingress-portals` would
+    # 301 the admin console and the fleet portal to the marketing site. The failure would
+    # not be subtle and it would arrive the moment the annotation synced.
+    nginx.ingress.kubernetes.io/permanent-redirect: https://www.mageride.lk$request_uri
+    # 301 and not 302. The apex is a canonical-URL decision as much as a routing one:
+    # `src/lib/seo.ts` builds every canonical, every `hreflang` and every sitemap entry on
+    # `https://www.mageride.lk`, and a temporary redirect would leave a crawler holding two
+    # addresses for one document and choosing between them itself (S19 · A32/A43).
+    nginx.ingress.kubernetes.io/permanent-redirect-code: "301"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/hsts: "true"
+    nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
+spec:
+  ingressClassName: nginx
+  tls:
+    # The apex needs its own certificate even though it serves no content: the redirect is
+    # issued over TLS, and a browser that hits `https://mageride.lk` before the redirect has
+    # to be able to complete the handshake. A certificate error is what a reader sees
+    # otherwise, on the shortest and most likely address anyone types.
+    - hosts: [mageride.lk]
+      secretName: mr-tls-apex
+  rules:
+    - host: mageride.lk
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            # ingress-nginx still wants a backend on a rule it will never proxy to — the
+            # redirect is returned before the upstream is consulted. `www-site` rather than
+            # a placeholder, so that if a future edit ever removes the annotation the
+            # failure is the apex serving the marketing site rather than a 503.
+            backend:
+              service: { name: www-site, port: { number: 80 } }

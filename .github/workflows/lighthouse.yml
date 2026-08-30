@@ -1,0 +1,117 @@
+# =====================================================================================
+# Lighthouse (C134 · S20) — the public informational site's performance gate.
+#
+# `www.mageride.lk` is the only MageRide surface written to be found by strangers on
+# their own phones, so it is the only one whose *field* performance is a product
+# requirement rather than an operational nicety. A34 states the target against the
+# Sri Lankan median device — a 3G-throttled mid-range Android — and this job is the
+# executable form of that sentence.
+#
+# ## Why it is its own workflow and not part of `ci`'s portal leg
+#
+# `ci.yml`'s `build (portal)` leg runs `npm ci && run lint && run build` across all
+# eight portal workspaces inside a matrix job that also carries the backend and
+# Android legs on a shared 45-minute timeout. Lighthouse needs a *served* build and
+# six throttled page loads on top of that, and it is the slowest and the noisiest
+# thing in the repository — putting it there would make every backend push wait on
+# a browser. S20 permits either placement and is explicit about the one thing that
+# is not negotiable: **"a job that reports without failing is not a gate."** This
+# one fails.
+#
+# ## It is currently red, deliberately, for one reason
+#
+# Accessibility is **100** and SEO is **100** on all six audited pages. Performance
+# is **59–88** against a threshold of 95, and every one of those failures has the
+# same cause: Total Blocking Time — the main thread hydrating a bundle whose largest
+# single item is 92 kB gzipped of resource tables, because eleven client components
+# take a `locale` and construct a translator.
+#
+# That is the same finding `portals/www/scripts/check-bundle.mjs` reports as an A34
+# breach. `build/prompts/MCS-36-a34-js-budget-below-the-framework-floor.md` **D3**
+# asks for the decision that unblocks it. **Do not lower 95 to make this green** —
+# S20's fence is *"fix the page, do not lower the number"*, and the page is fixable
+# once that decision is taken.
+#
+# ## Noise
+#
+# Lighthouse's Performance score moves several points run to run on a shared runner;
+# `/si` measured TBT of 1,270 ms and 2,280 ms on two runs of the same build. That is
+# a property of the metric, not of this job, and it is why Accessibility and SEO —
+# which are deterministic audits — are the two thresholds worth reading as pass/fail
+# today. When Performance comes back inside the threshold it should be re-checked
+# for flap before anyone relies on it as a merge gate.
+# =====================================================================================
+
+name: lighthouse
+
+on:
+  pull_request:
+    paths:
+      - portals/www/**
+      - portals/tailwind-preset/**
+      - portals/ui/**
+      - portals/i18n/**
+      - portals/package.json
+      - portals/package-lock.json
+      - .github/workflows/lighthouse.yml
+  workflow_dispatch:
+
+concurrency:
+  group: lighthouse-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lighthouse:
+    name: lighthouse (www)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: portals/package-lock.json
+
+      - name: install
+        run: npm --prefix portals ci
+
+      # `next build` and not the workspace's own `build` script: that script chains
+      # `check-bundle.mjs`, which is red on the A34 budget by design (S19). Running it
+      # here would fail this job before a single page was measured, and would report
+      # the byte finding twice under a name that is about something else. The bundle
+      # gate belongs to `ci`'s portal leg, where it already runs.
+      - name: build the site
+        run: npx --prefix portals next build portals/www
+
+      - name: serve and audit
+        run: |
+          set -euo pipefail
+          npx --prefix portals next start portals/www -p 3104 &
+          for _ in $(seq 1 60); do
+            curl -sf -o /dev/null http://127.0.0.1:3104/en && break
+            sleep 1
+          done
+
+          # The stylesheet must resolve, or every measurement below is fiction — a
+          # page with no CSS renders, scores well, and means nothing. S19 lost a full
+          # audit run to exactly this and the guard is cheap.
+          CSS=$(curl -s http://127.0.0.1:3104/en | grep -o 'href="[^"]*\.css"' | head -1 | sed 's/href="//;s/"//')
+          test "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3104${CSS}")" = "200"
+
+          npm --prefix portals run lighthouse --workspace @mageride/www
+
+      - name: keep the reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: portals/www/.lighthouse/
+          retention-days: 14
+          if-no-files-found: warn

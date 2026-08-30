@@ -144,7 +144,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C115 | fleet-portal-scheduling-billing | 4c | DONE | 2026-08-08 | **380 tests green** in `@mageride/fleet-portal` (24 files, was 321/22); the verify command exits 0, `next build` emits **24 routes** (was 21), `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 169.1 kB CSS**, and all six portal workspaces are green (**1,248 tests, 69 files**). **The departure clock is Colombo's, and that is the one bug this screen could not survive**: a `datetime-local` value has no zone on it and the server action reading it runs in a UTC container, so `departAtFrom()` resolves the wall clock against `Asia/Colombo` (D-13) — the difference between the 06:00 from the depot and 11:30 — reading the offset out of `Intl`'s zone rules rather than writing `+05:30` down. **Whose app rings is worked out the way `ScheduleAlarmWorker` works it out**: `driversCovering()` is `DriversCoveringAsync`'s predicate transcribed (vehicle, revoked, and the window evaluated *at the booked departure*), so the Vehicle cell names the recipient — or says **nobody is assigned over this departure**, the case the worker otherwise discovers at alarm time and logs as "there is nobody to tell". **Three things SCR-FP-008 cannot do and says so**: a booked departure cannot be changed or cancelled (the contract declares list and create and nothing else, though 0314 admits a `CANCELLED` status it attributes to the operator), the alarm has no off state (`NOT NULL` with a 1…120 CHECK, so the sketch's toggle has nothing to write), and a route cannot be named or chosen (`routeId` is a `spatial.routes` id and transit-svc's route read takes a GTFS string — a different id space). **The Mode A row is on the billing card and is not on the invoice**: a line exists only for a charge `billing.monthly_subscriptions` raised and that table is Mode B only (AL-03), so the count is today's roster, contributes nothing to the total, and the caption says which of the two it is; `invoiceSummary()` compares Σ lines against `lineSumMinor` **and** `invoice.amountMinor` and the card warns rather than picking one. **SCR-FP-010 reads nothing until `canReadBilling()` has said the caller may** — a Manager gets one sentence, not four 403s. **The invoice CSV/PDF is fleet-billing-svc's document, streamed** through a new `download()` on the data layer (the browser holds no bearer, so a link to the API would download a 401), which is the opposite call to SCR-FP-009's analytics CSV — there, no contract has an export route at all. **The sketch's three top-up rows are two rails**: OnePay *is* the card rail, and bank transfer is refused by `ck_fleet_topups_method` rather than by a code review (AL-05). **128 new resource keys × 3 locales** (561 → 689); **5 spec gaps / micro-change-set candidates**, **4 deliberate wireframe deviations**, **1 defect found in C113's shipped screens and fixed** — SCR-FP-004/005/006 passed function label props to client components, which React refuses to serialise across the server boundary, so all three threw at render time; the nine call sites now take sentences composed in the actions and `test/fences.test.ts` asserts the rule over every `'use client'` component's props. No new dependency, and no spec, contract, backend or migration file touched |
 | C116 | fleet-portal-subscriptions | 4c | DONE | 2026-08-09 | **449 tests green** in `@mageride/fleet-portal` (27 files, was 380/24); the verify command exits 0, `next build` emits **27 routes** (was 24), `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 169.2 kB CSS**, and all six portal workspaces are green (**1,317 tests, 72 files**). **AL-23 is the shape of the code, not a rule in it**: eight of the nine Epic 23 proxies are `…/vehicles/{vehicleId}/…` and no contract has a fleet-wide queue or roster, so `?vehicle=` is what both screens *are* and `test/subscriptions.test.ts` asserts every target against `fleet.yaml`. **The proxies split Owner from Manager mid-screen** — the queue and roster are `RequireFleetSubRole(Manager)`, the fare override, cash mark, slip confirmation and AL-25 delete are `RequireFleetSubRole(Owner)` — so `canManageSubscribers()` was added as the portal's third seat-gated control, parsed back out of `FleetOpsEndpoints.cs` by test. **SCR-FP-012's manifest entry moved off `fleet-billing`**: that row is MageRide's monthly invoice to the fleet, and a subscriber's fare is the owner's (AL-24/AL-49/BR-23.10) — same gate, right fact. **AL-59 drift recorded rather than papered over**: `subscription.yaml` has four Mode B methods and `fleet.yaml`'s proxy copy still has five, so the portal's union is the wider one (a pre-AL-59 row renders as a historic method, not a blank cell) and nothing here offers a method at all. **SCR-FP-012's KPIs are one roster read**, and the caption says what they are not: "cash due" is *due* (nothing knows a month will be cash until the owner marks it) and "collected" is the fares of the paid subscribers, not the sum of what arrived. **A muted row is rendered, never filtered** (US-23.12) and Delete is drawn on it alone. **5 spec gaps / micro-change-set candidates**, **7 deliberate wireframe deviations**; 143 new resource keys × 3 locales (689 → 832). No new dependency, and no spec, contract, backend or migration file touched |
 | C117 | web-passenger-subview | 4c | DONE | 2026-08-09 | **138 tests green** in `@mageride/web-passenger` (10 files); `npm --prefix portals run lint --workspace web-passenger && … test … && … build …` exits 0, `next build` emits **7 routes** (`/`, `/track`, `/t/[token]`, `/p/[token]`, the SSE proxy at `/api/live/[token]`, `/_not-found`, `/icon.svg`), and `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 166.6 kB CSS** plus a second assertion this surface needs — **no client chunk names a server-only variable**. All seven portal workspaces are green (**1,455 tests, 82 files**). **The token is redeemed on the server before a tree exists**, so "render nothing before it validates" is where the `await` is rather than a check anybody remembers: `<DeadEnd>` takes a translator, a locale, a path and a store URL and **no snapshot**, so SCR-WT-006 cannot hold a ride — asserted on the prop list *and* by grepping the rendered document for the driver, the plate, the number, the sender and the code. **Nothing redirects**, and that is the spinner's fault: `loading.tsx` streams D2's ≤1 s gate while the token is being redeemed, after which Next can only finish a `redirect()` as a meta refresh — a spinner, a blank and a second spinner for a rider whose car is moving — so all three routes call one `trackScreen` and every scope renders in place. **One `EventSource` per screen, read through context** by the map and by the SOS button's D6' I-29.4 fallback, because two hooks would be two connections against a per-token bucket and the server-rendered snapshot would hand a panic button a fix from whenever the tab was opened; reconnecting is the browser's own (`Last-Event-ID` → the cursor public-bff writes into every `id:`), so the only thing tested is that the proxy forwards it, and the `?since` fallback exists for an intermediary that buffers SSE rather than for old browsers. **Declining transmits no GPS as four properties of four components**, one of which is that the Geolocation API is never called until the reader presses the button that says so. **No cookie, no localStorage** (D6' I-29.1), so the language switch is `?lang=` and three links inside a `<details>` — no JavaScript at all. 137 resource keys × 3 locales; **7 spec gaps** (headline: `GET …/receipt` has no PDF behind its contract, so Download is `window.print()`), **7 deliberate wireframe deviations**; no spec, contract, backend or migration file touched, and no new dependency beyond the three the Fleet Portal's map already introduced |
-| C134 | www-informational-site | 4c | PENDING | | |
+| C134 | www-informational-site | 4c | PARTIAL | 2026-08-30 | **22 sessions. The site is complete, deployable and verified; one Definition-of-Done item is not met and it is a spec conflict rather than a gap in the work.** `npm --prefix portals run lint && … run build --workspace @mageride/www && … run test --workspace @mageride/www` **exits 0** — **139 tests, 9 files**, and all eight portal workspaces green at **1,594 tests** (one pre-existing failure in `portals/fleet`, see below, which C134 did not cause and only made visible). **94 published URLs** (13 routes + 34 guide chapters × 2 rendered locales), **99 prerendered**, **844 keys × 3 languages**, **280 committed screen images at 4.60 MB of a 12 MB gate**, image **346 MB**. **DoD walk — 6 of 7 met.** i18n parity green; the hero meets the APG carousel pattern and is keyboard-operable; reduced motion stops autoplay (asserted behaviourally in both directions, not by inspection); 34 chapters; `fences.test.ts` proves no request-time network call **and the deployment proves it too** — the site answers 200 with `app-services` stopped; `generate_manifests.py --check` clean with the ingress serving `www.mageride.lk` and the apex 301. **NOT MET: Lighthouse ≥95 Performance.** Measured 59–88 across the six audited pages, and **still 59–86 after MCS-36 D3 removed 96.7 kB gzipped from every page** — but this build host cannot measure it (23-container replica, load average 6.25, TBT varying 780–1,220 ms across three runs of one build), so re-measure on a quiet machine before concluding anything. **Accessibility is 100 and SEO is 100 on all six**, so two of the three thresholds are exceeded and the third is unreachable for a reason that is not this component's: A34's *JS ≤ 90 KB gzipped* is **below the App Router's own floor** — react-dom 70 + Next's router 43 + React 33 + runtime 18 = **163 kB gzipped before one line of this surface's code**, so an empty page breaches A34 by 73 kB. **No threshold was lowered** (S19's, S20's and A34's own fences forbid it); the number is applied to the bytes the surface controls, the floor is reported beside it, and **MCS-36** is the change set that asks for A34 to be restated. `npm run budget` and `.github/workflows/lighthouse.yml` are red on purpose and say why. **The 23.7 kB overage was one architectural decision, taken on record as MCS-36 D3 and executed the same day — first-party JS is now 17.0 kB of 90 and the budget passes.** What follows is the finding as S19 measured it, kept because it is why the decision was needed. Eleven client components take a `locale` and construct a translator, so **every published locale's entire resource table — the whole guide corpus — downloads on every page**, including pages with no guide on them. S19 removed what needed no decision: the *unpublished* locale's table is no longer in the client graph, worth **42 kB gzipped off every page**, and the surface gained an invariant it did not have — *a locale's table reaches a browser if and only if the locale is published*, held by a fence. Two things that look like the rest of the fix are not: shipping only the active locale (the locale is a runtime value and the translator is synchronous, so every published table must be statically present) and serving the table in the RSC payload (it moves ~55 kB gz from a cached chunk into uncached HTML on every navigation). What removes it contradicts a stated rule in `portals/www/CLAUDE.md`, so **MCS-36 D3 asks for that decision**. **Four fences, each with an executable form.** AL-52 — `check-al52.mjs` over the tree, `check-bundle.mjs` over the emitted chunks with a **motion** package and signature sweep the shared banned list does not cover (Framer Motion passes `check-al52.mjs` completely clean and is still out), and the one-stylesheet assertion. No request-time API — a source sweep for `fetch`/`axios`/`EventSource`/`WebSocket`/`sendBeacon`, no HTTP client or map dependency, **and now no gateway variable in the pod**: the generated Deployment mounted `portal-config`, which carries `MAGERIDE_API_BASE_URL`, so S21 added `reads_config` to the catalog and this is the only portal that mounts no ConfigMap. No cookie — asserted in source and in `package.json`, with `localStorage` deliberately **not** banned because the theme toggle uses it and D6′ I-29.1 is about a surface holding a live ride. Every string an si/ta/en resource — a shared ESLint rule, a compile error for a missing key, and `check-i18n-parity.mjs` for the three things the compiler cannot see. **WCAG 2.2 AA is met and it took four real fixes, none visible in a browser**: `role="group"` on the `/screens` filter `<ul>` replaced the implicit `list` and orphaned 41 `<li>` (S19 then made the identical mistake with `role="region"` and orphaned 31 more — **a `role` on a `<ul>` is never additive**); the role pages' screen strip was 7456px of content with zero focusable descendants, unreachable by keyboard; `size-cta-icon` is D2's 20px *icon box* and was being used as a *hit area*, making the phone's only navigation control 20×20; and `.mr-sticky-step`'s 0.45 opacity composited an 18px heading to **2.85:1** — opacity is the one way to fail contrast without ever writing a failing colour. **0 axe violations and 0 contrast failures across 48 page loads** (`npm run a11y`, in the repo). **Three spec gaps raised as change sets or recorded:** **MCS-36** (A34's JS budget below the framework floor — the only one needing a decision); OG cards render **English in every locale** because `next/og` accepts TTF/OTF/WOFF and not WOFF2 and there is no Noto Sans Sinhala on the host in any format, so a broken card was traded for an English one; and Sinhala pages carry **CLS 0.07–0.083 where English has 0**, from the two Noto faces arriving after first paint — S04's documented `preload: false` trade, still not fixable because `next/font` exposes no stable URL to preload. **Deferred by decision, not omission:** Tamil is complete, type-checked and unpublished (**MCS-34 D2** — 749 TODO markers, `/ta` 404s, and re-enabling is one entry in `WWW_PUBLISHED_MESSAGES`); store URLs, a contact address and counsel's three legal documents are **D3/D4/D5** and are go-live rows. `screen_coverage.md` stays **202 / 202** — this surface claims no `SCR-*` ID (**D9**) |
 | C118 | contract-test-suite | 5 | PARTIAL | 2026-08-09 | **82 tests green** in a new `tests/Contract` (`MageRide.Contract.Tests`, 1 skipped by design); `dotnet test tests/Contract -c Release` exits 0 and `dotnet build backend/MageRide.sln -c Release` is clean with the project in the solution, so CI's existing `dotnet test backend/MageRide.sln` leg runs it. **What landed:** the contract model (26 documents, `$ref` resolved *across* files, 382 operations), a schema validator whose supported keyword set is asserted to cover everything the directory uses, the four convention suites, the error-registry equality `.spectral.yaml` promises C118 would assert, two-way route conformance over **24 composed services**, and eleven deliberately-drifted payloads that must fail. **What is PARTIAL:** every operation is reached *structurally* (its route is matched against the running service's own `EndpointDataSource`), not yet driven over HTTP with its body validated; the Redpanda event-schema layer and the KMP live-stack tests are not built. **`docker-compose.dev.yml` cannot be brought up at all** — `app-services`, `hot-path` and `fanout` have no Dockerfile — so the CI clause of the DoD is blocked on C124/C125, and services are composed by their own `XApplication.Build` instead, which covers all twenty-four rather than the nine that have images. **12 real drift findings**, each ratcheted in `RouteDrift` so the list cannot grow and cannot hide a fix — headline: **fleet-svc does not start when `Fleet:ProvisioningBaseUrl` is configured** (mapping `POST …/trackers/bind` throws because `ITrackerBindingService` has an instance `BindAsync` and no `[FromServices]`), which is every production deployment; **subscription-svc still serves the OnePay Mode B webhook AL-59 removed**; and `POST /v1/admin/transit/gtfs-import` is declared by a contract nothing maps. **2 contract typos fixed** (`validation-error` → `validation-failed`, three operations). No service, spec or migration file was changed |
 | C119 | observability-stack | 5 | DONE | 2026-08-09 | **114/114 verify checks green** — `docker compose -f infra/observability/docker-compose.yml config && bash infra/scripts/verify-observability.sh` exits 0. Prometheus + Alertmanager + Loki + Promtail + Tempo + Grafana + OTel Collector + blackbox and pg/redis exporters on the dev network; **49 alert rules, 30 recording rules, 11 dashboards, 24 runbooks**. Every ADD §13.3 SLO, all eight §13.3.1 stuck-state rows (R-20) and all seven §13.4 bullets are alertable at the spec's own thresholds, and the verify asserts each threshold literally. The simulated stuck ride is `promtool test rules` over the real rule files. **Three code changes made the DoD reachable:** an end-to-end position histogram in fanout-svc (D-19 was not measurable — two half-path histograms cannot be added), an SOS dispatch histogram in safety-svc (D-33 pages on a single 5-minute window and a database column cannot page), and the two §13.3.1 rows that are not about a ride as gauges on fare-svc and registry-svc, through a new kernel `ScrapedGauges`. **Redpanda v24.2 publishes no consumer-lag metric** — computed from the committed offset and the high watermark. OTLP is proved end to end by running a real service against the collector and finding its trace in Tempo. Seven real defects found and fixed on the way, four of them pre-existing |
 | C120 | e2e-mode-c-ride | 5 | DONE | 2026-08-09 | **50 tests green** in a new `tests/E2E` (`MageRide.E2E.Tests`); `dotnet test tests/E2E -c Release --filter Category=ModeC` exits 0 in **1 m 45 s**, twice in a row against fresh containers, and `dotnet build backend/MageRide.sln -c Release` is clean with the project in the solution so CI's existing solution leg runs it. **Five services actually running** — ride-svc, reputation-svc, dispatch-svc, fare-svc and fanout-svc on real Kestrel sockets over real Postgres/Redis/Redpanda/EMQX, **every background worker on**: outbox dispatchers, the `ride.events` consumer, both R-04 sweeps, both EMQX last-will subscriptions and fanout's projection. No scenario calls `IDispatchService` or `IRideCancellationService`; a booking becomes an offer because dispatch-svc consumed it. **All 32 cells of the §11.12 matrix** are theory cases derived from `RideCancellationMatrix.All` — 31 driven end to end, 1 recorded in a ratcheted `Unreachable` ledger with a test that it is *still* unreachable. **The D-05 Rs 50 crosses four services and two rides**; AL-16's three-cancel disable and its consecutive-run reset are both asserted. **100 accept races, 100 single winners.** R-16's four windows, the flap and the re-plan run on a real last will published by the broker. DT-02 filtering and both halves of DT-06. **Three findings**, all against dispatch-svc/ride-svc and none fixed here: nothing calls `POST /v1/fare/calculate`, so every completed ride stops at `PaymentPending` with no payment row; a driver who comes online while a ride waits in `Matching` is never offered it, contrary to dispatch-svc's own note; and `(DriverArrived, DriverNoShow)` has no producer. No service, spec, contract or migration file was changed |
@@ -21955,3 +21955,2317 @@ red only on a real regression.
   **Working state:** branch **`build/c134-www-informational-site`** — the session began on a
   **detached HEAD** at `origin/main`'s tip (`c87c03e`), where commits would have been dangling.
   Three commits: S01 tree, inputs (manifest + generator) alone, then the regenerated output.
+
+- **Component:** C134 www-informational-site — S03 (scaffold + workspace registration,
+  `build/prompts/C134-www/S03-scaffold-workspace.md`) — 2026-08-28
+- **Status:** DONE — the full verify chain green: `npm --prefix portals ci` · `run lint` (all 8
+  members, including `check-al52.mjs` and the new parity script: **20 keys × 3 languages**) ·
+  `run build` (all 8) · `run test --workspace @mageride/www` (**30 tests, 3 files**) ·
+  `test -f portals/www/.next/standalone/portals/www/server.js` → **standalone layout correct** ·
+  `docker build --build-arg PORTAL=www --build-arg PORT=3004` → `mageride/www-site:dev`, **292 MB**.
+  `next build` reported **43 static pages**: **39 published URLs** (13 routes × si/ta/en), plus
+  `/_not-found`, `/icon.svg`, and the two guide-chapter segments, which publish **nothing** yet.
+  `ƒ /` is the only dynamic route on the site. Container smoke-tested on 127.0.0.1:3004:
+  `/` + `Accept-Language: ta` → **307 → /ta**, no header → **307 → /si**; `<html lang>` is the
+  segment on `/en/drivers` and `/si/vision`; `/de/drivers` → **404, not Sinhala**;
+  `/en/guide/passenger/anything` → **404**.
+- **Notes:**
+  **The prompt's own i18n instruction does not compile, and `web-passenger` never did it that way.**
+  S03 §3 says `export type WwwMessages = typeof wwwEn` beside `as const`. `as const` is what makes
+  the *keys* a literal union — and it makes the **values** literal too, so `si.ts` annotated with it
+  must say "Home" in English. First build died on **38 × TS2322** ("Type `'මුල් පිටුව'` is not
+  assignable to type `'Home'`"). The real precedent is `WebMessages = Record<WebMessageKey, string>`
+  — the key set is the contract, the strings are the translation. `en.ts` now carries that
+  distinction as a comment so the next surface does not re-derive it.
+  **`app/[locale]/layout.tsx` IS the root layout; `app/layout.tsx` is a pass-through that returns
+  its children.** Next requires a root layout above `app/page.tsx` (the `/` redirect S03 §2 asks
+  for), and two files emitting `<html>` would be two documents — so the outer one emits nothing.
+  It wraps exactly one page, which `redirect()`s before rendering, so no reader ever sees its
+  output. This is the shape that makes `<html lang>` the path segment rather than a header read.
+  **A FIFTH thing the Dockerfile requires, and S03 §7 lists four.** `Dockerfile.portal`'s runtime
+  stage ends with `COPY … /repo/portals/${PORTAL}/public`, and the image build failed there —
+  *after* a clean `npm ci`, a clean `next build` and a passing standalone assertion — because
+  `portals/www/public/` did not exist. All three existing portals carry `public/robots.txt`; this
+  one now does too, and it is the **inverse** of theirs (`Allow: /` plus the sitemap URL, since
+  this is the one surface that wants to be indexed). **Flagged for S19:** A5 lists
+  `public/robots.txt` and A32 lists `app/robots.ts`, and **Next fails the build if both exist** —
+  a public file colliding with a metadata route. S19 picks one.
+  **`import.meta.url` is not a `file:` URL under jsdom.** `fileURLToPath(new URL('..',
+  import.meta.url))` throws *"The URL must be of scheme file"* in Vitest's jsdom environment and is
+  the idiom every non-test module here uses. `web-passenger/test/fences.test.ts` uses
+  `resolve(import.meta.dirname, '..')`; both filesystem-walking test files now do.
+  **`check-bundle.mjs` makes a STRONGER claim than the one it was copied from, deliberately.**
+  `SERVER_ONLY_VARIABLES` (four names) became **"the `NEXT_PUBLIC_` prefix appears in no client
+  chunk at all"** — `web-passenger` has a gateway to reach and can only check that the address did
+  not leak; this surface has nothing to configure, so the absolute statement is the true one. Added
+  the **motion sweep** README §4.3 asks for (9 package names, 2 prefixes, 5 runtime signatures
+  including `projectionNodeConstructor` and `data-framer-appear-id`) — with `test/fences.test.ts`
+  that is the **entire** enforcement of the motion fence, since `banned-styling-packages.json` does
+  not list `framer-motion` and MCS-34 declined to widen it. Byte budgets left **reported-only**
+  (currently 25.0 kB CSS / 558 kB client JS, unminified source bytes); S19 turns them into A34
+  thresholds against real pages.
+  **`www.language.label` was seeded and then removed — the orphan check is a real gate.** S03 §4's
+  "no orphans" means the seed can only contain keys something *renders*, and the language switcher
+  is S14's. `www.brand.name` / `www.brand.tagline` survived by being put to work in the locale
+  layout's `generateMetadata`, which is where they belonged anyway: a Sinhala reader's tab and
+  search snippet should not be English. Twenty keys, every one rendered.
+  **Thirteen stub pages, not four.** S03's preamble says "four routes that say almost nothing" and
+  its §6 says seed `routes.ts` with "the ~14 top-level routes"; the two only reconcile one way,
+  because §6's whole point is that *a route that exists and is not listed is a test failure*. Every
+  one of the 13 table rows has a page, every static page is in the table, and
+  `test/routes.test.ts` walks `app/[locale]/` and asserts both directions plus that each dynamic
+  segment draws `generateStaticParams` from `src/lib/routes.ts`.
+  **The two guide-chapter segments exist and publish zero URLs.** `GUIDE_CHAPTERS` is `[]` until
+  S17, so `generateStaticParams` returns nothing and `dynamicParams = false` refuses every slug —
+  the A5 tree shape without a single address the sitemap cannot see. That is what "not written yet"
+  looks like when it is enforced rather than promised.
+  **`not-found.tsx` and `error.tsx` render all three languages at once**, each in its own `lang`
+  block. Next hands neither of them params, so there is no locale to render in, and choosing one
+  would answer a Tamil reader in Sinhala on the page that has already failed them. A33 asks for
+  `lang` switching on mixed-script content and this is the case that needs it most.
+  **Vitest config has no `server-only` alias**, unlike `web-passenger`'s. That surface needs one
+  because its transport is `server-only` and its tests import it; here the only `server-only`
+  module is a five-line `headers()` reader, and the rules live in the framework-free
+  `src/i18n/index.ts` the tests actually import. The reason is written in the config so the next
+  session does not add it back reflexively.
+  **Build-host note NOT honoured, and the box was fine.** `S03 · Verify` and CLAUDE.md both say to
+  keep the replica stack down; it was **already up** at session start (10+ `mageride-replica-*`
+  containers) and taking down a shared testing/CI/demo stack is not this session's call. 23 GB
+  total, ~5 GB used and 17 GB available throughout; the Docker build and a fourth Next build both
+  completed with headroom. If a later C134 session needs the box quieter — S05/S06 run Playwright
+  — that is a decision to put to the user first.
+  **Registration touched five lines in `Dockerfile.portal`, not three:** the PORTAL table (`www —
+  … port 3004 (MCS-34, C134)`), "three web surfaces" → **four**, the `deps` COPY, the build guard's
+  `<admin|fleet|web-passenger|www>`, and two stale enumerations beside them (the build-context
+  comment's workspace list, and "C104 / C111 / C117 must set it" → `/ C134`). `portals/package.json`
+  gained `"www"`; **`infra/k8s/service-catalog.yaml` is untouched — that is S21's.**
+
+- **Component:** C134 www-informational-site — S04 (motion & fonts,
+  `build/prompts/C134-www/S04-motion-and-fonts.md`) — 2026-08-28
+- **Status:** DONE — `npm --prefix portals run lint` (whole tree) green;
+  `npm --prefix portals run test --workspace @mageride/www` 31 passed;
+  `npm --prefix portals run build --workspace @mageride/www` green, `AL-52: clean — 1 compiled
+  stylesheet, 37.1 kB CSS`. No motion package in `package.json`; no `tailwind.config.*` file (the
+  prompt's grep hits are prose only — comments and the `test/fences.test.ts` assertion forbidding it).
+- **Notes:**
+  **Both Noto faces resolved from `next/font/google` on this host** — no `next/font/local` fallback
+  needed. Bound as `--mr-font-sinhala` / `--mr-font-tamil`; the two Latin faces were re-bound to
+  `--mr-font-outfit-latin` / `--mr-font-inter-latin` and `globals.css` composes the preset's
+  `--mr-font-outfit` / `--mr-font-inter` per locale, because binding `next/font` straight onto the
+  preset's names makes the composition a self-referential cycle that resolves to nothing.
+  `html[lang='si']` is (0,1,1) and beats `next/font`'s (0,1,0) class, so stylesheet order cannot
+  decide it. Verified in Chromium: `/si` loads Noto Sans Sinhala only, `/ta` Noto Sans Tamil only,
+  `/en` neither. `preload: false` on both Noto faces — `next/font` preloads per *module graph*, not
+  per rendered page, and all four are imported by one shared layout, so preloading would put a
+  Sinhala download in front of every Tamil and English page; **flagged for S19**.
+  **Next 16's View Transitions are NOT usable and were skipped** — and the blocker is not a Next
+  flag. Next's own guide says they need no configuration *because the App Router runs a React canary
+  that exports `ViewTransition`*. This workspace's `react` is `^19.2.8`, and stable 19.2.8 exports
+  neither `ViewTransition` nor an `unstable_` alias; `@types/react@19.2.18` does not mention it, so
+  the import fails `tsc --noEmit`. Using it means adding `react@canary` to a workspace the other four
+  surfaces share — a dependency change for a page transition. Revisit when it lands in stable React.
+  **`@layer utilities` additions, each derived and recorded in `portals/www/CLAUDE.md`:**
+  `--mr-www-text-hero` 40→72px and `--mr-www-text-hero-sm` 32→48px (the small one's **floor is
+  `text-display` exactly**, so at 375px the marketing scale and D2 agree) with a matching leading
+  clamp each (44→80, 40→56); `--mr-www-section` 48→96 (floor is `xxl`) and `--mr-www-section-lg`
+  64→128 (floor is `xl` doubled); `.text-hero`/`.text-hero-sm` (weight 700 = D2's `display`, no
+  family); `.py-section`/`.py-section-lg`/`.gap-section`; `.mr-aurora` from `primary` /
+  `primary-container` / `secondary-container` via `color-mix(…, transparent)` on the raw
+  `--mr-color-*` the preset flips on `.dark`, so **no `dark:` variant and no new hex**. Every endpoint
+  is on D2's 4px grid; every ramp runs 375→1024px, D2's own outermost breakpoints, so **no fourth
+  breakpoint entered the system** (D8). **No token was added and `tokens.ts` is untouched.**
+  **Two additions that are NOT derivations, flagged as such:** `letter-spacing: -0.02em` on the two
+  hero utilities (D2 prints no tracking for any role; relative to font size, scoped to the two
+  utilities above D2's largest), and the motion timing properties `--mr-www-ease-out` /
+  `--mr-www-ease-in-out` / reveal duration + stagger (D2 prints no curve or duration for any
+  platform). A shared platform motion vocabulary would be a change set against D2.
+  **`src/lib/motion.ts` is three mechanisms and nothing else** — the reduced-motion reader plus its
+  subscription, one shared `IntersectionObserver` per (root, margin, threshold), one `rAF` for the
+  whole document. **Three of the eight primitives ship no JavaScript at all** (`AuroraBackdrop`,
+  `Marquee`, `RouteDraw` are server components).
+  **Reduced motion verified behaviourally, not just visually.** With the setting on, the carousel
+  track's `scrollLeft` is unchanged after 8 s (one interval is 6 s) and the control reads "Play";
+  with it off it advanced 0→1168. Arrow keys work in **both** — reduced motion removes the timer, not
+  the controls. Marquee: `overflow-x` `hidden`→`auto` with the 6 `aria-hidden` clones removed, so
+  nothing is unreachable. Route line: `animation: none` alone would have been a **bug** — its resting
+  state is an invisible path — so the reduced rule also resets `stroke-dashoffset` to 0 and shows the
+  finished route. `Reveal`'s hidden state sits inside `@media (scripting: enabled)` so a no-JS reader
+  never gets a page of `opacity: 0`. `StickySteps` gets **no** reduced block, on purpose: nothing in
+  it transforms.
+  **Two corrections to the prompt, both load-bearing.** (a) `app/[locale]/_motion-demo/` **cannot
+  work** — a folder starting with `_` is a Next *private folder*, opted out of routing, so the page
+  would never resolve at the `/si/_motion-demo` the same prompt asks to check by eye. The directory
+  is `%5Fmotion-demo` (Next's documented encoded underscore); the published URL is exactly
+  `/si/_motion-demo`. (b) The carousel uses `track.scrollTo()`, **not** `slide.scrollIntoView()`:
+  `scrollIntoView` scrolls every ancestor scroller including the document, so an autoplay advance on a
+  half-visible carousel yanks the page under a reader looking elsewhere.
+  **A CSS finding worth not rediscovering:** the stat counter renders through `counter()`, and
+  `counter-reset` must be on the **element** with `content: counter()` on its `::after`. Declaring
+  both on the `::after` is not in scope for itself — the number renders a permanent `0` while the
+  custom property animates correctly and `getComputedStyle` reports the right value throughout. It is
+  invisible from the DOM; it was caught by screenshotting, and confirmed against both spellings side
+  by side in Chromium.
+  **`test/routes.test.ts` gained one named exemption** for the workbench route plus a second test
+  asserting the exempted page still exists, so an exemption cannot outlive what it exempts. **S20
+  deletes the route, its `www.motionDemo.*` keys (all three languages) and both, together.** The
+  `www.motion.carousel.*` keys belong to the mechanism and survive.
+  **Build-host note:** the replica stack was already up at session start and was left alone (same
+  call as S03). Verification used the Playwright Chromium already in `~/.cache/ms-playwright` via the
+  npx cache — **no dependency was added to the repo**; Playwright as a devDependency is still S05's.
+
+- **Component:** C134 www-informational-site — S05 (screen registry & capture,
+  `build/prompts/C134-www/S05-screen-registry-capture.md`) — 2026-08-28
+- **Status:** DONE — `npm --prefix portals run lint` (whole tree) green, `AL-52: clean`, `i18n: 119
+  keys × 3 languages`; `npm --prefix portals run test --workspace @mageride/www` **35 passed** (31
+  from S04 + 4 new fences); `node portals/www/scripts/capture-screens.mjs` writes **69 PNGs**, exit
+  0; `git status --porcelain specs/` empty; `.screens-raw/` gitignored.
+- **Notes:**
+  **69 of 202 selected**, by this rule in priority order: every one of the 34 guide chapters gets at
+  least one screen (verified — 34/34 covered, no chapter empty); the four hero concepts get a
+  passenger *and* a driver cut (**12 heroes**); Android over iOS wherever both exist; **zero
+  `SCR-AP-*`**. S05 permits one or two admin screens on `/fleets` and none earned it — every admin
+  screen that could illustrate something public shows staff tooling and real-looking personal
+  records to an audience that will never sign in. The six `SCR-FP-*` are in because
+  `fleet.mageride.lk` is a *customer* surface. Split: 29 passenger · 30 driver · 6 fleet · 4 `SCR-WT`.
+  **The iOS twin is a derivation, not a field.** `SCR-PA-*`/`SCR-PI-*` and `SCR-DA-*`/`SCR-DI-*`
+  carry identical numeric suffixes — verified, zero asymmetry — so `iosTwin()` is one line instead of
+  69 hand-copied strings a later session could mistype.
+  **THE PROMPT'S LOCATOR DOES NOT WORK, AND NEITHER DOES README §4.1's CORRECTION.** §4.1 replaces
+  the plan's "`SCR-*` anchor" with "the `.cell` whose `.cap .scr` text equals the ID". **`web_admin`
+  and `web_fleet` have no `.cell` at all** — caption and frame are flat siblings inside one `.wrap`,
+  with no per-screen wrapper. The locator that fits all seven files is: find the `.cap` whose `.scr`
+  text is the ID, then walk **forward through its siblings** to the first `.phone`/`.browser`/`.mweb`,
+  stopping at the next `.cap` so a frameless screen cannot borrow the next one's. **202 captions →
+  202 frames, no misses.**
+  **Geometry, measured not assumed.** `.phone` **320 × 680** (prompt's table correct). `.mweb`
+  **330 × 616**. `.browser` **944 wide with a per-screen height of 440–1037** — height varies by
+  *screen*, not by file, so **S06 cannot composite the portal frames into one fixed mockup** the way
+  it can the phones. The plan's 375 × 812 / 1440 × 900 are both wrong.
+  **DARK CAPTURES DO NOT WORK — every entry ships `['light']`.** README §4.2's route (inject a
+  `:root` override from the preset's dark tokens) was built in full and is kept at
+  `scripts/wireframe-appearances.mjs`. It does not produce a publishable image: **231 rules across
+  the seven stylesheets hard-code a light surface hex** — `.card{background:#fff}`, `.sheet`,
+  `.field`, `.btn-out`, `.map`'s green tiles, the status pills — and **all 202 frames inherit them**,
+  with **44 frames** adding their own inline light hexes on top. So the override repaints the *text*
+  and not the *surfaces*. Rendered and inspected side by side: grey-on-white body copy that fails
+  WCAG contrast outright, white cards floating on dark chrome. The prompt asks to "list every such
+  frame" — **it is all 202, which is why this is a decision and not a list.** Painting the component
+  rules too would mean assigning dark values to ~250 hard-coded colours whose meaning is ambiguous
+  (most of the 52 inline `color:#fff` are text on a coloured chip and must *stay* white) — that is
+  inventing a dark appearance D2 has never specified and publishing it as what the app looks like.
+  **The fix is to tokenise `specs/wireframes/*.html`; dark then becomes one field in the registry
+  with no script change.** `portals/www/CLAUDE.md`'s dark-capture paragraph was corrected to match.
+  **`playwright-core`, deliberately not `playwright`.** `playwright`'s postinstall downloads a
+  browser and CI runs `npm --prefix portals ci` with **no skip flag**, so adding it would put a
+  ~130 MB Chromium download on every portal CI run — exactly what plan §A17 exists to prevent. The
+  operator installs a browser once (`npx playwright-core install chromium`); the script says so in
+  its launch-failure message. `test/fences.test.ts` asserts `playwright`/`@playwright/test`/
+  `puppeteer` are absent and `playwright-core` is a devDependency.
+  **Two font packages were added, and the reason is determinism, not taste.** The wireframes declare
+  `font-family:'Inter', system-ui, …` and **neither Inter nor Outfit is installed on this host** — so
+  captures were rendering in DejaVu Sans. That is a fidelity gap *and* a reproducibility break: the
+  same script on another machine would emit different pixels. `@fontsource-variable/inter` and
+  `@fontsource-variable/outfit` are devDependencies, resolved to `file://` paths at capture time,
+  never imported by the site (which self-hosts the same families via `next/font`, S04). A fence test
+  asserts no source file imports `@fontsource` or `polish.css`.
+  **The "polish must not move a control" fence is executable, not aspirational.** Every capture
+  measures each control's bounding box **relative to the frame's own origin**, before and after
+  injecting the non-metric half of `polish.css`, and fails the run if any moves > 1px. `polish.css`
+  is therefore in **two parts** split on a `@CAPTURE-SPLIT@` marker: PART 1 pins the D2 faces (which
+  legitimately rewraps some labels — up to ~90px where a chip row reflows — because it honours the
+  wireframe's own declared font) and establishes the baseline; PART 2 is shadows, radii and hiding
+  contact-sheet chrome, and is held to 1px. Measuring the file as one unit would need a tolerance
+  loose enough to swallow ~90px, which would no longer catch a control actually moving.
+  **Three bugs the fence caught, two of them mine.** (a) Measuring viewport-relative made all 67
+  frames look moved, because hiding `.page-header` lifts every frame 200–430px — the deltas were
+  identical and size-free, which is what gave it away. (b) The split marker was named in the file's
+  own header prose, so `indexOf` split the docstring: **every font rule landed on the wrong side and
+  the second half began mid-comment**, where a CSS parser discards tokens until the next `{` and
+  silently ate the chrome-hiding rule. The fence ran the whole time and was measuring the wrong
+  thing. The loader now rejects zero *or multiple* occurrences and slices past the comment's `*/`.
+  (c) `--only` wiped the entire output directory, so re-shooting one frame destroyed the other 68;
+  it now overwrites just its targets and records `partial` in the manifest.
+  **Idempotency verified, not asserted:** four captures re-shot after a full run are **byte-identical
+  by md5** (`prefers-reduced-motion` forced, all animation/transition killed, `document.fonts.ready`
+  awaited, no timestamp, `file://` only).
+  **Two files this session added that S05 did not name.** `src/content/chapters.ts` — the 34 chapter
+  slugs from plan §A19/§A20, slugs only, no content. The registry's `chapters` field has to name real
+  chapters *now* while `GUIDE_CHAPTERS` stays empty until S17 and the bodies until S08–S11; without a
+  canonical list the registry would use free strings and drift silently. `GuideChapterRef` is
+  `` `passenger/${slug}` | `driver/${slug}` `` so a typo is a compile error — qualified because both
+  guides really do share `install-and-first-run`. **S08–S11 should implement these slugs, not invent
+  their own.** And **68 caption keys + `www.screens.provenance` in all three languages**: `captionKey`
+  is typed `WwwMessageKey`, so the keys must exist for the registry to compile, and the parity
+  script's orphan check requires each to be *referenced* — `screens.ts` is what references them. The
+  English is written to be publishable; **S07–S09 still own the marketing pass**, and si/ta are
+  first-pass with S12/S13 owning native review (D2 defers Tamil *quality*, not presence).
+  **`www.screens.provenance` is the honesty line**, rendered once by S18 rather than repeated in 69
+  captions: these are rendered from approved designs, not photographed from a released app.
+  **Verify-line deviation:** S05 says `ls .screens-raw | wc -l` should be "2 × the number of entries
+  with both appearances". With light-only that is **1 × 69 = 69 PNGs**, plus a `manifest.json`, so
+  `ls | wc -l` reads **70**.
+  **Build-host note:** the replica stack was up throughout and was left alone (same call as S03/S04).
+  A full capture takes ~15 min on this box at `deviceScaleFactor: 3`.
+
+- **Component:** C134 www-informational-site — S06 (compositing & budget,
+  `build/prompts/C134-www/S06-compose-frames-budget.md`) — 2026-08-28
+- **Status:** DONE — `npm --prefix portals run build --workspace @mageride/www` green and reporting
+  `screens: 276 images, 4.52 MB of 12 MB — every registry entry resolves, none over 220 kB`;
+  `npm --prefix portals run test --workspace @mageride/www` **36 passed**; `du -sh` 5.2 M;
+  `find public/screens -size +220k` empty.
+- **Notes:**
+  **276 images, 4.52 MB, largest 110 kB** — 69 registry entries × 2 densities × 2 formats. Well
+  inside the 12 MB / 220 kB fence; **nothing was dropped to fit it**.
+  **THE CAPTURES ALREADY CONTAIN A BEZEL AND A STATUS BAR, so the compositor draws neither.** S06
+  step 1 asks for "rounded corners, bezel, a status bar for the phone families"; the wireframes
+  already draw `.phone` with a 9px `#0f1115` border and its own `.sbar`, and S05 screenshots exactly
+  that box. Verified by sampling: a phone capture at (30,30) is `#0F1115` (bezel), a portal capture
+  is `#E7EAEE` (browser chrome). Drawing a second bezel would put a phone inside a phone. What the
+  compositor adds instead is the three things a capture genuinely cannot hold: **rounded corners as
+  transparency** (an element screenshot is a rectangle and the area outside the radius is page
+  background — sampled `#FCFCFC`, so unmasked every frame would wear four pale corner triangles),
+  a **D2 `elevation-5` drop shadow** (a box-shadow paints *outside* the border box, which is
+  precisely what the element screenshot clips away, so `polish.css`'s shadow never reached the PNG),
+  and the plate.
+  **Colours are imported, not transcribed.** Node strips types, so the compositor imports
+  `portals/tailwind-preset/src/tokens.ts` directly and a D2 change reaches the images by re-running
+  the refresh. Plate = `.mr-aurora`'s own recipe (`primary-container` at 20% radial over `surface`),
+  shadow = `ELEVATIONS['elevation-5']` **parsed from the token string**, padding = `SPACING.xxl`.
+  **No new hex.** (S05's `wireframe-appearances.mjs` transcribes instead, and that is not an
+  inconsistency — it maps D2 onto the *wireframes'* custom-property names, which has no importable
+  source.)
+  **NO PNG FALLBACK — AVIF + WebP only, and the arithmetic is why.** Measured on this set: a 2×
+  phone plate is **12 kB AVIF / 21 kB WebP / 123 kB PNG**; a 2× portal plate is **31 / 57 / 266 kB**.
+  A smooth gradient is near worst-case for PNG's predictors, so **the PNG of every portal frame
+  breaches the 220 kB per-image fence on its own**, and the format would put ~14 MB into a 12 MB
+  budget. S06 says to drop PNG for dark captures first "because every browser that reads
+  `prefers-color-scheme` also reads WebP" — S05 shipped light-only so that lever did not exist, but
+  the reasoning generalises: **WebP is the universal floor**, shipped in every engine since Safari 14
+  (2020). A PNG fallback in 2026 is bytes nobody fetches.
+  **Encoder effort was measured, and maxing it out was wrong.** On the largest image, AVIF effort
+  2/3/4/6 gives 42/39/37/35 kB at 1.2/2.4/7.5/19.3 s. **Effort 6 spends 16× the time of effort 3 to
+  save 4 kB against a 220 kB ceiling in a directory using a third of its budget.** A first pass at
+  effort 6 was on course for **~55 minutes**; at AVIF effort 3 + WebP effort 4 the full compose is
+  **3 m 21 s** for 4.52 MB instead of ~4.2 MB. A refresh nobody wants to start is a refresh that does
+  not happen. **If the budget ever tightens, raise `effort` before dropping a screen** — it costs
+  only wall-clock. Recorded in the script and in `public/screens/README.md`.
+  **The budget gate is enforced from today, unlike the JS/CSS totals beside it** — and that
+  asymmetry is deliberate, not an oversight. A34's JS budget describes a finished page and the pages
+  are still empty, so a threshold now would be met by having shipped nothing (S19 owns those).
+  `public/screens/` is the opposite: complete now, committed, and heavier every time somebody adds a
+  screen. **Both failure modes were tested negatively rather than assumed** — a 293 kB probe file is
+  named and rejected, and removing one `.avif` makes the build name `SCR-PA-010`; both recover.
+  **`public/screens/README.md` is preserved by the compositor, not wiped.** The cleanup deletes file
+  by file and skips `README.md`, because an `rm -rf` on the output directory would delete the one
+  hand-written file whose whole job is to say that everything beside it is generated. Found by
+  writing the README and noticing the next run would eat it.
+  **The plate is rendered light-only, and that is a live constraint on S15/S18.** The screens are
+  light because S05 established the wireframes cannot be rendered dark honestly, and the plate
+  follows them. So **a dark page must place these on their own light surface** — a card, the way a
+  printed screenshot sits on paper — rather than letting a bright rectangle sit on a dark section.
+  Written into the `next/image` contract in `portals/www/CLAUDE.md` alongside the rest (explicit
+  `width`/`height` from the real per-screen numbers, `alt` from `captionKey` through the translator,
+  `priority` only for `HERO_SCREENS`, and `prefers-color-scheme` in CSS rather than a JS `src` swap).
+  It disappears by itself if the wireframes are ever tokenised.
+  **`sharp` is a devDependency** (0.35.4) with a fence test asserting it stays out of `dependencies`
+  and is never imported from `app/`/`src/` — it is a native module pulling libvips, and a page that
+  imported it would drag that into a marketing site's server bundle to re-render an image that was
+  composited months earlier.
+  **Two lint findings worth not rediscovering:** `document` inside `page.evaluate` callbacks needs a
+  file-scoped `/* global document */` (S05) — and here, an `rgbOf()` helper written for an SVG
+  `rgba()` went unused once the gradient moved to `stop-opacity`, which `@typescript-eslint` caught.
+  Both are the shared config doing its job on `.mjs` build tooling.
+  **Build-host note:** the replica stack was up throughout and left alone. Full `screens:refresh` is
+  ~15 min capture + ~3.5 min compose on this box.
+
+- **Component:** C134 www-informational-site — S07 (content architecture & marketing copy,
+  `build/prompts/C134-www/S07-content-vision-mission.md`) — 2026-08-28
+- **Status:** DONE — **not** blocked: MCS-34 D1 *was* answered. `check-i18n-parity.mjs` green,
+  `i18n: 325 keys × 3 languages`, reporting `si: 206 · ta: 206` TODO strings; `tsc --noEmit` clean;
+  `npm --prefix portals run test --workspace @mageride/www` 36 passed; `run build` green.
+- **Notes:**
+  **D1 was already decided — S07's "stop and ask" gate did not fire.** MCS-34 line 159 records
+  **national-infrastructure-led**, quoted in full, chosen 2026-08-28. The other two framings stay in
+  MCS-34's record and are not on the site. What D1 *also* records is that the framing "carries a
+  coverage claim ('every bus, every train') that is not true on launch day" — so
+  **`www.mission.qualifier` is required furniture, not decoration**: *"We are starting, not
+  finished… you will see the ones who have joined — not every vehicle in the country."* A layout
+  session may move it; it may not drop it for balance. Recorded in `portals/www/CLAUDE.md`.
+  **S07's own source list is wrong and S01 was right about it.** `MageRide_Government_Proposal.md`
+  **does not exist in this repository** — S07's "Before you start" cites it, quotes it, and calls it
+  "a much better public framing"; `find` returns nothing and the quoted sentence appears only inside
+  `docs/www-site-plan.md` and S07 itself. The real sources are **URD §1** and —
+  much the better starting point, because it is already written for a lay reader —
+  **`specs/MageRide_Functional_Walkthrough.md` §1**, which S07 also names and which is what the
+  vision copy was actually built from.
+  **CORRECTION: the stats band says 10 vehicle types, not 11.** S07 §6 asks for "11 vehicle types".
+  The authoritative enumeration is URD §1.B and `backend/src/Registry.Api/Domain/VehicleTypes.cs`,
+  and **both list ten**: motorbike, three_wheeler, flex, sedan, mini_van, van, truck, mini_truck,
+  bus, train. Eleven is the number of *map marker colours* — `VEHICLE_COLORS`' eleventh token is
+  `veh-private`, whose own comment says it is "a Mode B **display** token, not a vehicle type" (a
+  private vehicle is a sedan drawn grey because of its mode). Publishing 11 would invent a vehicle
+  type a reader could go looking for. Fixed in `STATS` with the reasoning in the doc comment.
+  **The six fee tiers, and the four URD places that agree on them.** `DAILY_FEE_TIERS` in
+  `src/content/marketing.ts`, **in minor units** per the Universal Rules — motorbike 5 000,
+  three-wheeler 10 000, flex 15 000, sedan 20 000, mini van 25 000, van 30 000 (i.e. Rs 50 / 100 /
+  150 / 200 / 250 / 300). Stated identically at URD **line 12** (§1 Product Vision), **line 484**
+  (Epic 9 · US-9.1), the **Epic 9 "Daily Platform Fee Structure" table**, and **line 1251**
+  (glossary). Keyed by the canonical `registry.vehicles.vehicle_type` so the table joins to the
+  backend enum and the preset's vehicle colours with no second mapping. **No number is written
+  inside a message string** — S20's `test/content.test.ts` asserts these six against the URD.
+  **Mode B's price is deliberately not a constant.** The URD says "**approximately** Rs 300" in both
+  places it states it, so the copy says "around Rs 300 per vehicle, with the first month free". An
+  approximate price rendered as a precise one is a false claim with a decimal point on it. **The
+  exact figure is a content gap.**
+  **Content gaps — facts the site needs and the specs do not state.** (a) Mode B's exact monthly
+  charge (above). (b) **The contact address** — MCS-34 D4 left it unchosen, so `/contact` says where
+  support actually lives (inside the app, attached to the trip) and names no address; a placeholder
+  somebody mistakes for real is worse than an absence. (c) **Store URLs** — D3: the apps are not
+  published, so `/download` says so plainly and links to nothing rather than showing a dead store
+  badge, and it carries **no form** (a notify-me box would be a personal-data collection point on a
+  surface whose whole claim is that it holds none). (d) No launch date, no city list, no coverage
+  numbers — none exist in any spec and none are on the site.
+  **The mode copy respects the service boundary.** `CLAUDE.md`: ride-svc owns Mode C, trip-state-svc
+  owns Mode A/B, never crossed. On a marketing page that means **three separate things you can do,
+  never one feature with a switch** — copy saying "toggle between tracking and booking" would
+  describe an app MageRide is not.
+  **Word count, reported honestly rather than padded.** The English corpus is **2 944 words** across
+  206 keys (FAQ 867 · page-level 886 · bands 731 · vision/mission/values 397), and `en.ts` totals
+  **3 729** including S05's captions. S07 asks for "~6 000". **Every itemised deliverable in §6 is
+  complete and at or above its stated size** — 4 hero slides, 3 modes, 8 how-it-works steps, 5
+  feature splits at ~60 words each as specified, the fee band, stats, the language band, footer, and
+  **20 FAQ entries against a 15–20 ask** — plus page-level copy for all nine prose routes that §6
+  implies but does not itemise. The list simply does not total 6 000; that figure comes from plan
+  §A23's estimate for all marketing copy. Reaching it would mean padding public copy to hit a
+  number, which is how bad marketing copy gets written. **S14–S18 should find they are composing,
+  not authoring** — if any of them hits a missing string, that is the real test of this count.
+  **Two files S07 did not name.** `src/content/pages.ts` — per-route headers, intros and section
+  furniture, keyed by `RoutePath` so a page cannot be written for a route the site does not publish;
+  the split against `marketing.ts` is scope, not kind (one route vs reusable bands). And
+  `src/content/index.ts` is the chapter *inventory* while S05's `chapters.ts` is the *contract* —
+  separate because S05 needed slugs before any chapter existed, and a slug the registry has not
+  filled yet is a planned chapter rather than a broken one. `CHAPTERS` is **empty until S08**, which
+  is correct: the dynamic segments already answer 404 for every slug.
+  **The parity script now warns on TODO and never fails on it.** MCS-34 D2 deferred Tamil
+  deliberately, so failing would mean C134 could not go green until a decision the user made had
+  been reversed. Every build prints `si: 206 · ta: 206`; S12 and S13 drive it to zero. The 206
+  placeholders were **generated from `en.ts`**, not hand-written, so key parity is mechanical rather
+  than trusted — and each holds the English text behind the marker, which is worse than a
+  translation and much better than a missing key.
+  **One thing the orphan check caught and I had to fix properly:** five footer keys were written
+  with no content module naming them. The right fix was `FOOTER_COLUMNS` binding headings to the
+  `RouteGroup`s `src/lib/routes.ts` already carries — *not* a second list of links, because `ROUTES`
+  is what the sitemap reads and a duplicate would drift from it.
+
+- **Component:** C134 www-informational-site — S08 (passenger guide, chapters 1–8,
+  `build/prompts/C134-www/S08-guide-passenger-1-8.md`) — 2026-08-28
+- **Status:** DONE — `npm --prefix portals run lint` (all seven workspaces), `npm --prefix portals
+  run test --workspace @mageride/www` (36 tests) and `node portals/www/scripts/check-i18n-parity.mjs`
+  all green. The eight chapters are registered in `src/content/index.ts` in order 1–8; every callout
+  carries a source, every `screenRef` and every chapter `screens` entry resolves to a registry entry
+  tagged with that chapter, and every `faqRefs` id resolves. Checked with a throwaway vitest file,
+  deleted after — `test/content.test.ts` is S20's and this session did not pre-empt it.
+- **Notes:**
+  **Word count per chapter** (summary + steps + notes + callouts, excluding titles), against S08's
+  "~450": p01 **373** · p02 **400** · p03 **483** · p04 **392** · p05 **378** · p06 **420** ·
+  p07 **437** · p08 **395** — **3 278 words**, 95 keys, 6–8 steps and 2–3 callouts each. Reported
+  rather than padded: the shorter chapters are the ones where the specs say less, and inventing a
+  further sixty words about permissions would have meant inventing facts about permissions.
+  **The brief's chapter-8 payment facts are stale, and this is the finding of the session.** S08
+  says "OnePay adds **+5%** … LankaQR has no surcharge; cash is the default" (US-8.10/8.11, URD
+  v2.9). **ADD v3.6's payment-custody change set — §1.18 AL-57…AL-59, 2026-08-01 — retired both card
+  rails as ride methods.** OnePay now collects only where **MageRide is the payee** (wallet top-ups,
+  daily fees, vouchers); a card passenger tops up a **passenger wallet** and pays with `wallet`; a
+  LankaQR ride payment is the **driver's own** QR (`scan_driver_qr`). Three specs agree and the URD
+  is simply the one that was not re-issued: **D2's own SCR-PA-016 paragraph** now reads "Cash
+  (default) · Wallet · Driver QR … **OnePay is not a ride method**"; **D3** `POST /fare/pay` is
+  `cash | wallet | scan_driver_qr | cod`; **ADD §6 `fare-svc`** says the same "because no ride fare
+  may be charged to a platform merchant account". AL-59 likewise removed **OnePay from Mode B
+  subscription payment** (`payTo` is the fleet owner), leaving `lankaqr_deeplink | lankaqr_scan |
+  online_transfer | cash`. Chapters 6 and 8 follow the current specs, so **the site quotes no 5%
+  surcharge** — publishing one would be exactly the "public site quoting a price that changed"
+  failure S08 warns about. S07 reached the same conclusion independently (`www.faq.howToPay.a`,
+  the SCR-PA-016 caption). **URD Epic 8 and D2's traceability row 1303 still carry the old rule —
+  filed the same day as `build/prompts/MCS-35-retired-ride-rails-wireframes-and-urd.md`.**
+  **Two committed images now contradict the specs, and no C134 session can fix them.**
+  `pa-016-payment-method` draws a live "OnePay +5% Rs 43 · Rs 893" row and `pa-025a-subscription-
+  payment` draws "OnePay · cards / wallets · +5%". Both are faithful renderings of the **approved**
+  wireframes, which is the problem: the wireframes are what changed underneath them. S08 dropped
+  `passenger/choosing-a-vehicle-and-fare` from SCR-PA-016 and `passenger/mode-b-payments` from
+  SCR-PA-025a so that neither frame is published beside copy saying there is no surcharge — correct
+  on the merits too, since with no surcharge on any method the payment sheet no longer changes the
+  fare. **That does not solve it.** Both frames still render on `/screens` (S18) with their captions,
+  so a reader can still see a retired price. The fix is one of: update `specs/wireframes/
+  passenger_android.html` for AL-57/AL-59 and re-run `npm run screens:refresh`, or drop the two
+  entries from the registry. **The first is a spec change and belongs above C134**; SCR-PA-016 keeps
+  its `passenger/paying` tag so S09 judges chapter 11 with its own eyes.
+  **Screen registry — four entries re-tagged, no new `SCR-*` ID, coverage stays 202 / 202.**
+  Added `passenger/tracking-buses-and-trains` to **SCR-PA-008** (D1′ F-23.1 starts a public-transport
+  trip in the same search box; the Walkthrough's screen index lists it under scenario 11 as well as
+  4) and to **SCR-PA-009** (one screen carries the GTFS routes above and the Mode C tiers below);
+  added `passenger/booking-a-ride` to **SCR-PA-026** (saved places are one of the four ways to set a
+  location). Removed the two tags above. Every reason is in a comment beside the entry.
+  **Three places the brief describes an app that is not the one in the specs**, corrected in the
+  chapters and recorded in each module's doc comment. (1) **The passenger does not choose a city** —
+  US-1.3a is written "as a user" but the city list is on the **driver's** SCR-DA-002; the passenger's
+  SCR-PA-002 has three slides and the language boxes in D2, D1′ A.1 and the wireframe alike, so a
+  "pick your city" step would reference a control the picture beside it does not have. (2) **Ten
+  vehicle types, not eleven** — the eleventh palette token, `vehPrivate` grey, is a Mode B *display*
+  colour whose own comment in `tokens.ts` says so; S07 made the same correction for the stats band.
+  Chapter 3 names the ten and then explains the grey, which is the marker a reader is most likely to
+  tap and be surprised by. (3) **Paste-a-link is not on your own booking** — US-8.2d and F-23.2 scope
+  it to a location captured *for somebody else* (proxy pickup, package pickup and drop-off), and
+  Walkthrough scenario 4 does not offer it; chapter 7 describes it and says where it appears.
+  **Chapter 2 is mostly a set of negatives, and they are the honest part.** The passenger app asks
+  for **foreground location only** (D2 SCR-PA-005: `FINE` + `FOREGROUND_SERVICE_LOCATION`,
+  `requestWhenInUseAuthorization`; D1′ A.5) — background/always is the **driver** app (SCR-DA-007).
+  So "background" appears as the thing the app does not do. **No spec states a passenger-side
+  notification-permission prompt** (only the driver's screen lists `POST_NOTIFICATIONS`), so the
+  chapter describes the profile *preference* (US-1.5) and the push types (D1′ A.5) and invents no
+  dialog. The contact picker (US-8.16) is the only other permission a passenger meets.
+  **Content gaps — facts the guide needed and the specs do not state.**
+  (a) **No expiry for an unanswered Mode B access request** (Walkthrough scenario 12 flags it): the
+  chapter describes Pending / Accepted / Rejected and promises no timeout. (b) **No timetable-only
+  fallback** for a GTFS route with no vehicle reporting (scenario 11's gap): chapter 4 says the route
+  draws and no vehicle appears on it, which is what US-7.17 gives, and promises no schedule.
+  (c) **No published Mode B subscriber amount** — it is per-subscriber and operator-set (US-23.7),
+  so the chapter quotes no figure; the platform's own charge stays "about Rs 300" because the URD
+  says *approximately* in both places. (d) **Where a passenger finds a Vehicle ID** when the vehicle
+  is not on screen is unspecified — chapter 5 says you can type one and does not say where to get it.
+  (e) **`www.faq.howToPay.a` (S07) omits the wallet method** — it says "cash, or by scanning the
+  driver's QR code", which was right before AL-57 added `wallet`; a one-line fix for S12/S18.
+  (f) **`www.page.passengers.bookBody` says "nothing is added afterwards"**, which is stronger than
+  **D5 §1.4** supports: the upfront figure is an *estimate* over route distance (US-8.9) and the
+  final fare is the same tariff over the distance actually travelled, with a discrepancy beyond the
+  admin threshold going to review. Chapter 8's second callout states the true version; **S16 should
+  soften that sentence on `/passengers`** rather than leave the two saying different things.
+
+- **Component:** MCS-35 retired-ride-rails-wireframes-and-urd (micro-change-set **filed, not
+  applied**) — `build/prompts/MCS-35-retired-ride-rails-wireframes-and-urd.md` — 2026-08-28
+- **Status:** FILED — no spec, contract, migration or image was edited by this session. The change
+  set names every location, the replacement rule, and five decisions that cannot be inferred from
+  the specs. **No manifest component was added and the generator was not re-run** (MCS-06's rule);
+  the one path that would need it is decision D4, a new `SCR-PA-*` id for the passenger wallet.
+- **Notes:**
+  **It was requested three times before this.** C080, C082 and C083 each closed on 2026-08-06 asking
+  for exactly this micro-change-set — *"the SCR-PA-016/017 wireframes still draw OnePay +5%"*,
+  *"Cash takes the vacant row … the wireframe needs a micro-change-set"*, *"the wireframe's
+  Cash/LankaQR/OnePay row needs a micro-change-set"* — and it was never filed. C134 S08 is the fourth
+  component to hit it and the first for which it is **publicly visible**: `pa-016-payment-method` and
+  `pa-025a-subscription-payment` are committed under `portals/www/public/screens/` and draw a
+  surcharge the platform does not charge.
+  **Four artefacts already carry the new rule and the rest contradict them** — D2's own SCR-PA-016
+  paragraph (`Δ AL-57/AL-59`), D3's `POST /fare/pay` enum, ADD §6 `fare-svc`, and the built
+  `apps/passenger-android`, whose `PaymentRails` contains neither retired rail and says so. **D2 now
+  disagrees with itself six lines apart**: line 477's corrected paragraph sits above line 483's ASCII
+  sketch still drawing *"OnePay +5% Rs 525"*.
+  **Scope, in four parts.** **A** — 13 wireframe locations across `passenger_android`,
+  `passenger_ios`, `web_fleet` and `web_admin`, every edit row-for-row so the 320 × 680 `.phone`
+  geometry C134 measured is undisturbed. **B** — URD Epic 8 (eleven lines, US-8.10 through the C-11
+  label standard) plus the identical claim in Epics 13, 20, 22, 23 and the three screen tables;
+  moving Epic 8 alone would leave the document contradicting itself. **C** — D2's seven stale rows
+  and `mobile_db_schema.md` §2.3, recommended here; `ride.yaml` / `iam.yaml` / `fleet.yaml` and three
+  CHECK constraints recommended as a **separate** change set, because the booking-time enum carries
+  code and a migration. **D** — `npm run screens:refresh` re-renders the two published images.
+  **Two findings the sweep turned up that nobody had filed.** (1) `backend/contracts/fleet.yaml`
+  2300 still offers `onepay` for Mode B subscription payment while `subscription.yaml` 1845 has
+  already removed it — **two contracts, one flow, two answers.** (2) **AL-57 gave passengers a wallet
+  and no screen**: D2 line 1019 discharges it with *"the same screen serves the passenger"*, pointing
+  at **SCR-DA-022** — a driver screen, in the driver app's wireframe file, which a passenger cannot
+  open. C134's guide chapter 8 already tells readers they can pay from that balance. It is decision
+  **D4** and it is the only part of this change set that would move screen coverage off 202 / 202.
+  **Five decisions are open** and are listed in the file: proxy-booking payer routing under
+  `scan_driver_qr` (US-8.21 has no answer), whether US-8.10a survives or moves to Mode B, the new
+  C-11 label triple (which binds the driver app too), the passenger wallet screen id, and whether
+  the contract half rides along or becomes MCS-36.
+
+- **Component:** C134 www-informational-site — S09 (passenger guide 9–16) —
+  `build/prompts/C134-www/S09-guide-passenger-9-16.md` — 2026-08-28
+- **Status:** DONE — `npm --prefix portals run lint --workspace @mageride/www` (eslint + parity +
+  `tsc --noEmit`), `run test` (36 tests, 3 files) and `run build` all green; parity reports
+  **531 keys × 3 languages, complete, placeholder-consistent, every one rendered**. By hand:
+  the 16 passenger chapters resolve in the registry, `order` runs 1…16 with no gap, the 16 slugs
+  are unique, and **every `screenRef` and every `screens` entry names a real `screens.ts` id**
+  (0 unresolved). **The passenger guide is now 16 chapters complete in English.**
+- **Notes:**
+  **Word counts.** Passenger guide total **6,771** English words. S09's eight: p09 428 · p10 478 ·
+  p11 436 · p12 450 · p13 467 · p14 372 · p15 401 · p16 422 — average **432** against the plan's
+  ~450 target. p14 (scheduling) is the outlier and is short *because* of the two spec gaps below;
+  the missing words are the ones nobody is entitled to write. No new `SCR-*` id was added: all
+  eight chapters were already covered by S05's registry, so screen coverage stays **202 / 202**.
+  **The plan's chapter table did not match the specs in one place, and it is the money one.**
+  S09's brief for chapter 11 says *"three ways to pay: cash (default), driver QR / LankaQR (no
+  surcharge), OnePay (+5%)"*. That is URD v2.9 and **ADD v3.6 / AL-57…AL-59 retired both card rails
+  as ride methods on 2026-08-01** — `POST /fare/pay` is `cash | wallet | scan_driver_qr | cod` and
+  **no ride method carries a surcharge**. S08 hit the same staleness on chapter 8 and filed MCS-35;
+  chapter 11 is where publishing it would have put "+5%" on a public page. The chapter is written
+  from ADD §1.18, D3 and D2's `Δ AL-57/AL-59` paragraph instead, and describes the driver-QR
+  attestation (passenger *"I've paid"* → driver confirm → `DriverConfirmedQR`, disputes to Support,
+  no money held because the platform never had it) rather than paraphrasing it.
+  **SCR-PA-016 is now `chapters: []`** — S08 reduced it to `passenger/paying` and left the call to
+  S09, and the call is the same one it made for SCR-PA-025a. The frame draws a live
+  *"OnePay +5% Rs 43 · Rs 893"* row against a Rs 850 fare; chapter 11 says in as many words that no
+  way of paying costs extra. It still renders on `/screens`, so this is a mitigation, not a fix —
+  MCS-35 Scope A + D is the fix.
+  **A new location for MCS-35 that its Scope A table does not list.** `SCR-PA-017` (pay fare) draws
+  a *"Pay with my bank app (LankaQR)"* row — the platform-merchant deep link **AL-59 retired for
+  rides** (`LankaQr__MerchantId` survives only for wallet top-ups). MCS-35 reaches SCR-PA-017 only
+  through D2's component tables (lines 495/500), not through `passenger_android.html` itself. It is
+  a **stale control rather than a false price**, and the frame's headline and primary action —
+  "Scan driver's QR to pay", the awaiting-confirmation state, "Switch to Cash" — are correct after
+  AL-47/AL-59, so the entry is **kept** for chapter 11 rather than dropped. Add the frame to Scope A.
+  **Content gaps — four, none of them filled.**
+  (1) **"Share your live trip" has no surface.** The plan's chapter-10 table lists *share* among the
+  during-the-ride actions, and **S07's `www.faq.safety.a` already promises it to the reader** —
+  *"Share your live trip with someone you trust"*. `safety.trip_share_tokens` does carry a
+  `trip_view` scope (D-34) and the ADD's §18 checklist names a "live-trip web share token", but
+  **no URD story, no D2 screen row and no wireframe control surfaces it**: SCR-PA-015 draws the
+  driver card, the start code, Call, SOS and Cancel, and nothing else. Chapter 10 therefore has no
+  share step. **The FAQ answer should be corrected or the control specified** — one of the two, and
+  it is a public claim either way.
+  (2) **Who pays a proxy booking is unanswered** (MCS-35 decision D1, still open). US-8.21's rule was
+  *Cash ⇒ rider pays; LankaQR/OnePay ⇒ booker charged*, and both card rails are gone. `wallet` maps
+  to the booker's balance; **`scan_driver_qr` has no answer**, because the phone at the drop-off is
+  the rider's. Chapter 13 publishes only the surviving half — if the booker chose cash, the rider
+  pays and their tracking page says so — and is silent on the rest.
+  (3) **Scheduling has no stated window and no stated edit path** (Walkthrough scenario 9's own
+  flagged gap). Nothing says how far ahead a ride may be booked, and nothing says whether one can be
+  edited or only cancelled and rebooked. Chapter 14 says "a future date and time", offers review and
+  cancel, and quotes no limit in either direction.
+  (4) **The passenger wallet still has no `SCR-PA-*` screen** (MCS-35 decision D4, unchanged since
+  S08). Chapter 11 describes paying from a balance and illustrates it with nothing, because D2 line
+  1019 points at **SCR-DA-022** — a driver screen a passenger cannot open.
+  **One correction made to a first draft, recorded because it is easy to repeat.** US-1.5
+  (Discussion item 10) moved language **off** Edit profile: `SCR-PA-027` Profile & settings carries
+  language, notifications, saved addresses, default payment and Help & Support, while **Edit
+  profile** carries name, photo, notification preferences and **SOS contacts** and explicitly has
+  *"No language selector here"*. Chapter 16 now names both screens separately, and points chapter
+  10's SOS callout at the one that actually holds the emergency contact.
+  **Two stale-URD claims deliberately not published.** US-6A.2's driver card *"Payment Method (Cash
+  / LankaQR / Card)"* and US-20.8's three package methods are the same AL-57/AL-59 defect as Epic 8
+  (MCS-35 Scope B lines 806 / 816–819); chapters 9 and 12 route around them. `specs/D5` §10 also
+  still says a proxy offer carries a **"masked phone"**, which AL-48 withdrew — chapter 10 follows
+  URD Epic 26 and Walkthrough scenario 108, which are the authorities.
+  **Next:** S10 (driver chapters 1–9). S12/S13 own the 412 `TODO(si)` / 412 `TODO(ta)` strings;
+  S17 publishes these 16 chapters, and is the session that will need `GUIDE_CHAPTERS` filled.
+
+- **Component:** C134 www-informational-site — S10 (driver guide 1–9) —
+  `build/prompts/C134-www/S10-guide-driver-1-9.md` — 2026-08-29
+- **Status:** DONE — `npm --prefix portals run lint --workspace @mageride/www` (eslint + parity +
+  `tsc --noEmit`), `run test` (36 tests, 3 files) and `run build` all green. Parity reports
+  **656 keys × 3 languages — complete, placeholder-consistent, every one rendered**; the build's
+  screen gate reports **280 images, 4.60 MB of 12 MB, none over 220 kB**. Checked by a throwaway
+  vitest file (removed after the run, since `test/content.test.ts` is S20's): the registry is
+  well-formed, driver `order` runs 1…9 with no gap, **every `screenRef` and every `screens` entry
+  resolves to a real `screens.ts` id**, every chapter key exists in `en.ts`, and every registry
+  `file` stem has a composed 1× AVIF *and* WebP on disk.
+- **Notes:**
+  **Word counts.** d01 543 · d02 522 · d03 444 · d04 368 · d05 409 · d06 423 · d07 425 · d08 496 ·
+  d09 489 — **4,119** words, averaging **458** against the plan's ~450. **d04 (approval) is the
+  short one and is short for a reason**: the specs state no turnaround time for the Verification
+  Officer queue, so the chapter quotes none (see gap 2).
+  **Every number this half of the guide publishes, and its anchor.** 15 s offer window (US-6A.2/3) ·
+  first trip of the day free and the flat daily fee deducted before the 2nd trip, no charge on a day
+  not worked (US-9.1, US-9.4) · Rs 200 default low-balance alert, driver-configurable (US-9.9) ·
+  Mode A no fee, Mode B *about* Rs 300 monthly — "approximately" in both URD statements, so the copy
+  hedges exactly as `marketing.ts` already does (Epic 9 fee table) · 5-minute passenger no-show +
+  2 reminders, Rs 100 to the passenger, driver compensated **with no amount stated anywhere**, so
+  none is quoted (D1 §B.9.6, Walkthrough 26) · scheduled-ride no-show = level −1 (US-6A.7) · three
+  passenger reports = level −1 + temporary delisting (US-6A.6) · Job Board ≤ 30 km, level 2+,
+  T-30 min dispatch (US-6A.5) · 60-second OTP resend (US-1.10) · 4-step onboarding, each step saved
+  (US-2.22/2.26). **The six per-vehicle fee amounts are deliberately not in these nine chapters** —
+  they are `DAILY_FEE_TIERS` and belong to d13, which S20's test asserts against the URD; quoting
+  them twice is two places to get them wrong.
+  **The missed-offer question the brief asked to settle: there is no penalty, and that is a finding
+  rather than a shrug.** US-6A.2/6A.3 attach no consequence to either branch; **D1 §B.3 says in as
+  many words "no reputation hit on first timeout"**; Walkthrough scenario 28 is titled *"turn down an
+  offer without penalty (within reason)"* and downweights rather than penalises pattern rejections;
+  and **every stated Level penalty in Epic 6A is something else** (no-show on an accepted scheduled
+  ride, three passenger reports). So chapter 8 says one miss costs nothing and a habit shows up as
+  the acceptance rate on the driver's own level screen — and stops there, because of gap 1.
+  **The brief's chapter-3 source is the wrong screen, and it is the second time a C134 session has
+  caught this class.** S10 says the per-vehicle document slots are *"registration copy (CR book),
+  insurance certificate, revenue licence, route permit (Mode A required)"* citing **US-27.3**.
+  US-27.3 is **SCR-FP-004 — the Fleet Portal** — and **US-2.24 removed the registration document,
+  the permit and the GPS-tracker field from Driver-App onboarding outright**. Publishing the fleet
+  list in the driver guide would send an owner-driver hunting for a CR-book slot their app does not
+  have. Chapter 3 names the driver-app four (licence front/back at profile setup, insurance, revenue
+  licence, vehicle front/back with the plate readable) and says in one line where the other two live.
+  **Insurance mandatory for all modes is right and is stated** (US-2.19/2.20, E-03).
+  **`SCR-DA-017` was filed under the wrong chapter with a caption that was factually wrong.** S05
+  had it as `driver/package-jobs`, captioned *"the job board — deliveries you can pick up"*. The
+  board carries **future scheduled rides** and its only action is *post intent* — US-6A.5, D2's
+  SCR-DA-017 (*"no accept here"*) and the drawn frame agree, and none of them mentions a delivery.
+  Moved to `driver/the-15-second-offer` (acceptance happens on SCR-DA-014 at T-30 min and nowhere
+  else) and re-captioned in all three languages. **The Sinhala and Tamil captions were rebuilt from
+  phrases already in those tables** (`ඔබ අසල` / `உங்கள் அருகில்` from pa010, and da018's own
+  "rides booked in advance") rather than translated afresh, which is the safest thing an
+  English-speaking session can do to a live translation.
+  **`SCR-DA-026` (My Vehicles) added to the registry — 69 → 70.** Chapter 2 turns entirely on
+  MCS-06's three doors and **this is the only frame that draws them**: ＋ in the header, *Resume ›*
+  on the Incomplete row, the Approved and Active-now states, and the temporarily-assigned fleet
+  group. Captured with `screens:capture --only SCR-DA-026` and composed; verified by eye. Note the
+  frame is current and **its `.states` prose is not** — that paragraph still carries the superseded
+  US-2.27 wording, and it is contact-sheet chrome the capture never includes, so the published image
+  is safe. **S05's stated totals were one low from the start** (prose "68 of 202", comments
+  28 + 30 + 6 + 4, actual 29 + 30 + 6 + 4 = 69); corrected in the same change rather than left to be
+  rediscovered. **`build/screen_coverage.md` is untouched and stays 202 / 202** — C134 claims no
+  `SCR-*` id, it only renders them.
+  **Two stale-URD claims routed around, both the AL-57/AL-59 defect MCS-35 already documents.**
+  **US-6A.2's offer card** says *"Payment Method (Cash / LankaQR / Card)"* with *"Card = OnePay"* —
+  two labels for rails a passenger cannot choose since ADD v3.6 §1.18. Chapter 8 says the card shows
+  **how the passenger chose to pay and names no labels at all**, because **MCS-35 decision D3 (what
+  C-11's three labels are now) is still open and it binds this driver card too**. Chapter 9 does the
+  same at settlement. **The wireframe frames are safe to publish here** — SCR-DA-014 draws
+  `Rs 480 · Cash` and SCR-DA-015 draws no method — so no driver frame needed S08's `chapters: []`
+  treatment. **Walkthrough scenario 26's *"connects without revealing either number"*** is the
+  withdrawn masking clause (US-26.2, AL-48); chapter 9 follows Epic 26 and scenario 108, as passenger
+  chapter 10 already does, and states plainly that matched parties see each other's real numbers.
+  **Content gaps — three, none of them filled.**
+  (1) **No threshold for the acceptance rate.** Walkthrough scenario 28 flags this itself: a low rate
+  clearly affects level/score, but nothing states where it begins to **reduce dispatch priority** as
+  opposed to merely being displayed. Until it does, no public page can tell a driver how many
+  declines are too many, and chapter 8 does not try.
+  (2) **No turnaround time for the Verification Officer queue.** Nothing in URD Epic 2, D5's
+  onboarding rules or the admin screens that drain the queue (SCR-AP-003/003a) states an SLA. Chapter
+  4 says the driver is notified when the decision lands (US-2.14) and quotes no duration — a
+  "usually within 24 hours" is exactly the invented commitment a driver would plan a working day on.
+  (3) **The driver's no-show compensation has no amount.** The passenger is charged Rs 100 and the
+  driver is "compensated"; no figure, no rule and no ledger line for the driver half appears in D1
+  §B.9.6, Walkthrough 26 or D5. Chapter 9 says compensated and stops.
+  **One wireframe/D2 discrepancy noted and not published either way.** SCR-DA-004's hint line prints
+  the full canonical ten (AL-09) **including bus and train** on a screen D2's own component table
+  says is *"Mode C; no bus/train"*. Chapter 2 names the Mode C types from **US-2.3**, which agrees
+  with D2 and with what the wizard is for. Worth a one-line wireframe fix, not a change set.
+  **Next:** S11 (driver chapters 10–18). d10–d18 are unwritten, so **no `relatedChapters` in these
+  nine names one** — S11 should add back-references as it writes them. S12/S13 own the 537
+  `TODO(si)` / 537 `TODO(ta)` strings (was 412 each). S17 publishes the guide and is the session that
+  needs `GUIDE_CHAPTERS` filled.
+
+- **Component:** C134 www-informational-site — S11 (driver guide 10–18) —
+  `build/prompts/C134-www/S11-guide-driver-10-18.md` — 2026-08-29
+- **Status:** DONE — `npm --prefix portals run lint` (whole tree: `check-al52.mjs` + eslint + parity
+  + `tsc --noEmit` on all five surfaces), `run test --workspace @mageride/www` (36 tests, 3 files)
+  and `run build --workspace @mageride/www` all green. Parity reports **795 keys × 3 languages —
+  complete, placeholder-consistent, every one rendered**; the build's screen gate reports **280
+  images, 4.60 MB of 12 MB, none over 220 kB**; AL-52 clean at 1 stylesheet. Checked by a throwaway
+  vitest file (removed after the run — `test/content.test.ts` is still S20's): the registry is
+  well-formed, **driver `order` runs 1…18 with no gap**, `CHAPTERS.length === 34` (16 passenger +
+  18 driver), every `screenRef` and `screens` entry resolves to a real `screens.ts` id, and **every
+  `chapters:` tag in the screen registry now resolves to a registered chapter — zero orphans**,
+  which was not true before this session.
+- **Notes:**
+  **The driver guide is complete at 18 and the corpus at 34 — the DoD's "34+ chapters".**
+  **Word counts (English).** d10 543 · d11 574 · d12 552 · d13 566 · d14 610 · d15 508 · d16 553 ·
+  d17 476 · d18 538 — **4,720** words over **139** keys, averaging **524**. Running totals for
+  S12/S13's estimate: **passenger 1–16 = 6,771** words / 206 keys, **driver 1–18 = 8,848** / 263,
+  **all 34 chapters = 15,619 words across 469 keys**. Whole table: **795 keys**, of which
+  **676 carry `TODO(si)`** and **676 `TODO(ta)`** (was 537 each).
+  **The six fee tiers: one constant, one anchor, and no rupee figure in d13's prose at all.**
+  `DAILY_FEE_TIERS` in `src/content/marketing.ts` (S07) is unchanged and remains the single home —
+  minor units, canonical `vehicle_type` key, `DAILY_FEE_SOURCE` = URD *Daily Platform Fee Structure
+  (Namma Yatri Methodology)*, and the URD states the six **four times and all four agree** (§1,
+  US-9.1, the fee table, the glossary). **d13's copy quotes none of them**, and it does not quote
+  Mode B's "about Rs 300" either — that belongs to `MODE_B_FEE_KEY`. How the numbers reach the page
+  is a **new optional `Chapter.table` field** (`'daily-fee-tiers'`, a one-member union), documented
+  in `types.ts`: the alternative was S17 special-casing the slug `the-daily-platform-fee` in a page
+  file, which is a magic string that breaks silently. **S17 must render `DAILY_FEE_TIERS` plus
+  `MODE_A_FEE_KEY`/`MODE_B_FEE_KEY` for any chapter carrying this field** — the two mode rows are
+  required beside the six so the table is not read as "what everybody pays" (marketing.ts says so
+  itself). d13 also publishes the fee table's own last line, **"All rates admin-configurable"**, so
+  the six read as the current specification rather than as a price promise.
+  **Fence reading recorded so it can be overturned deliberately.** S11's *"never inline a rupee
+  figure in prose"* is read as scoped to the sentence it sits under — the six fee tiers, the ones
+  `test/content.test.ts` asserts. d15 therefore states the five voucher denominations (Rs 1,000 to
+  Rs 10,000, URD four times) in prose, as d07 already does with the Rs 200 low-balance default and
+  d09 with the Rs 100 no-show charge. **What d15 does not print is the discount percentage** — the
+  URD calls it *"variable/admin-configurable"* and the wireframe's own tiles are labelled
+  "admin-set, variable", so a figure there would publish a price MageRide has not set.
+  **Ch 14 is written around the fence "no payout promise `payout-svc` does not implement".** The
+  chapter separates the three rails by **where the money physically is**: cash → the driver's hand;
+  driver-QR → the driver's own bank, bank-to-bank (AL-59); a passenger's MageRide balance → the
+  driver's **wallet**, which is the only thing a payout run ever touches. Cash and QR fares are
+  stated as already-received, with nothing to withdraw. The payout copy states AL-58 and C133 as
+  built — weekly, **full sweep with no minimum** (`PayoutRunService`: "no minimum, no holdback"),
+  gated on a **verified** `driver_payout_profiles` row, and **a driver with no verified profile
+  accrues and is never paid out (retained, never lost)** — and then says plainly that **MageRide
+  will confirm when payouts begin**, because AL-58's bank adapter is "one outbound port and no
+  provider is chosen", `Payout__BankBaseUrl` is empty in `.env.app.example`, instructions rest at
+  `PENDING`, and origination needs a sponsor bank and CBSL authorisation. It also states the useful
+  consequence: the payout profile is where the driver's **QR image** lives (AL-59), so filling it in
+  is what makes the second way of being paid work at all.
+  **Ch 17's dispatch claim is made because the specs make it, and is bounded to exactly what they
+  say.** Three statements and no fourth: dispatch is by **distance, Driver Rating/Level and vehicle
+  category** (US-6A.2); D5 §3.3's score is `w_dist·f(dist) + w_level·(level/3) + w_cat·match` with
+  **admin-configurable, versioned weights**; and on a scheduled ride two equally-close intent-posters
+  are broken by level (US-6A.5). **How much a level is worth is not published, so the chapter says
+  so** rather than implying a rate. Acceptance rate is shown and **nothing attaches a consequence to
+  it** — the same finding S10 recorded for chapter 8, restated here rather than quietly softened.
+  **Ch 12's negatives are the load-bearing part.** Card / OnePay / LankaQR only; **Bank Transfer is
+  not a top-up method** (AL-05, `billing.bank_transfer_topups` dropped) and is published as a
+  negative because a driver told otherwise sends money nowhere. Surcharges follow the URD's own
+  table — **LankaQR none, card and OnePay carry OnePay's processing fee** — with no percentage
+  invented. Epic 9A's *"drivers never access the web portal"* is published as the **security** fact
+  it is: there is no driver web login, so a page asking for a MageRide sign-in is not MageRide.
+  **Two stale-spec drifts found, both routed around, neither published.**
+  (1) **`D2` SCR-DA-023 still offers a QR scanner** (*"enter another driver's Driver ID **or scan
+  their QR**"*, plus a `QR scanner` component row). **US-9.10 removed it** (2026-06-25 item 10), the
+  Walkthrough agrees (scenario 44, *"no QR scan"*) and **the drawn wireframe already says
+  "No QR scan, no special reseller codes"** — one stale document against three current ones. d15
+  follows the URD. Worth a one-line D2 fix, not a change set; the published image is correct.
+  (2) **`SCR-DA-025`'s frame draws a row reading "Reseller transfer · RSL-2048"**, an id prefix
+  implying the reseller account **AL-01 says does not exist** and the reseller code **US-9.10 says
+  was removed**. The frame is published in d13 (fee history) and its other rows are right; d15's
+  copy states the three negatives explicitly so the guide contradicts the image rather than the
+  reverse. **Recorded for the next wireframe pass** — it is the same class as MCS-35's Scope A rows
+  and would ride along with them; it is not a fee claim, so it was not worth fencing the frame out.
+  **Package payment rails are named the way S10 named them: not at all.** URD Epic 20's "three
+  methods: LankaQR / OnePay +5% / COD" is on **MCS-35 Scope B's own correction list (line 806)** and
+  the surviving ride methods are `cash | wallet | scan_driver_qr | cod`. d11 states **only COD** —
+  which the driver has to physically collect — and otherwise says the sheet shows how the delivery
+  is being paid, because **MCS-35 D3 (what C-11's three labels are now) is still open**. The three
+  delivery frames draw no retired rail, so none needed S08's `chapters: []` treatment.
+  **URD Epic 1–27 → chapter coverage.** Derived mechanically from the spec anchors in all 34 chapter
+  modules, then read by hand:
+  **1** d01, p01, p02, p16 · **2** d01–d04, d07 · **3** d05, d16 · **4** d16, p05, p06 ·
+  **5** d06, d16 · **6** *deferred to Phase 2 by the URD itself — nothing to cover* ·
+  **6A** d07–d11, d17, p09, p10, p14 · **7** d05, d06, d07, p02, p03, p04, p15 ·
+  **8** p04, p07, p08, p13 · **9** d06, d07, d08, d11, d12, **d13**, d15, d18, p04 ·
+  **9A** d12, d15 · **10** d10, p14 · **11** *architecture, no user-facing capability — its two
+  driver-visible clauses (US-11.3 in-app wallet, US-11.5 no driver web login) are published in d12* ·
+  **12** d17, d18, p10, p16 · **13** d16 (US-13.9 fleet assignment; the portal itself is S23) ·
+  **14** *internal roles only* · **15** d18 · **16** d18, p16 · **17** d18 · **18** d17, p15 ·
+  **19** — **see the gap below** · **20** d11, p12 · **21** *internal roles only* · **22** p15, p16 ·
+  **23** p06 · **24** d03, p14, p15 · **25** p13 · **26** d09, **d14**, p10, p11, p13 ·
+  **27** d02, p06.
+  **The one real coverage gap: Epic 19 (Accessibility).** US-19.1 (TalkBack on core flows) and
+  US-19.2 (system text size) are genuinely user-facing and **no chapter covers them**. It was
+  deliberately **not** closed here and it is not a chapter's worth of material — two sentences —
+  and the harder reason: **US-19.1's stated flows are "registration, map, booking, and trip
+  summary", which are passenger-app screens**, so putting a screen-reader claim in the driver guide
+  would extend the claim past what the spec states. The right homes are one step in **p16**
+  (`settings-help-and-your-data`, S09's, complete) and/or an FAQ entry in **S18**, which owns
+  `/faq`. **S18 should close it**; if it does not, it is a Definition-of-Done gap against "every
+  passenger and driver capability".
+  **Forward links added to d06–d09, which S10 asked for by name** ("S11 should add back-references
+  as it writes them"): d06→d13, d07→d10/d13, d08→d11/d13, d09→d14. Every new chapter also links
+  back, so the guide now walks in both directions. Registry re-asserted after the edit.
+  **Next:** S12 (Sinhala). The whole English corpus is written — 795 keys, 676 still `TODO(si)` —
+  and **d13 is the chapter to translate most carefully**: it is a commercial claim to a driver, and
+  its six numbers are *not* in the message table, so a translator cannot damage them. S13 (Tamil) is
+  conditional per MCS-34 D2. S17 publishes all 34 chapters and is still the session that needs
+  `GUIDE_CHAPTERS` filled and the `Chapter.table` field rendered.
+
+- **Component:** C134 www-informational-site — S12 (the Sinhala corpus) —
+  `build/prompts/C134-www/S12-translate-sinhala.md` — 2026-08-29
+- **Status:** DONE — **first pass, not native-reviewed.** All five Verify lines green:
+  `npm --prefix portals run lint` (whole tree — `check-al52.mjs`, eslint, parity, `tsc --noEmit` on
+  all five surfaces), `node portals/www/scripts/check-i18n-parity.mjs`,
+  `run build --workspace @mageride/www`, `run test --workspace @mageride/www` (36 tests, 3 files),
+  and `grep -c "TODO(si)" portals/www/src/i18n/messages/si.ts` → **0**. Parity reports **795 keys ×
+  3 languages — complete, placeholder-consistent, every one rendered**, and the untranslated line is
+  now **`ta: 676`** alone; `si` has left it. AL-52 clean at 1 stylesheet / 37.6 kB CSS; the screen
+  gate reports 280 images, 4.60 MB of 12 MB.
+- **Notes:**
+  **Word count: 16,597 Sinhala words over 795 keys** (97,811 characters), against 19,359 English —
+  Sinhala runs ~14 % fewer *words* and far more characters, which is the shape of the language and
+  not an abridgement. By family: **driver guide 7,600** (263 keys) · **passenger guide 5,716** (206)
+  · marketing, nav and footer 1,201 (129) · FAQ 761 (40) · page furniture 707 (63) · screen captions
+  516 (71) · motion demo 96 (23, deleted with the route in S20). **676 keys were `TODO(si)`; the
+  other 119 were already Sinhala from S03–S06 and were left alone except where noted below.**
+
+  **NATIVE REVIEW IS OUTSTANDING AND IS A SEPARATE LINE ITEM.** What this session can guarantee is
+  *structural* parity — every key present (a compile error otherwise), every placeholder present and
+  in the same set per key, every chapter the same shape, because `WwwMessages` and
+  `check-i18n-parity.mjs` make each of those mechanical. **What it cannot guarantee is that the
+  Sinhala reads naturally to a native speaker**, and the exposure is concentrated exactly where the
+  prompt said it would be: transport, payment and legal register. **The review covers ~16,600 words
+  / ~98,000 characters**, of which **13,316 words (80 %) are the two how-to guides** — the part a
+  reader follows as instructions rather than skims. Budget it as a real translator's pass, not a
+  proofread. **Do not record this component as launch-ready on the strength of this session.**
+
+  **The glossary is now a file, not a habit: `portals/www/src/content/glossary.si.ts`.** It fixes
+  every term S12 named plus the ones the corpus turned out to need, and each row carries the *app
+  resource it was taken from* so a reviewer can check a choice against a source instead of a
+  preference. It renders nowhere, exports no `MessageKey` and is imported by nothing. The terms
+  taken straight from the apps: **පසුම්බිය** wallet (`nav_wallet`) · **දෛනික ගාස්තුව** daily fee
+  (`home_daily_fee_due`) · **ණය පිරවීම** top-up (`wallet_top_up_title`) · **ගමන් ඉල්ලීම** ride offer
+  (`push_channel_rides_name`) · **කුලිය** hire (`onboarding_slide_dispatch_title`) · **රැකියා
+  පුවරුව** job board (`job_board_level_gate`) · **දිශානුගත** directional (`home_directional`) ·
+  **රියදුරු මට්ටම** driver level (`level_title`) · **ආරම්භක කේතය** start code (`ride_start_otp`) ·
+  **බාරගැනීමේ / බාරදීමේ කේතය** pickup / delivery code (`package_*_otp_label`) · **ආදායම්
+  බලපත්‍රය** revenue licence · **මාර්ග බලපත්‍රය** route permit · **රක්ෂණ සහතිකය** and **ලියාපදිංචි
+  පිටපත (CR පොත)** from the fleet portal's `fleet.vehicles.doc.*` · **සත්‍යාපන නිලධාරී**
+  Verification Officer (`admin.role.verification_officer`) · **කොමිස්** commission
+  (`admin.config.vouchers.percent`) · **අධිභාරය** surcharge (`admin.directory.payment.surcharge`) ·
+  **වාහන සමූහය** fleet (`fleet.tagline`) · **හදිසි උදව්** / **හදිසි සම්බන්ධතාව** SOS and emergency
+  contact (`ride_sos`, `edit_profile_sos_contacts`) · **දත්ත අයිතිවාසිකම්** data rights
+  (`nav.pdpa`) · **මැකීම** erasure (`settings_delete_title`). Only two rows are `composed`: *data
+  export* (no app ships an export screen yet) and the descriptive half of *open maps*.
+
+  **Three places the apps disagree with each other, recorded rather than smoothed over.** Each is a
+  real platform inconsistency this site had to resolve because it addresses passengers, drivers and
+  fleet owners on one page; **none is fixable from C134** and each is a micro-change-set against the
+  app resources. (1) **Mode A/B/C** — `ක්‍රමය` (fleet + admin portals, 63 uses, and driver-android's
+  own tracker copy) vs `ප්‍රකාරය` (passenger-android, 6) vs `මාදිලි` (driver-android onboarding, 5).
+  The site uses **ක්‍රමය**, the plurality, which was already this table's word in
+  `www.screens.pa006.caption`. (2) **mini van / mini truck** — `මිනි` (driver app + fleet) vs `කුඩා`
+  (passenger app); the site uses **මිනි**, because the place those two names are read here is the
+  daily-fee table, which is driver-facing. (3) **three-wheeler** — `ත්‍රීරෝද` (driver + fleet) vs
+  `ත්‍රිරෝද` (passenger); the site uses **ත්‍රීරෝද**, which `www.screens.pa010.caption` already said.
+  **A fourth, smaller one is internal to this table and was left alone**: `www.nav.fleets` is the
+  short `රථ හිමියන් සඳහා` that S07 chose for nav width, while body prose uses the platform's
+  `වාහන සමූහය`. `www.page.fleets.title` was translated to *match the nav label word for word* rather
+  than the prose, because the README's rule is that a route's label and its heading may not drift —
+  and the same was done for `www.page.passengers.title` and `www.page.drivers.title`.
+
+  **`standby` needed two Sinhala words and the apps supply both.** The *toggle* is
+  **සබැඳි වන්න / සබැඳියි**, which is what the driver app's own `home_online` / `home_offline` say.
+  The *vehicle class* is **පොරොත්තු වාහනය**, from the passenger app's `booking_standby`
+  ("පොරොත්තුවෙන් · කලින් දන්වන ගාස්තුව") — **not** the driver app's `රියදුරු වාහනය`, which
+  collides with රියදුරු = driver and would read as "the driver's vehicle" in a sentence about
+  drivers. Recorded in the glossary with both sources.
+
+  **The typography check found a real defect and it was not the one the prompt predicted.** Measured
+  in Chromium at 375px against the built standalone server, on `%5Fmotion-demo` — which is the page
+  S04 built for exactly this and, today, the *only* place a hero-sized string renders, because
+  S14–S18 have not run and every page below `[locale]/` is still a `StubPage`.
+  **(a) Fonts resolve correctly.** `/si` serves four font files and Noto Sans Sinhala is among them;
+  `/ta` serves three and gets Noto Sans Tamil; `/en` serves two and neither Noto — S04's per-locale
+  variable class works as documented, and `document.fonts.check('72px "Noto Sans Sinhala"', 'ශ්‍රී')`
+  is true on `/si` and false on `/ta`. No system-face fallback.
+  **(b) The hero does *not* wrap to four lines.** `www.vision.hero` is **three** lines at 375px in
+  the real 343px `.text-hero` box; English is two. The literal rendering
+  ('ශ්‍රී ලංකාව ගමන් කරන ආකාරය සජීවීව බලන්න.') measures **three as well** — so the shorter string
+  was kept for register, not because it bought a line. Three is under S12's four-line threshold, so
+  **the type was not shrunk and no meaning was cut to make a layout fit.**
+  **(c) The defect is leading, and it is what S12 said to look for.** D2 §0.2's roles were set for
+  Latin. Outfit's ink at 40px is 37px in a 44px line box. **Noto Sans Sinhala's ink at 40px is 51px**
+  — 7px taller than its own line box, because the script stacks vowel signs above the headline and
+  below the baseline inside the same em. Two stacked Sinhala hero lines **overlapped by a measured
+  6px**. Across the ramp, clearance was `.text-hero` −7px @375 / −9px @1024+, `.text-hero-sm` −1px /
+  −4px. **Fixed in `app/globals.css`'s `@layer utilities`, not in a token**, by re-stating the two
+  *leading* ramps for `html[lang='si']`: `--mr-www-leading-hero` **44→80px becomes 56→96px**
+  (`clamp(3.5rem, 2.055rem + 6.163vw, 6rem)`) and `--mr-www-leading-hero-sm` **40→56px becomes
+  44→64px** (`clamp(2.75rem, 2.028rem + 3.082vw, 4rem)`). Every endpoint is on D2's 4px grid, the
+  ramp is still 375→1024px, the sizes, weight and tracking are untouched and
+  `portals/tailwind-preset/src/tokens.ts` was not opened. Re-measured after: **+5px / +7px clearance
+  for Sinhala and the rendered two-line overlap became 6px of clearance.** English is byte-for-byte
+  unchanged (still 40/44 and 32/40).
+  **(d) Tamil is in the same rule, deliberately.** Measured: `.text-hero` −5px at both ends of the
+  ramp and `.text-hero-sm` −1px at the cap. **S13 owns the Tamil *copy*; this is not copy** — it is a
+  layout defect already on the page in every language, and `not-found.tsx` / `error.tsx` render all
+  three scripts inside one document, so a Sinhala-only fix would set two blocks differently on the
+  same page. One rule, both scripts; Sinhala is the binding constraint and Tamil clears it with
+  room. **S13 does not need to touch `globals.css`.**
+  **(e) One deliberate divergence.** `.text-hero-sm`'s Latin floor is `text-display` *exactly*
+  (32/40), which S04 chose so the marketing scale and D2 agree at 375px. On a Sinhala page that
+  floor is the thing that collides, so they no longer agree there: 32/44. Recorded in the CSS.
+
+  **A D2 finding this session did not act on, and should not have.** The same measurement over D2's
+  own roles says Sinhala **collides at `display` (32/40, −1px) and `caption` (12/16, −1px)** and is
+  *touching* at `headline` (22/28, 0px) and `title` (18/24, 1px). Tamil is touching at four of the
+  seven. Those tokens are a platform-wide contract Compose and SwiftUI read from the same table, so
+  the product surfaces have the same problem on the same Sinhala strings — **that is a change set
+  against D2 §0.2, not something to paper over on one marketing page with a `@layer utilities`
+  override that would then make www's Sinhala metrics differ from the four app surfaces.** Only the
+  two utilities that are this site's own were touched. **Worth raising as a micro-change-set.**
+
+  **Nav labels and CTAs measured, nothing overflows.** No nav exists yet (S14), so each label was
+  measured unwrapped in a 343px mobile drawer row: the widest is `www.nav.guide` at **251px**
+  ('MageRide භාවිත කරන ආකාරය') and every one fits on a single line. In a 343px full-width button
+  with 24px padding, **seven of nine CTAs are one line**; the two long-form guide CTAs wrap to two —
+  `www.page.drivers.guideCta` measures 346px against ~295px of content width, and its English
+  ('Read the full driver guide') is 198px. **That is a layout fact for S16/S18 to design for, not a
+  copy defect**, and it was not shortened by deleting "සම්පූර්ණ" (full), which is the word doing the
+  work. `/si`, `/si/drivers` and `/si/guide` were each loaded at 375px: **no horizontal overflow on
+  any of them.**
+
+  **What could not be checked by eye, stated rather than glossed.** S12 asks for `/si`,
+  `/si/drivers` and one guide chapter at 375px. **All three render a `StubPage` today** — the body of
+  `/si/drivers` is literally *"රියදුරන් සඳහා" පිටුව තවමත් ලියමින් පවතී.* — and
+  `/si/guide/passenger/install-and-first-run` **404s**, because `GUIDE_CHAPTERS` is empty until S17.
+  So there is no hero, no nav, no CTA and no chapter body on those routes to look at. The checks
+  above are the honest substitute: real computed styles, real font loading, real ink metrics and
+  real label widths, taken from the built site. **S14 (hero and nav) and S17 (chapters) should redo
+  the by-eye pass in Sinhala once their pages exist**; the leading fix is in place for them.
+
+  **Two changes outside `si.ts`, both forced and both recorded.**
+  (1) **`test/i18n.test.ts`'s allow-list grew from one key to five.** The test asserts *exact*
+  equality against the set of keys whose `si`/`ta` string is byte-identical to `en`, and its comment
+  said "the brand name is the only legitimate case of it". That was true only while every other
+  string wore a `TODO(si)` prefix and so differed from English *by accident*. Four more are identical
+  **by design**: `www.stats.percentSuffix` ('%', no letters), `www.footer.rights` ('© MageRide', a
+  symbol and a brand), and the three `www.languageBand.*` — which are *samples*, not translations,
+  shown side by side in their own `lang` blocks so a reader who only ever sees one language can see
+  the app speaks three. Translating `languageBand.ta` into Sinhala would delete the only thing that
+  card does. **The assertion is still exact equality, not a superset**, so a sixth key going
+  identical still fails and has to be argued for. Each entry carries its reason inline.
+  (2) **`www.screens.da026.caption` moved.** S10 appended it to the driver-guide block instead of the
+  caption block; it is a screen caption and `en.ts` has it between da025 and da027. The two files now
+  agree on key order. Marked `Δ S12` in place.
+
+  **Fences held.** No placeholder dropped, renamed or reordered — the corpus's only placeholder is
+  `{count}` in `www.page.guide.chapterCount`, rendered as `පරිච්ඡේද {count}ක්`, and
+  `check-i18n-parity.mjs` already compared placeholder *sets* per key (§2), so **the check S12 said
+  to add if missing was not missing** and needed no work. No key added or removed. No slug
+  translated — chapter slugs stay Latin per S07. No token changed. Brand names left Latin: MageRide,
+  LankaQR, OnePay, Google Maps, OpenStreetMap, Namma Yatri. **No rupee figure entered `si.ts`** — d13
+  in particular still renders its six tiers from `DAILY_FEE_TIERS`, so the sentence around the
+  numbers is all a translator could damage, and the load-bearing Sinhala in it is `කොමිසයක් නැත`
+  (zero commission), `දිනකට` (per day, never per trip) and `පමණ` (approximately, which the URD says
+  twice and which `www.fees.modeB` and `d06`/`p06` all keep).
+
+  **One thing the glossary file itself had to be careful about.** Rows cite `www.*` message keys
+  **unquoted** — `from: 'profile_trip_ratings; www.screens.da019.caption'`. The parity script's
+  orphan check marks a key referenced when it finds it *inside quotes* anywhere under `src/`, so a
+  quoted citation there would make a genuinely dead caption look alive and silently disarm the check.
+  Verified programmatically: **no key in `en.ts` is satisfied by that file**, and the rule is written
+  into its header.
+
+  **Next:** S13 (Tamil) — conditional and formally deferred by MCS-34 D2, **676 `TODO(ta)`
+  remaining**, and it now has a worked example plus a glossary pattern to copy; it does **not** need
+  to touch `globals.css`, because (d) above already covers Tamil leading. S14 owns the hero and nav
+  and should redo the 375px Sinhala pass once they exist. S17 fills `GUIDE_CHAPTERS` and publishes
+  all 34 chapters, which is what makes the guide corpus reachable at all. **Native Sinhala review
+  (~16,600 words) is unscheduled and is not any of those sessions.**
+
+- **Component:** C134 www-informational-site — S13 (Tamil corpus) —
+  `build/prompts/C134-www/S13-translate-tamil.md` — 2026-08-29
+- **Status:** DONE — **formally deferred per MCS-34 D2**, not shipped and not dropped. All four of
+  S13's deferral Verify lines green: `npm --prefix portals run lint` (whole tree, exit 0),
+  `run test --workspace @mageride/www` (**45 tests**, 3 files — was 36; nine new), `grep -rn
+  "WWW_LOCALES" portals/www/src portals/www/app` (every consumer reads it, none reads `LOCALES`),
+  and `grep -n "LOCALES" portals/i18n/src/index.ts` → **still `['si', 'ta', 'en']`, untouched**.
+  `git status portals/i18n` is clean. The build now emits **si and en only**; the route list went
+  from 39 URLs to 26 and the legal segment from 9 paths to 6.
+- **Notes:**
+  **Which branch, and on whose decision.** The gate is MCS-34 **D2**, and the answer is recorded
+  identically in two places — the change set's decision table (*"No — si + en complete first, Tamil
+  next release"*) and S01's own handoff (*"D2 si + en first, Tamil deferred to the next release →
+  S13 conditional"*). **The deferral branch was taken.** The stated reason is worth repeating
+  because it is the thing a later session will be tempted to overturn for tidiness: **no native
+  Tamil reviewer is identified anywhere in this repo**, and ~21k words of machine-translated Tamil
+  under a Tamil label is worse for a Tamil reader than no Tamil at all — it tells them the platform
+  does not really support them, and it tells them so in their own language.
+
+  **THE C134 DEFINITION OF DONE CHANGES: "three locales" is now TWO, by decision.** Any later
+  session, checklist or review that reads "si + ta + en complete" against this surface is reading a
+  requirement the user's own decision has superseded. What is complete is **si + en**; Tamil is a
+  *next-release* item with its scaffolding already built and paid for. **C134 must not be recorded
+  as failing a trilingual bar it was deliberately released from**, and equally must not be recorded
+  as trilingual — it is neither.
+
+  **The one constant, and where it is documented.**
+  `export const WWW_LOCALES: readonly Locale[] = ['si', 'en'];` in
+  `portals/www/src/i18n/index.ts`. Re-enabling Tamil is changing it to `LOCALES` and deleting three
+  test cases — nothing else. Documented in `portals/www/CLAUDE.md` under a new section, *"Tamil is
+  deferred, and `WWW_LOCALES` is the whole of it"*, which carries the constant, the consumer list,
+  the two apparent contradictions below and the finding at the end.
+
+  **What "deferred" means in code, stated as the pair it is.** `ta.ts` stays a **complete,
+  type-checked `WwwMessages`** — a key added to `en.ts` without a Tamil string is still a compile
+  error, and parity still counts its **676** outstanding markers on every build. What was removed is
+  not the *table* but the *routes*: no `/ta/…` URL is built, sitemapped or named in an `hreflang`
+  set, and every one answers **404**. Verified at runtime against the built standalone server:
+  `/ta`, `/ta/drivers`, `/ta/legal/pdpa` all **404**, identically to `/de/drivers`; `/si`, `/en`,
+  `/si/drivers`, `/en/drivers`, `/si/legal/pdpa` all **200**.
+
+  **Two derived helpers, so no gate can read the wrong constant by accident.** `isWwwLocale`
+  replaces `isLocale` in `localeFrom` and the locale layout's guard — `isLocale('ta')` is `true` and
+  is the platform's question, not this surface's. `negotiateWwwLocale` replaces `negotiateLocale` in
+  `getNegotiatedLocale`. Consumers switched: `generateStaticParams` in the locale layout **and all
+  three dynamic segments** (`guide/passenger/[chapter]`, `guide/driver/[chapter]`, `legal/[doc]`),
+  `localeFrom`, `allUrls`, `getNegotiatedLocale`, `not-found.tsx`, `error.tsx`. Left on `LOCALES`
+  deliberately: `test/i18n.test.ts`'s table-completeness cases and `check-i18n-parity.mjs`, which
+  must keep checking all three tables.
+
+  **A test caught a real defect in the first implementation, and the fix is the interesting part.**
+  `negotiateWwwLocale` was written as a post-filter — take `negotiateLocale`'s answer, swap in
+  Sinhala if it says `ta`. That passes every obvious case and **silently loses a reader**: on
+  `Accept-Language: ta-LK, en;q=0.8` it serves **Sinhala to somebody who said they read English**,
+  because the shared negotiator had already collapsed the header to `ta`. Rewritten to strip
+  unpublished tags **before** ranking and delegate the quality-value parsing to `@mageride/i18n`,
+  where it is tested. Verified against the running server: `Accept-Language: ta` → **307 to `/si`**,
+  `ta-LK,ta;q=0.9` → `/si`, **`ta-LK,en;q=0.8` → `/en`**, `si-LK` → `/si`, `en-US` → `/en`, `de` →
+  `/si`. Without this, a Tamil browser hitting the apex would have been redirected **straight into a
+  404** — the deferral's most likely bug and its least visible, because it fires only for the
+  readers it hurts and never for the person testing it.
+
+  **`not-found.tsx` and `error.tsx` render two blocks, not three, and that is the deferral's whole
+  logic applied to itself.** Both were built to render every locale at once because Next hands them
+  no params. A third block would emit **English prose under `lang="ta-LK"`** — which is the failure
+  A33 is written against, on the two pages least able to absorb another one: a screen reader hands
+  English words to a Tamil speech engine and produces sounds that are not words in any language. An
+  honest omission beats a page that lies about what it contains.
+
+  **Nine new tests, in a `the Tamil deferral (MCS-34 D2)` suite, asserting the pair in both
+  directions** — because both directions are silent failures. Tamil quietly becoming reachable would
+  serve English under a Tamil label and crash nothing; `ta.ts` quietly decaying would mean that the
+  day D2 is reversed, "flip one constant" is a lie and somebody finds 795 keys of work they thought
+  was done. Cases: `WWW_LOCALES` is exactly `['si','en']` · `isWwwLocale('ta')` is false while
+  `isLocale('ta')` is true · a Tamil-only browser lands on Sinhala · **a Tamil-first-English-second
+  browser lands on English** · published locales still rank as the platform ranks them · `allUrls()`
+  names no `/ta` · `ta.ts` carries every `en.ts` key non-empty · every untranslated Tamil string is
+  still *marked* untranslated (so "tidying up" by deleting markers and leaving the English cannot
+  make the table look finished). `test/routes.test.ts` moved its URL-count assertion to
+  `WWW_LOCALES` and gained a case stating that `href` stays total over `Locale` — composing a Tamil
+  URL is legal; *publishing* one is what `allUrls()` decides.
+
+  **Two things that look like contradictions and are not.** (a) **The language band still shows
+  Tamil** and `www.values.trilingual` / `www.faq.languages` still say "Sinhala, Tamil and English".
+  Those are claims about the **apps**, which are genuinely trilingual on all four product surfaces
+  today; what D2 defers is *this marketing site's* Tamil. Different claim, both true — and the three
+  `www.languageBand.*` keys stay in `IDENTICAL_BY_DESIGN` untouched. (b) **Noto Sans Tamil is still
+  imported** and the `ta` branch of `fontClassNames` is unreachable. Kept on purpose: a face is only
+  fetched when a rendered stack names it and none does, so it costs disk and not bandwidth, and
+  deleting it would make re-enabling Tamil two changes instead of one. The `html[lang='ta']` leading
+  rule S12 added to `globals.css` is kept for the same reason and needs no work when Tamil lands.
+
+  **A pre-existing defect found, deliberately not fixed, and now materially worse.**
+  **`app/[locale]/not-found.tsx` is bound to no route and renders for nothing.** Verified against
+  the built output: `.next/app-path-routes-manifest.json` lists `/_not-found` and **no
+  `/[locale]/_not-found`**. Every 404 on this site — `/de/drivers`, `/si/nonexistent`, and since
+  today every `/ta/…` — is served by Next's built-in English *"This page could not be found"*. The
+  carefully-written multilingual 404 has never reached a reader. **S13 did not cause this**
+  (`/de/drivers` behaved identically before it) **and S13 is why it now matters**: before the
+  deferral `/ta/*` was published, so a Tamil reader never took this path; now every Tamil URL does,
+  and the reader least served by an English system page is the one most likely to see it. It is not
+  a missing line — a segment's `not-found.tsx` only catches a `notFound()` raised inside that
+  subtree, so the handler must be `app/not-found.tsx`, which renders under the deliberate
+  pass-through root layout that emits no `<html>` and would therefore sit outside the fonts,
+  `globals.css` and the appearance script. Fixing it means deciding again **who emits `<html>`** —
+  the S03/S04 architectural decision `portals/www/CLAUDE.md` documents under *Locale routing* — and
+  that is not a translation-deferral session's call. **Recorded in the file itself, in CLAUDE.md and
+  here; S14 (the shell) or S19 (a11y/SEO) owns it.**
+
+  **`check-i18n-parity.mjs`'s build message was stale and was corrected.** It told every build that
+  *"S12 (si) and S13 (ta) own driving this to zero"*, which stopped being true the moment this
+  session ran. It now says Tamil is formally deferred by D2, that no `/ta` URL is published so
+  nobody reads the 676 marked strings, and names `WWW_LOCALES` as what makes them visible again. The
+  count itself is unchanged and still printed on every build, so "deferred" cannot drift into
+  "forgotten".
+
+  **Fences held.** No key added or removed — parity still reports **795 keys × 3 languages,
+  complete, placeholder-consistent, every one rendered**. No token change. `@mageride/i18n`'s
+  `LOCALES` untouched, and `git status portals/i18n` is clean — three other surfaces read it and
+  Tamil is deferred on none of them. No partial locale shipped: `/ta` is absent, not half-present.
+  **No claim anywhere that the Tamil is reviewed** — it is not translated at all.
+
+  **Next:** S14 (shell, nav and hero) — and it inherits two things from S12/S13 by name: the Sinhala
+  hero is **three lines and 168px tall at 375px against English's two and 88px**, which is a real
+  layout constraint rather than a copy problem, and **the unreachable 404 above is its call or
+  S19's**. S17 fills `GUIDE_CHAPTERS`. **Tamil is a next-release item, not a C134 one**; when it is
+  scheduled it needs a native translator for ~19,400 English words plus the native Sinhala review
+  (~16,600 words) that S12 left outstanding — **two separate line items, neither of them scheduled.**
+
+- **Component:** C134 www-informational-site — S14 (shell, nav, hero) —
+  `build/prompts/C134-www/S14-shell-nav-hero.md` — 2026-08-29
+- **Status:** DONE. `npm --prefix portals run lint` (whole tree, **exit 0**),
+  `run build --workspace @mageride/www` (**exit 0**) and `run test --workspace @mageride/www`
+  (**45 tests, 3 files**) all green. Parity reports **809 keys × 3 languages — complete,
+  placeholder-consistent, every one rendered** (was 795; +14 chrome keys, no orphans). AL-52 clean at
+  1 stylesheet / 41.7 kB CSS; screens gate 280 images, 4.60 MB of 12 MB. **The home page is the first
+  of the eleven scaffolds to go** — ten `StubPage` uses remain for S15–S18.
+- **Notes:**
+  **The by-hand list was driven for real, not eyeballed.** A Playwright harness ran every item in
+  S14's "By hand" block against the built standalone server: **56 checks pass.** The eight that
+  reported failures were re-tested individually and **all eight were harness bugs or now confirmed
+  working** — recorded because the fixes are the interesting part.
+  **Landmarks:** exactly one `<header>`, `<main>`, `<footer>` and `<h1>`; three `<nav>`s each with a
+  distinct name (`ප්‍රධාන` · `භාෂාව` · `පාදකය`) — unnamed ones would read "navigation, navigation,
+  navigation" in a landmark list. Skip link is the **first anchor in the document and the first tab
+  stop**, and `Tab`+`Enter` genuinely moves focus onto `<main id="main-content">` (verified;
+  `tabIndex={-1}` is what makes that work — without it the browser scrolls but leaves focus in the
+  link and the skip link skips nothing).
+  **APG carousel, every clause verified:** `aria-roledescription` on the region and on each slide,
+  positional slide labels ("දර්ශන 4න් 1 වැන්න"), dots are real `<button>`s with `aria-current` —
+  **not `aria-selected`, because they are not tabs** — exactly one current at a time, ←/→ move one
+  slide, autoplay advances on its own and **stops** on the pause control, on hover, on focus-within
+  and on `document.hidden`, and **under reduced motion never starts** (slide 0→0, `scrollLeft` 0→0
+  over nine seconds, **0 running animations**) while the dots stay operable.
+  **The live region announces user moves and is silent for autoplay** — the APG requirement that is
+  easiest to ship backwards. Verified empty before interaction and
+  `"දර්ශන 4න් 3: රියදුරන්ට 100%ම"` after a dot press. `goTo(index, announce)` takes the distinction
+  as a parameter rather than inferring it from timing. A region that narrated every six-second tick
+  would interrupt a screen reader continuously — turning the one affordance added for those readers
+  into the reason they leave.
+  **JavaScript off:** all four slides, their headlines, the locale links (2 `hreflang` anchors) and
+  12 primary-nav links are in the prerendered HTML.
+
+  **THREE FINDINGS THAT SUPERSEDE EARLIER SESSIONS, all measured.**
+
+  **(1) The language band and the locale switcher were rendering in a system face on every page —
+  a real defect, found and fixed.** S04 applied only the current locale's `next/font` variable class,
+  reasoning that "a Tamil page never names Noto Sans Sinhala in a stack and never fetches it". That
+  is right for page *copy* and wrong for this site, because **two components deliberately render
+  another script on every page**: the switcher's endonyms (සිංහල · English — a reader looking for
+  their language scans for their own script) and the footer's language band, whose entire purpose is
+  one sentence in all three at once. Measured before the fix: on `/en` the Sinhala **and** Tamil band
+  lines resolved to `Inter, Inter Fallback, ui-sans-serif` — *no script face* — and on `/si` the
+  Tamil line resolved to the Sinhala stack. **Two of three scripts in a system fallback, in the
+  component that exists to prove the opposite.** Fixed by applying all four variable classes always
+  plus `[lang='si-LK']`/`[lang='ta-LK']` rules in `@layer base`. Cost: `/en` serves 5 font files
+  instead of 2 — because it genuinely displays Sinhala and Tamil, which is the correct reason; both
+  Noto faces stay `preload: false` and below the fold. **S04's verification note ("/si loads Noto
+  Sans Sinhala only, /en neither") is superseded and struck through in `portals/www/CLAUDE.md`.**
+  **Two earlier attempts at that fix shipped and changed nothing, and both are recorded beside the
+  rule because both look correct.** Overriding `--mr-font-inter` on the element fails because **a
+  custom property's `var()`s are substituted where the property is *declared*** — `:root` — not
+  where it is used, so descendants inherit an already-resolved value. Overriding `--font-body` fails
+  because **`font-family` is inherited**: `body` holds the only declaration in the subtree, so a
+  `<p>` with no `font-family` of its own never re-reads the variable. The rule has to declare
+  `font-family` itself. Both failures computed the *variable* correctly while rendering the wrong
+  face, which is why neither was visible without measuring the resolved stack.
+
+  **(2) The plate height is not a constant, and assuming one would have distorted 26 screens.**
+  S06's contract said "read the real numbers rather than assuming a constant"; S14 measured and
+  found **eight distinct plate sizes**, with the phone frames alone splitting **34 at 416×777 and 26
+  at 416×776**. New `scripts/screen-dimensions.mjs` derives the map from the **committed** 1× WebPs
+  (no browser, idempotent, re-runnable to prove the map still matches), checks the AVIF agrees and
+  that `@2x` is exactly double, and emits `src/content/screen-dimensions.ts`. Wired into
+  `screens:refresh` as `screens:dimensions` so it cannot drift. **A `.ts` module and not `.json`**,
+  after the JSON version failed the build: three toolchains import the registry — Next's bundler,
+  `tsc`, and **raw Node ESM** (`check-bundle.mjs`) — and Node requires `with { type: 'json' }` where
+  the bundler does not, so JSON works in two of three. The follow-on is `allowImportingTsExtensions`
+  in `tsconfig.json`: Node's type-stripping will not infer `.ts` on a **value** import, and this is
+  the first value import between `.ts` files in `src/content/` — every other sibling import there is
+  type-only and therefore erased before Node sees it.
+
+  **(3) `ScreenImage` departs from "renders through `next/image`", deliberately, and it is recorded
+  as a departure rather than slipped in.** S06 already emitted AVIF **and** WebP at 1× and 2× to a
+  budget `check-bundle.mjs` gates every build; feeding an already-minimal AVIF through
+  `/_next/image` to be re-encoded as AVIF spends CPU to produce a slightly worse file, and **the
+  file the budget gate measured is then not the file that ships**. It also adds a *request-time*
+  code path to the surface whose defining property is the fourth MCS-34 negative. `<picture>` gives
+  everything `next/image` would here — `type`-negotiated AVIF with a WebP floor, density switching,
+  reserved space, native lazy loading, `fetchPriority` — and is where `prefers-color-scheme` art
+  direction slots in later. `images.formats` left untouched. **Flagged for review** rather than
+  treated as settled.
+
+  **APG deviations: none.** Every clause of the pattern S14 lists is implemented as written. Two
+  choices worth naming as *decisions* rather than deviations. **The dots' progress fill is a
+  registered `@property` animated by `Element.animate()`**, per the brief — `initial-value: 1`, not
+  0, so a paused or reduced-motion reader sees a solid "you are here" pill rather than an empty
+  outline waiting for a timer that will never start; and it is `scaleX()` on an `::after`, because a
+  width animation lays out and paints every frame where a transform composites. **The theme toggle
+  is `aria-pressed` with a stable name** ("Dark appearance"), not a name that flips between "Switch
+  to dark" and "Switch to light" — a changing name plus `aria-pressed` says the same thing twice and,
+  at the instant of the press, says it in two tenses. Its state comes from `useSyncExternalStore`
+  over the `<html>` class list, not `useState` + an effect: the appearance is not this component's
+  state, and `react-hooks/set-state-in-effect` correctly refused the mirror. The subscription watches
+  **both** `matchMedia` and a `MutationObserver`, or the button goes stale immediately after its own
+  press.
+
+  **Copy that had to change for Sinhala at 375px: none.** The Sinhala `<h1>` is **3 lines** against
+  English's 2 and the slide headlines are 1 line in both; the threshold is four. **No CTA overflows
+  in either locale** — measured against each slide's own box (worst case: Sinhala
+  "මගී මාර්ගෝපදේශය කියවන්න" at 287px in a 343px slide; English's tightest is "See how it works" with
+  16px to spare), and every one sits on a single line. No `clamp()` adjustment was needed beyond
+  S12's Indic leading, which is what keeps the 3-line Sinhala headline from colliding with itself.
+  No horizontal overflow at 375px in either locale in either appearance.
+
+  **`not-found.tsx` and `error.tsx` no longer render their own `<main>`** — the shell provides one,
+  and a second would have been the second landmark. Both gained a route back into the site (§5);
+  `error.tsx` gained a home link beside `reset()`, because a deterministic throw makes the retry
+  button a dead control and leaves the reader with no way out. **`app/[locale]/not-found.tsx` is
+  still bound to no route** — the S13 finding is unchanged: `.next/app-path-routes-manifest.json`
+  lists `/_not-found` and no `/[locale]/_not-found`, so every 404 still gets Next's built-in English
+  page. **S14 did not fix it and the reason is scope, stated plainly:** the handler would have to be
+  `app/not-found.tsx`, which renders under the deliberate pass-through root layout that emits no
+  `<html>` — so making it reachable means deciding again *who emits `<html>`*, which is the S03/S04
+  decision that also makes `<html lang>` the path segment. That is an architecture change, not a
+  page fix, and it does not belong inside a hero session. **S19 owns it.**
+
+  **One plan correction, the same class as S01's three.** S14 §1 says *"`app/layout.tsx` (the root)
+  keeps the fonts, the pre-paint appearance script and the base metadata; `app/[locale]/layout.tsx`
+  owns everything that varies by language."* **That is not possible here and the repo wins**
+  (README §4). Only one layout may emit `<html>`, and on this surface it must be the locale one,
+  because `<html lang>` is the path segment — which is what buys reciprocal `hreflang` (A32) and is
+  documented at length under *Locale routing*. The fonts and the pre-paint script have to live on or
+  inside that `<html>`, so they stay in `app/[locale]/layout.tsx`; `app/layout.tsx` remains the
+  pass-through it was built as. Same knot as the 404 above.
+
+  **Next:** S15 (home sections) — it inherits `ScreenImage` as the sanctioned way to place a frame,
+  `plateSize()` for real dimensions, and the light-plate constraint (`plate` defaults to **on**, so a
+  page has to opt *out* of putting a light capture on its own light card). The hero's own device
+  frames bleed past the `max-w-[1200px]` container at wide widths and are clipped by the body's
+  `overflow-x-clip` — intentional, no horizontal scroll, but S15 should look at it once with the
+  sections beneath for company. **Still outstanding and unscheduled: native Sinhala review
+  (~16,600 words, S12) and Tamil translation (next release, MCS-34 D2).**
+
+- **Component:** C134 www-informational-site — S15 (home sections) —
+  `build/prompts/C134-www/S15-home-sections.md` — 2026-08-29
+- **Status:** DONE. `npm --prefix portals run lint` (whole tree, **exit 0**),
+  `run build --workspace @mageride/www` (**exit 0**) and `run test --workspace @mageride/www`
+  (**45 tests**) all green. Parity: **813 keys × 3 languages, complete, placeholder-consistent,
+  every one rendered** (+4 showcase keys, no orphans). AL-52 clean at 1 stylesheet / 43.4 kB CSS.
+  **Bands 2–9 built; the home page is complete.** Ten `StubPage` uses remain for S16–S18.
+- **Notes:**
+  **The by-hand list was driven for real: 37 checks, 0 failures.** The whole page at
+  **375 / 768 / 1024 × si/en × light/dark** — twelve combinations, **no horizontal overflow in any
+  of them** — plus reduced motion on and off, the lightbox by keyboard only, and JavaScript off.
+
+  **FOUR REAL BUGS FOUND BY MEASURING, all fixed.** Each looked fine in a browser and none would
+  have been caught by reading the code.
+
+  **(1) The zero-commission band rendered with none of its claims.** `FareTable` picked the headline
+  `VALUES` with `filter(v => IDS.includes(v.id))` and the ids were written camelCase
+  (`zeroCommission`) where `vision.ts` spells them kebab (`zero-commission`). The filter matched
+  nothing, the list rendered empty, and **the section shipped as a fee table with no "drivers keep
+  100%", no "passengers pay nothing" and no "first trip free" above it** — a page publishing a price
+  with the context deleted, which is the one thing S15 §5 says the band exists to prevent. Caught by
+  looking at a screenshot, not by any check. Rewritten as a `find` that **throws**: this is a server
+  component rendered at build, so a missing id is now a red build rather than a quiet omission. The
+  set also grew to three, because URD §1 states "passengers pay drivers directly" alongside the other
+  two.
+
+  **(2) The reduced-motion rule for the sticky section did nothing.** `@media (prefers-reduced-motion)`
+  was written *above* the rules it overrides. **A media query adds no specificity**, so
+  `.mr-sticky-media { position: static }` lost on source order and the column stayed `sticky` under
+  forced reduced motion — the exact failure S15 §3 warns about, shipped while looking implemented.
+  Moved below; re-measured under forced reduced motion: **`position: static` and every step at
+  opacity 1**, which is the "plain vertical list of four steps" the brief asks for. The reason is now
+  written beside the rule.
+
+  **(3) The lightbox did not return focus to the thumbnail.** Measured after `Escape`:
+  `document.activeElement` was `<body>`, and still `<body>` a second later. Radix restores focus to
+  its own `Dialog.Trigger`, and `@mageride/ui`'s `Modal` is **controlled** — `open`/`onOpenChange`,
+  no trigger — so there was nothing for it to restore to. That is S15's fourth lightbox obligation
+  and it is invisible to a mouse user: a keyboard reader who closed the lightbox was returned to the
+  top of the document. Fixed by capturing the trigger on open and focusing it on close inside
+  `requestAnimationFrame` (synchronous focus is undone by Radix's own teardown a frame later).
+  Verified: focus returns to the exact thumbnail and stays there at +100/300/600/1200 ms.
+
+  **(4) The stat counters rendered "0" with JavaScript off.** The digits come from
+  `counter(--mr-www-count)`, whose registered `initial-value` is 0 and which was only ever set by an
+  effect — so a crawler and a JS-off reader saw four zeros, including **"0" for the ten vehicle
+  types**. S15 §7 requires the real value be in the server-rendered HTML. `StatCounter` now
+  server-renders an inline `--mr-www-count` and winds back to zero at mount *only when it is about to
+  animate*. Verified with JavaScript disabled: `--mr-www-count:10`, `:3`, `:0`, `:1` — the one zero
+  is the commission figure, which is genuinely zero.
+
+  **A fifth, smaller correction: the fee table said "LKR 50" while the prose said "Rs 300".**
+  `Intl.NumberFormat`'s default `currencyDisplay: 'symbol'` gives "LKR" in English. Measured across
+  all three locales and switched to `narrowSymbol`, which gives **"Rs 50"** in English and Tamil —
+  matching the copy exactly — and **"රු. 50"** in Sinhala, that reader's own mark. One page calling
+  the same currency two things reads as carelessness about the numbers, on the table where the
+  numbers are the point.
+
+  **S15 §7 says "11 vehicle types". The site publishes 10, and that is deliberate.** `STATS` in
+  `src/content/marketing.ts` carries `vehicleTypes: 10` with S07's anchor: URD §1.B and the backend's
+  `Registry.Api/Domain/VehicleTypes.cs` **both list ten**. Eleven is the count of *map marker
+  colours*, whose eleventh token `veh-private` says in its own comment that it is "a Mode B
+  **display** token, not a vehicle type". Publishing 11 would invent a vehicle a reader could go
+  looking for. The brief inherited the figure from the plan; README rule 7 makes the anchored
+  constant the thing that renders. **Flagged rather than silently resolved.**
+
+  **Reduced-motion degradation, per animated section.** *Sticky how-it-works* → media column becomes
+  `static`, all steps opacity 1: a plain list (verified). *Feature splits* → `Reveal`'s hidden state
+  lives inside `@media (scripting: enabled)`, so a JS-off reader never gets `opacity: 0`; under
+  reduced motion the transition is removed in the same rule block. *Stat counters* → `animate()` is
+  never called and the value settles immediately. *Screen carousel* → no timer at all; it is the
+  platform's own scroller, so there is nothing to degrade. **The first feature split is deliberately
+  not wrapped in `Reveal`** — it is the LCP candidate on tall viewports, and an element fading in
+  from `opacity: 0` is not *painted* until the fade begins, which moves the metric by the animation's
+  length for no gain on something the reader is already looking at.
+
+  **The JS-off read, in full.** 10 sections in the HTML · fee table complete at 6 rows · language
+  band complete at 3 `lang`-tagged lines · 12 showcase thumbnails · **both** how-it-works cuts (8
+  steps) present, because the inactive one is `hidden` rather than unmounted — S15's crawlability
+  requirement · stat values real · **zero forms or email inputs anywhere on the page**.
+
+  **The lightbox against S15's six obligations:** focus moves in ✓ · trapped across 12 tabs ✓ ·
+  `Escape` closes ✓ · focus returns to the thumbnail ✓ (after fix 3) · ←/→ move and re-announce
+  ("Image 1 of 12" → "Image 2 of 12") ✓ · page behind does not scroll (`body { overflow: hidden }`,
+  restored on close) ✓ · Radix-backed rather than a hand-rolled `role="dialog"` ✓.
+
+  **One finding recorded and deliberately not fixed here: `<main>` is not `aria-hidden` while the
+  dialog is open.** Measured at +1500 ms: Radix marks the header, the footer, the skip link and the
+  route announcer `aria-hidden="true"` and **leaves `<main>` exposed**, so a screen reader's virtual
+  cursor can still browse the page behind the lightbox. Radix also sets no `aria-modal`. Focus *is*
+  trapped and scroll *is* locked, and background hiding is **not** one of S15's six obligations — but
+  it is a real gap, and it is in **`@mageride/ui`'s shared `Modal`**, so it affects the fleet and
+  admin portals too. That makes it a change set against the shared package rather than something to
+  patch on one marketing page (a local workaround would diverge this surface from the component every
+  other portal uses). **Worth raising as a micro-change-set.**
+
+  **The language band moved out of the footer.** S14 put it there; S15 §8 makes it home section 8,
+  and rendering both would show the same three sentences twice on one page. The footer now keeps the
+  links and the rights line. **The trade is a real one and is a decision, not an oversight:** the
+  trilingual claim was previously on *every* page and is now on the home page only. If it should
+  appear site-wide, the footer is where it goes back — recorded here so somebody chooses rather than
+  discovers.
+
+  **Every fence held.** No API call, no live count, no fare estimate. **No inline rupee figure** —
+  the six values come from `DAILY_FEE_TIERS` in minor units and `test/content.test.ts` (S20) will
+  assert them against URD §1. No motion library. No literal user-facing string (the four new
+  showcase keys are in all three tables; Tamil carries `TODO(ta)` per D2). Content capped at
+  `max-w-[1200px]`, three breakpoints, **no fourth**. The three mode cards use the preset's own
+  `mode-a`/`mode-b`/`mode-c` tokens as a 4px rule rather than a filled panel — those hues are chosen
+  for small badges and `mode-b`'s grey behind body text would fail contrast in light, `mode-c`'s
+  orange in both.
+
+  **Next:** S16 (the four role landing pages) — it inherits `ModeCards`, `FeatureSplits`,
+  `FareTable`, `ScreenCarousel` and `ScreenImage` as reusable bands, all of which take only a
+  `locale` and read their own content module, so a role page composes rather than re-authors. S17
+  fills `GUIDE_CHAPTERS`. S18 owns `/screens` (all 70 frames) and `/download`. **Still outstanding
+  and unscheduled: native Sinhala review (~16,600 words, S12), Tamil translation (next release,
+  MCS-34 D2), the unreachable localised 404 (S13/S14 → S19), and the shared `Modal`'s background
+  `aria-hidden` gap (above).**
+
+- **Component:** C134 www-informational-site — S16 (role landing pages) —
+  `build/prompts/C134-www/S16-role-landing-pages.md` — 2026-08-29
+- **Status:** DONE. `npm --prefix portals run lint` (whole tree, **exit 0**, re-run after the last
+  change), `run build --workspace @mageride/www` (**exit 0**) and
+  `run test --workspace @mageride/www` (**45 tests**) all green. Parity **815 keys × 3 languages,
+  complete, placeholder-consistent, every one rendered** (+2 keys, no orphans). AL-52 clean at 1
+  stylesheet / 43.7 kB CSS. **Four pages, one template**; six `StubPage` uses left for S17–S18.
+- **Notes:**
+  **The by-hand list was driven for real: 64 checks, 0 failures** — including **all 48 grid
+  combinations** (4 pages × si/en × light/dark × 375/768/1024), each returning 200 with exactly one
+  `<h1>` and no horizontal overflow.
+
+  **The template.** One component, `src/components/pages/RolePage.tsx`; one data module,
+  `src/content/roles.ts`; four page files of three lines each. Bands: hero → **vision + mission
+  (`/vision`)** → benefits → how-it-works → **fee table (`/drivers`)** → screen strip → FAQ subset →
+  guide entry + CTA. Four bands are optional and are **absent rather than empty**, so no page renders
+  a heading over nothing. What each page parameterises: `benefits` (`values` with anchors, or the
+  `PAGES` sections), `howItWorks` (the four-step constant, or none), `fareTable`, `screenSurface`
+  (a `Surface` filter over the registry rather than a hand-listed set of ids), `guide`, `cta`, and
+  `faq` (an `audience` selector or an explicit id list — **ids, never duplicated prose**).
+
+  **THE URD §1 QUOTATION, verbatim.** S16: *"exactly as URD §1 states it. Not a paraphrase."*
+  Rendered on `/drivers` in a `<blockquote>` with its anchor beneath, and asserted character-for-
+  character by the verification run:
+  > *"For Mode C (Standby On-Demand) drivers, the first trip of the day is always free; from the 2nd
+  > trip, a flat daily platform fee (vehicle-type dependent…) is auto-deducted from their wallet."*
+  Source: `specs/user-requirements-document.md#1-product-vision` (line 12). **One elision, marked by
+  `…`**: the original parenthesis enumerates the six rates, and those render from `DAILY_FEE_TIERS`
+  in the table directly beneath — quoting them inline would have put six rupee figures in a message
+  string, which is the fence S16 states in the same breath. Nothing else is changed: not the
+  semicolon, not "always", not "auto-deducted".
+  **The English is the quotation; si/ta are translations of it.** A Sinhala driver has to be able to
+  read a commercial commitment, so it localises like everything else — but the Sinhala was written
+  against *these words* rather than a summary (`සැමවිටම` for "always", `දෙවන ගමනේ සිට` for "from the
+  2nd trip", `ස්වයංක්‍රීයව අඩු කෙරේ` for "auto-deducted"), and the anchor renders beside it so a
+  reviewer can check. **Flagged for the native review S12 left outstanding: this is the one string on
+  the site where a loose translation is a commercial misstatement.**
+
+  **The fee table is the same table.** Verified by reading both pages and comparing: `/en` and
+  `/en/drivers` return **identical six-row output**, as do `/si` and `/si/drivers`. That is a
+  property of there being one `DAILY_FEE_TIERS` array behind one `FareTable` band, not of two lists
+  agreeing — S16 asks for exactly this check and it passes in both locales.
+  The other three claims are stated with it: zero commission, passengers pay drivers directly, first
+  trip free (the three `VALUES` cards), plus **Mode B monthly / Mode A nothing** from
+  `MODE_A_FEE_KEY` / `MODE_B_FEE_KEY`.
+
+  **TWO REAL BUGS FOUND, both by looking rather than by any check.**
+
+  **(1) Seven spacing utilities did not exist and were silently doing nothing.** `pt-section`,
+  `pb-section`, `pb-section-lg` and `mt-section` are **not Tailwind utilities** and are not derivable
+  from the `--mr-www-*` properties by the engine — those are plain custom properties, not
+  `--spacing-*` theme entries — so `class="pt-section"` compiled to **no rule at all**. Nothing
+  warned: an unknown class is not an error in Tailwind, in `tsc`, in eslint, or in any check this
+  component runs. **Introduced in S14 and repeated in S15 and S16** across seven call sites
+  (`Hero`, `Footer`, `FareTable`, `DownloadBand`, `RolePage` ×3). The symptom was a heading sitting
+  hard against the cards above it on `/drivers`, caught in a screenshot. Fixed by adding the
+  single-axis variants to `@layer utilities` from the **same two `clamp()`s** the block already
+  publishes — no new value, one edge instead of two. Measured after: the fee heading's `margin-top`
+  went **0 → 96px**. Recorded in `portals/www/CLAUDE.md`'s marketing-scale table.
+
+  **(2) `/vision` was missing the mission entirely.** S16 §27 asks for *"Vision, the chosen mission
+  (MCS-34 D1), and the values cards"*; the first cut rendered the values and skipped the mission,
+  because the template's `benefits: 'values'` branch read only the values heading out of
+  `PAGES.vision.sections`. That is worse than a missing band: **MCS-34 D1 makes the mission qualifier
+  required furniture wherever the mission renders**, so a page that dropped the mission also dropped
+  the honest correction to a coverage claim that is false on launch day. Added as its own band —
+  vision paragraphs, mission, qualifier — and kept as *one* band deliberately, so a later session
+  that moves the mission moves the qualifier with it. Verified rendering on `/en/vision`.
+
+  **`/vision` carries its anchors, on purpose.** S16: *"Every value card shows what makes it true —
+  the anchors S07 attached are for the reader as much as for review."* All six `VALUES` render their
+  `source` as a visible citation (six on the page). A spec path is **not** a hyperlink — the specs
+  are not published — so it renders as a monospace citation: copyable, checkable by anyone with the
+  repository, quiet enough not to compete with the claim. `/vision` also has **no CTA and no store
+  badge**, per S16: it is the page a journalist or an official reads.
+
+  **`/fleets` points its guide link at `/contact`**, because MCS-34 **D7** defers the fleet guide to
+  S23. The CTA is a link (`www.page.fleets.talkToUs` → `/contact`), **never a field** — S16's fence,
+  and `/fleets` is where that pressure comes from. Verified: **zero `form`, `input`, `textarea` or
+  `select` elements on any of the four pages.**
+
+  **No page links to a guide chapter that does not exist**, and that is structural rather than
+  incidental. New `guideEntryPath(audience)` in `src/lib/routes.ts` resolves against
+  `GUIDE_CHAPTERS` — **empty until S17** — and returns the guide index when no chapter is registered,
+  the first chapter when one is. **S17 needs to change nothing here**: filling `GUIDE_CHAPTERS` turns
+  the index links into deep links on its own, which is what stops this being a hardcoded `'guide'`
+  somebody has to remember to revisit. Verified: **zero `/guide/<audience>/<slug>` links on any of
+  the four pages** today. The first chapter and not an arbitrary one because both guides open with
+  `install-and-first-run` — a driver arriving from an advertisement wants to know what documents they
+  need before downloading anything, and that is chapter 1.
+
+  **One plan correction.** S16 §63 says *"Register the routes — all four go into `src/lib/routes.ts`
+  this session."* **They were already there**, from S03: `vision`, `passengers`, `drivers` and
+  `fleets` have been in `ROUTES` since the scaffold, which is why the nav, the footer and
+  `test/routes.test.ts` have been exercising them for thirteen sessions. Nothing to add; the repo
+  wins (README §4). Same class as S01's three plan corrections.
+
+  **One deliberate divergence, recorded rather than silently taken.** S16 §20 specifies a
+  **three-step** how-it-works; `HOW_IT_WORKS_PASSENGER` and `HOW_IT_WORKS_DRIVER` are S07's
+  **four-step** constants with anchors. All four render. Slicing to three would drop a real step —
+  "Pay the driver" on the passenger cut, "Accept a job" on the driver cut — and that is a content
+  decision about what the funnel *is*, not a layout one. The anchored constant wins (README rule 7),
+  as it did for the vehicle-type count in S15.
+
+  **The screen strips are the full per-surface set** — 29 passenger, 31 driver, 6 fleet frames — in a
+  `scroll-snap` scroller, all `loading="lazy"` (verified). S16 asks for the strip to come from the
+  `SCR-PA-*` registry entries and that is literally what a `Surface` filter returns; `/screens` (S18)
+  shows all seventy. Worth watching in **S19's Lighthouse gate, which runs on `/drivers`** — 31 lazy
+  images is fine today because none is eager and only the first few are ever in the viewport, but it
+  is the page most likely to need a cap if the gate is tight.
+
+  **Next:** S17 (the guide) — it fills `GUIDE_CHAPTERS` and publishes all 34 chapters, at which point
+  the four role pages start deep-linking with **no edit to S16's output**, and `test/routes.test.ts`
+  begins holding the new URLs to the table. S18 owns `/screens`, `/faq`, `/download`, `/contact` and
+  the three `legal/*` — the six remaining stubs. **Still outstanding and unscheduled: native Sinhala
+  review (~16,600 words, S12, now including the URD quotation above), Tamil translation (next
+  release, MCS-34 D2), the unreachable localised 404 (S13/S14 → S19), and the shared `Modal`'s
+  background `aria-hidden` gap (S15).**
+
+- **Component:** C134 www-informational-site — S17 (guide pages) —
+  `build/prompts/C134-www/S17-guide-pages.md` — 2026-08-29
+- **Status:** DONE. `npm --prefix portals run lint` (whole tree, **exit 0**),
+  `run build --workspace @mageride/www` (**exit 0**), `run test --workspace @mageride/www`
+  (**47 tests**, was 45) and
+  `grep -rnE "\bfetch\(|axios|navigator\.sendBeacon" portals/www/src portals/www/app` (**nothing**)
+  all green. Parity **829 keys × 3 languages, complete, placeholder-consistent, every one rendered**
+  (+14 guide keys, no orphans). AL-52 clean at 1 stylesheet / 45.4 kB CSS.
+  **The largest route family on the site now publishes.** Five `StubPage` uses remain for S18.
+- **Notes:**
+  **ROUTE COUNT, from `next build`'s own manifest: 99 prerendered routes** — **68 chapter pages
+  (34 × 2 rendered locales)**, 2 guide indexes, and 29 for everything else. Exactly the arithmetic
+  S17's Verify line predicts, and it is arithmetic rather than a coincidence: `GUIDE_CHAPTERS` is
+  **derived from `CHAPTERS`**, not hand-listed, so 34 is the registry's number and not a typed one.
+
+  **The by-hand list was driven for real: 59 checks, 0 failures.** Three chapters (short —
+  `permissions`, 7 steps; long — `onboarding-your-vehicle`, 8 steps and 3 callouts; image-heavy —
+  `reading-the-live-map`) × **both rendered locales**, plus the index, the pager, the keyboard path
+  and print.
+
+  **`GUIDE_CHAPTERS` is generated, and that is the session's load-bearing decision.** S17: *"34
+  hand-typed slugs will drift."* They would, and the drift is silent in the expensive direction — a
+  mistyped slug compiles, publishes a 404 at a URL the sitemap advertises, and reads as a missing
+  page rather than a typo. `routes.ts` maps `chaptersFor(audience)` over `GUIDE_AUDIENCES`, so **the
+  route table cannot disagree with the corpus in either direction**. `test/routes.test.ts`'s old
+  *"publishes no guide chapter yet — S17 adds them"* was replaced with three cases that assert the
+  derivation rather than the count: the table equals the registry, 16 passenger + 18 driver in
+  reading order, and every chapter has a unique **audience+slug** URL — the pair, because the two
+  guides genuinely share `install-and-first-run` and a slug-only uniqueness test would either fail on
+  that legitimate collision or miss a real duplicate.
+
+  **One component renders all 34 pages**, which is the payoff S17 names for typing the content
+  instead of authoring it per locale: *"a chapter that renders in English renders in Sinhala by
+  construction."* Verified in both — same step counts, same callout counts, same TOC.
+
+  **The lightbox was extracted, not copied.** S17's fence is *"one lightbox implementation across
+  the whole site"*, and S15 had it embedded inside `ScreenCarousel`. It is now
+  `src/components/showcase/ScreenLightbox.tsx` — a `useLightbox` hook plus the dialog — used by the
+  home showcase and by every inline screen reference in a chapter. That is not a tidiness move: the
+  six obligations on that dialog took a measurement pass each in S15, including the **focus
+  restoration Radix does not do for a controlled dialog**, and a second copy would have had to get
+  all six right again silently. Verified in the guide: opens on `Enter`, takes focus, announces
+  "Image 1 of 3", `ArrowRight` → "Image 2 of 3", `Escape` closes, **focus returns to the step
+  thumbnail**. The set it pages through is the chapter's own screens in step order, deduplicated —
+  a screen shown by two steps is one entry, not two.
+
+  **"Was this helpful?" — option 1, omitted entirely, and the choice was forced rather than
+  preferred.** S17 offers omission or a `mailto:` pre-filled with the chapter slug. **MCS-34 D4
+  leaves no address to send it to**: the change set says *"the address itself is a placeholder — no
+  address goes on a public page that was not chosen"*, and there is no `mailto:` anywhere on this
+  surface. A `mailto:` to a placeholder is worse than nothing — it is a feedback channel that looks
+  real and goes nowhere. So there is no control, no fetch, no beacon and no counter; the Verify
+  sweep for `fetch(`/`axios`/`sendBeacon` returns nothing. **If real feedback measurement is ever
+  wanted it is its own change set with its own data-protection position**, per the prompt.
+
+  **Screen references (§5) needed no work.** S17 anticipates `screens: []` left over from S08–S11;
+  **all 34 chapters already carry non-empty `screens`**, and every `Step.screenRef` resolves. **No
+  registry entry was added and `screens:refresh` was not re-run** — the screen gate still reports 280
+  images, 4.60 MB of 12 MB, every entry resolving.
+
+  **The print stylesheet (§3) does what the brief asks and was verified under `emulateMedia`.**
+  Header hidden ✓, footer hidden ✓, chapter rail hidden ✓, **step numbers kept** ("Step 1") ✓,
+  **callout label kept** ("💡Tip") ✓, images capped at 60mm (**226.77px** measured) ✓. Two details
+  worth keeping: the step number is a real element rather than a `list-style` marker **because a
+  generated marker is not reliably printed**, and the callout's word survives because *the tint is
+  the first thing a cheap printer loses* — which is the same reason WCAG 1.4.1 wants it. Also
+  forces light colours (a dark-appearance reader would otherwise print a solid black page) and
+  prints the URL after every in-article link, so a printed cross-reference is followable.
+
+  **Callouts carry text, not colour alone.** Four kinds, each with a resource label ("Tip",
+  "Careful", "What this costs", "Your privacy"), a glyph and a tint — three independent signals.
+  Verified on every sampled chapter: **callout count === labelled-callout count**, in both locales.
+  `fee` and `privacy` also render their spec anchor, because `types.ts` requires one whenever a
+  callout states a fact and those two are the ones carrying regulated claims.
+
+  **The pager ends; it does not roll over.** Measured: the last passenger chapter has a `prev` and
+  **no `next`**, the first has a `next` and no `prev`. Rolling chapter 16 into driver chapter 1 would
+  tell a passenger the driver guide is the rest of their document.
+
+  **Layout.** Sticky rail · reading column · on-page TOC, **all three at `lg:` (1024px) only** —
+  D2's third breakpoint, no fourth (D8). The reading column measures **624px**, inside the `65ch`
+  cap; S17's reason is not aesthetic — *"1200px of Sinhala body text is unreadable"*. Below `lg` the
+  page is one column and the TOC is dropped, because a table of contents for a nine-step chapter on
+  a 375px screen is a screenful of links in front of the thing the reader came for.
+
+  **TWO REAL BUGS, both mine, both caught before they shipped.**
+  **(1) The print block swallowed the entire utilities layer.** Inserting a top-level `@media print`
+  closed `@layer utilities` early, so the aurora, reveal, carousel, sticky and route-line rules ended
+  up **nested inside `@media print`** — every motion utility disabled on screen and enabled only when
+  printing. **The brace count balanced**, which is exactly why it was worth checking the built CSS
+  rather than the source: verified after the fix by walking the compiled `@media print` blocks and
+  confirming `.mr-aurora`, `.mr-carousel-track`, `.mr-reveal`, `.mr-sticky-media` and `.text-hero`
+  are all outside them.
+  **(2) `stepId` was exported from a `'use client'` module** and called by the server component that
+  builds the TOC. It type-checked and failed at export: *"Attempted to call stepId() from the server
+  but stepId is on the client."* A value exported from a client module is a client *reference*, not
+  a function the server may call. Moved to `src/components/guide/ids.ts` with no directive, shared by
+  both — which is also what stops the anchor and its target drifting.
+
+  **Next:** S18 — the five remaining stubs (`/screens`, `/faq`, `/download`, `/contact`, the three
+  `legal/*`). It inherits `ScreenLightbox` as the one lightbox, `ScreenImage` for every frame, and
+  the `Callout` component if it wants one. **S18 also owes URD Epic 19 (accessibility) an FAQ entry**
+  — S11's handoff identified it as the corpus's one real coverage gap (US-19.1 TalkBack, US-19.2
+  system text size) and named `/faq` as its home; if S18 does not close it, it is a Definition-of-Done
+  gap against "every passenger and driver capability". **Still outstanding and unscheduled: native
+  Sinhala review (~16,600 words, S12, including S16's URD quotation), Tamil translation (next
+  release, MCS-34 D2), the unreachable localised 404 (S13/S14 → S19), and the shared `Modal`'s
+  background `aria-hidden` gap (S15).**
+
+- **Component:** C134 www-informational-site — S18 (`/screens`, `/faq`, `/download`, `/contact`,
+  `/legal/[doc]`) — `build/prompts/C134-www/S18-screens-faq-download-contact-legal.md` — 2026-08-29
+- **Status:** DONE. `npm --prefix portals run lint` (whole tree, **exit 0**),
+  `run build --workspace @mageride/www` (**exit 0**), `run test --workspace @mageride/www`
+  (**85 tests**, was 47) all green. `grep -rnE "<form|onSubmit|action=\"/"` over `app/` and `src/`
+  returns **nothing**. Parity **867 keys × 3 languages** (+39, −1), complete, placeholder-consistent,
+  every one rendered. AL-52 clean at 1 stylesheet / 46.0 kB CSS.
+  **Phase 5's gate is met: every route in `routes.ts` renders in both rendered locales**, walked by
+  hand against the built standalone server — **361 checks, 0 failures**.
+- **Notes:**
+  **`StubPage` is gone and `src/components/scaffold/` with it**, which is what Phase 5 finishing
+  looks like. `www.scaffold.notice` left all three tables in the same change (it would have been an
+  orphan on the next build), and `test/fences.test.ts` now asserts the directory *stays* gone —
+  the failure it prevents is a later session reaching for the obvious name and quietly reopening the
+  gate. Route count is **unchanged at 99 prerendered** (13 routes + 34 chapters + the workbench,
+  × 2 locales, + `_not-found`/`_global-error`/`icon.svg`): S18 replaced stubs, it added no route.
+
+  **THE SESSION'S REAL BUG, and it was invisible in a browser.** `/screens` filters from the URL, so
+  the gallery is a client component reading `useSearchParams()`, which must sit under `<Suspense>`.
+  The first cut used `fallback={null}` on the reasoning that "the boundary never shows on a real
+  request". **Next prerenders the fallback and nothing else** — the served HTML for `/en/screens` was
+  **27 kB containing zero screens, zero captions and zero links into the guide**. Every claim the
+  design was justified by ("a crawler and a JS-off reader get the whole gallery") was false, and it
+  was false in the way that is hardest to catch: the page is perfect in a browser, because a browser
+  runs the JavaScript. Found by curling the built standalone server rather than by looking at it.
+  The fix is `src/components/screens/GalleryBody.tsx` — **a module with no `'use client'`, imported
+  by the page as a server component and by the client gallery as a client one**. Same markup, both
+  sides. The served page is now **261 kB with all 70 plates in it**, there is no layout shift on
+  hydration (the client renders the same elements in the same order), and with JavaScript off the
+  gallery is whole. **The general rule, now in `portals/www/CLAUDE.md`: if a page puts
+  `useSearchParams()` under a boundary, the fallback must be the real content.**
+
+  **The gallery keeps the static-render rule instead of following SCR-AP-002 literally.** S18 names
+  `portals/admin`'s stats filter as the precedent for "a server render whose entire state is the
+  URL", and that page reads `searchParams` **on the server**. This surface may not —
+  `portals/www/CLAUDE.md`: *"No page below `[locale]` may read a header, a cookie or a search
+  param."* Awaiting them would have made `/screens` dynamic to sort seventy items already in the
+  bundle. What was followed is the part that matters: **the controls are `<Link>`s and the component
+  holds no state.** Reload, bookmark, back button and paste all verified working.
+  **One consequence S19 inherits:** every chip is a crawlable URL rendering the *same* document as
+  `/screens`. That is duplicate content, and the fix is a canonical plus keeping the query-string
+  views out of the sitemap — not a change here.
+
+  **The mode facet did not exist and had to be derived.** S18 asks for `surface × mode × chapter`;
+  `screens.ts` has carried `surface` and `chapters` since S05 and has never carried a mode, because
+  the wireframes are organised by app and not by service. `src/content/screen-modes.ts` is the
+  answer: a **nineteen-row chapter → mode map**, anchored to URD §1-A, unioned over each screen's
+  own chapters. The alternative was seventy per-entry judgements nobody could check afterwards; this
+  reads data S05 curated and S08–S11 revised *with this question in front of them* — SCR-PA-009's
+  registry comment already says it *"carries both halves of the booking result — the GTFS public
+  routes above and the Mode C tiers below"*, and it is tagged with both chapters for that reason.
+  `TRANSPORT_MODES[].screens` (S07's home-page mode cards) is folded in on top, and
+  `test/screens-gallery.test.ts` asserts **it adds nothing** — the day that fails, either a mode card
+  points somewhere the chapters do not, or a mapping was dropped. Three rows carry their reasoning in
+  the module: the live map is all three (it is where they meet), the daily fee is Mode C only (URD
+  Epic 9 charges it on the second *on-demand* trip), and the wallet/earnings chapters are unmapped
+  because "money moving" is not a service.
+
+  **D3, D4 and D5 were all unanswered, and two of the three constrained variants had to be narrowed
+  further than S18 specifies.**
+  **D3 · `/download`** — S18's variant is *"an email-notify page with no form. A `mailto:` link with
+  a pre-filled subject."* **The `mailto:` cannot be built, because D4 leaves no address to send to.**
+  S17 hit this exact wall building "was this helpful?" and reached the same answer: a `mailto:` to a
+  placeholder is worse than nothing — a channel that looks real and goes nowhere. So the page ships
+  the rest of the variant in full (the apps are not listed, said plainly, no badge, no form, no
+  field), plus two things that need no store URL and are true today: **which of the two apps you
+  want**, and **URD NFR-22's Android 8.0 / API 26 minimum, cited**. **No iOS minimum** — the URD
+  states none and S18 says omit rather than invent.
+  **D4 · `/contact`** — "email-only" is not shippable when the email itself is unchosen. The page
+  points at in-app support (the real answer for anything about a trip — a ticket arrives attached to
+  the trip), offers `/faq` and `/guide`, and then **says in body copy that no address is published
+  yet**. One paragraph for the go-live checklist to replace. There is no `mailto:` anywhere on this
+  surface, still.
+  **D5 · `/legal/*`** — the shell is built (`src/content/legal.ts` + `LegalPage`): document layout,
+  table of contents, last-updated line, status notice. **`lastUpdated` is a supplied `YYYY-MM-DD`
+  string, never read from the clock** — a date that moved every rebuild would tell a reader a legal
+  document had changed when it had not, and `test/legal.test.ts` sweeps both files for a clock read.
+  Privacy and PDPA also carry **factual descriptions of software, clearly labelled as not the
+  policy**: what this website collects (nothing — no cookies, no analytics, no form, and honestly
+  about the ingress's ordinary logs and the `localStorage` theme), and what `pdpa-svc` does (export
+  and erasure, due within 30 days, with the legal-retention exception stated). **`terms` carries
+  none**, deliberately: terms *are* the policy all the way down, so any section would be the generic
+  template S18 rules out wearing a different heading.
+
+  **`/faq` is native `<details>`, and the prompt's instruction could not be followed.** S18 says to
+  use *"`@mageride/ui`'s `Tabs`/disclosure primitives"* — **there is no disclosure primitive in
+  `@mageride/ui`** (Button, Field, Chip, StatusPill, Table, Modal, Toast, Tabs, Dropzone). Building
+  one on `radix-ui`'s Accordion would satisfy *"answers in the DOM whether open or closed"* via
+  `forceMount` and would **fail the clause in the same sentence** — *"a JS-off reader need them"* —
+  because a Radix accordion without JavaScript is buttons that do nothing above answers CSS has
+  hidden, on the surface whose defining property is working when nothing else does. `<details>` gives
+  every obligation natively, for no dependency and no hydration. `aria-expanded` is deliberately
+  **not** hand-written: a server-rendered `false` that never changes is worse than the native state
+  it would shadow. Deep links are `src/components/faq/FaqHashOpener.tsx`, twenty lines of
+  enhancement — the fragment names the `<details>` itself, which no browser auto-expands.
+  Verified: 21 items, unique ids, all closed on load, **every answer in the DOM while closed**,
+  `#faq-daily-fee` opens exactly one, a hash change on the page opens the next, and **with JavaScript
+  disabled every answer is present and clicking a summary still opens it**.
+
+  **A print defect found and fixed.** `/faq` printed twenty-one questions and **zero** answers —
+  measured with `checkVisibility()` under `emulateMedia`, 0 of 21. `app/globals.css` now prints every
+  `<details>` open, with **two declarations because two engines hide it two ways** (`content-visibility`
+  on `::details-content` in current Chromium and Safari; `display: none` on the slot in older ones),
+  and drops the collapsed `+` marker so no answer prints under a control saying it is shut. 21 of 21
+  after, in both locales. **S17's brace bug did not recur** — the compiled sheet has exactly two
+  `@media print` blocks totalling 728 characters, and `.mr-aurora`, `.mr-carousel-track`, `.mr-reveal`,
+  `.mr-sticky-media` and `.text-hero` are all outside them; the guide chapter's print behaviour is
+  unchanged (8 steps, images capped at 226.77px = 60mm, rail and TOC hidden).
+
+  **URD Epic 19 is closed.** S11 found it and S17 handed it here: US-19.1 (TalkBack on the core
+  flows) and US-19.2 (system text size) were stated nowhere in 34 chapters or 20 questions.
+  `www.faq.accessibility.*` is the twenty-first entry, shown to both audiences, citing both stories.
+  **TalkBack by name and no VoiceOver claim** — the URD names TalkBack and states no iOS
+  accessibility requirement anywhere, and this site does not get to infer one. `test/faq.test.ts`
+  asserts the entry exists so a later tidy-up cannot reopen a gap two sessions went looking for.
+
+  **THE SWEEPS CAUGHT MY OWN COMMENTS THREE TIMES, and the fix was always the comment.**
+  `test/fences.test.ts` failed on `src/content/legal.ts` because its module note named `fetch(`,
+  `process.env.` and the public-env prefix while explaining that they are banned; `test/legal.test.ts`
+  failed on the note explaining that the clock is never read; and S18's own Verify grep hit an `en.ts`
+  comment quoting the proposal's bracketed to-be-added placeholder. These sweeps are **text searches
+  over the source, on purpose** — a value assembled from fragments would defeat any analysis — so
+  they cannot tell a call from a sentence about one. Describing the rule instead of spelling it keeps
+  the guarantee; teaching the checks to skip comments would trade it for a comment style. Recorded in
+  `portals/www/CLAUDE.md` so the fourth time is somebody else's minute, not their hour.
+
+  **S18's Verify line has one clause that cannot pass and is not meant to.**
+  `grep -rn "To be added\|TODO\|Lorem" portals/www/src/i18n portals/www/src/content` returns **754
+  lines from `ta.ts`**, every one a `TODO(ta)` marker. That is **S13 executing MCS-34 D2**, not
+  debris: `ta.ts` is complete and type-checked so a missing key stays a compile error, and no `/ta`
+  URL is published. Read the clause against `en`, `si` and `src/content`, where it returns **nothing**
+  except one line of S13's own prose in `src/i18n/index.ts` explaining the deferral.
+
+  **`portals/www/CLAUDE.md` updated** for what S18 invalidated or added: the scaffold directory is
+  gone, "39 URLs" is now 96 published (13 routes + 34 chapters, × 2 rendered locales), the
+  `useSearchParams`-under-Suspense trap, the two interaction decisions above, the text-sweep rule,
+  and the three Deferred rows for D3/D4/D5.
+
+  **Next:** S19 — SEO, a11y and performance. It inherits: **the canonical/sitemap question the
+  gallery's chips raise** (query-string views must not be sitemapped); **`FAQPage` JSON-LD**, which
+  can now be generated from `FAQ` knowing the DOM genuinely carries every answer; the byte budgets
+  (A34), still reported-only at 46.0 kB CSS and 1224 kB JS; and the `/screens` hydration swap, which
+  is the one CLS risk S18 introduced and did not measure under throttling. **Still outstanding and
+  unscheduled: native Sinhala review (~16,600 words, S12, now including S18's ~39 new keys), Tamil
+  translation (next release, MCS-34 D2), the unreachable localised 404 (S13/S14 → S19), and the
+  shared `Modal`'s background `aria-hidden` gap (S15).** **Go-live checklist rows still owed by
+  D3, D4 and D5** — store URLs, a contact address, and counsel's three documents.
+
+- **Component:** C134 www-informational-site — S19 (SEO, accessibility, performance, dark mode) —
+  `build/prompts/C134-www/S19-seo-a11y-perf.md` — 2026-08-30
+- **Status:** PARTIAL, and the missing part is a **deliberately red budget gate**, not unfinished
+  work. `run lint --workspace @mageride/www` **exit 0**; `run test --workspace @mageride/www`
+  **105 tests** (was 85, +20 in the new `test/seo.test.ts`) **exit 0**; `next build` **exit 0** and
+  then `scripts/check-bundle.mjs` **exits 1** on A34's JS budget, by 24.6 kB, on purpose — see
+  *the budget* below and `build/prompts/MCS-36-a34-js-budget-below-the-framework-floor.md`.
+  Accessibility is **fully green**: `npm run a11y` reports **0 axe/structure violations and 0
+  contrast failures across 48 page loads** (6 pages × si/en × light/dark × desktop/375px phone).
+  `sitemap.xml` serves **94 URLs** — 13 routes + 34 chapters × 2 rendered locales, 100% of
+  `allPaths()` — with reciprocal `si-LK`/`en-LK`/`x-default` and **no `ta-LK` anywhere**.
+  `robots.txt` comes from `app/robots.ts`; `public/robots.txt` is deleted and a test keeps it so.
+  Zero third-party origins fetched, asserted rather than assumed.
+- **Notes:**
+  **The accessibility audit found four real defects and none of them were visible in a browser.**
+  A `role` on a `<ul>` is never additive — `role="group"` on the `/screens` filter chips replaced
+  the implicit `list` and orphaned 41 `<li>`; **S19 then made the identical mistake a second time**
+  adding `role="region"` to the role pages' screen strip and orphaned 31 more. That strip was also
+  7456px of content in a 1280px viewport with **zero focusable descendants** — unreachable by
+  keyboard, WCAG 2.1.1. `size-cta-icon` is D2's 20px *icon* box and was being used as a *hit area*,
+  making the theme toggle 20×20 on every page and the mobile menu trigger 20×20 at the width where
+  it is the only way to reach another page; both are 44×44 now with the glyph unchanged. And
+  `.mr-sticky-step`'s 0.45 opacity composited an 18px heading to **2.85:1** and its body to
+  **2.27:1** — opacity is the one way to fail contrast without ever writing a failing colour.
+
+  **The sticky-step fix is worth reading before changing it.** The measured floor across the three
+  inks inside a step is **0.83**, and opacity is the *only* thing distinguishing an active step from
+  an inactive one — so "passes AA" and "reads as dimmed" cannot both be true of one number, and
+  raising it until the audit went quiet would have silently deleted the effect. It sits at 0.8 and
+  the one ink that could not survive that — the accent step index at 4.25:1 — leaves the opacity's
+  reach by swapping colour instead, which is more differentiation rather than less.
+
+  **The audit tooling lied twice, confidently, and both lies look like a pass.** A stale `next start`
+  from the previous session kept port 3104 and served the *previous* build's HTML, whose hashed
+  stylesheet no longer existed: the page rendered completely unstyled, every element measured ~17px
+  tall, and the contrast walk reported a clean sweep because everything was default black on default
+  white. And Tailwind v4 emits **`oklab()`** for any colour with an alpha modifier, so the sticky
+  header computes to `oklab(0.999994 … / 0.85)` — white at 85% — which a regex over the numbers reads
+  as *black*, inventing three header failures while burying the real ones. Both are now defended in
+  `scripts/check-a11y.mjs`, which is in the repo (`npm run a11y`) precisely so the next session does
+  not pay for them again. **axe is the authority on SC 2.5.8, not a raw 24px sweep**: 88 links measure
+  under 24px and axe exempts every one under the inline and spacing rules.
+
+  **The budget: A34's "JS ≤ 90 KB gzipped on `/`" is below the framework's own floor.** Measured per
+  page on the prerendered HTML, gzipped, excluding the `noModule` polyfill chunk no modern browser
+  fetches: **react-dom 69.8 + Next's router 42.5 + React 32.9 + runtime 18.1 = 163.3 kB before one
+  line of this surface's code**. An empty App Router page breaches A34 by 73 kB. S19 did **not** raise
+  the threshold — its own fence forbids that — and instead applies the 90 kB to the bytes the surface
+  controls, reports the floor beside it, and files **MCS-36** proposing A34 be restated. CSS passes at
+  **9.8 kB of 25**, the largest hero plate at **36 kB AVIF of 120**, third-party origins at **0 of 0**.
+
+  **First-party is 114.6 kB, and 91.9 of it is the resource tables.** Eleven client components take a
+  `locale` and build a translator, so every published locale's whole table — including the entire
+  guide corpus — downloads on every page, guide or not. S19 removed what could be removed without a
+  decision: **the unpublished locale's table is no longer in the client graph at all**, which took
+  **42 kB gz off every page** and bought an invariant the surface did not have — *a locale's table
+  reaches a browser if and only if the locale is published* — held by a new fence in
+  `test/fences.test.ts`. The total lookup moved to `src/i18n/messages/all.ts`, which nothing under
+  `app/` or `src/components/` may import. **Two things that look like the remaining fix and are not:**
+  shipping only the active locale (the locale is a runtime value and the translator is synchronous, so
+  every *published* table must be statically present — that idea is now fully banked), and serving the
+  table in the RSC payload (it moves ~55 kB gz out of a cached chunk into uncached HTML on every
+  navigation). What removes it is moving a component to the server, or handing an island its resolved
+  strings — which contradicts a stated rule in `portals/www/CLAUDE.md`, so **MCS-36 D3 asks for that
+  decision explicitly rather than a session taking it quietly.**
+
+  **Re-enabling Tamil is now one *entry* rather than one line**, and `portals/www/CLAUDE.md` is
+  updated: the table joins `WWW_PUBLISHED_MESSAGES` in `src/i18n/index.ts` and `WWW_LOCALES` is that
+  map's keys. The old one-liner published a locale without shipping anything, because the bytes were
+  already there.
+
+  **The text-sweep rule caught S19 three more times**, which is the fourth, fifth and sixth occurrence
+  and vindicates S18 writing it down. `src/lib/seo.ts` failed the public-env fence by *explaining*
+  that the surface reads no configuration; `OgCard.tsx` failed the font-package fence by naming the
+  two packages it explains it must not import; and the new unpublished-locale fence failed on its own
+  module's worked example of how to re-enable Tamil. **S19 first "fixed" this by teaching the two
+  fences to match imports rather than prose, then reverted it** — CLAUDE.md is explicit that
+  weakening a check to ignore comments trades a guarantee for a comment style. All three are reworded
+  to describe rather than spell.
+
+  **JSON-LD ships `Organization`, `WebSite`, `SoftwareApplication` ×2, `FAQPage`, `HowTo` on all 34
+  chapters, `BreadcrumbList` and `WebPage` on the legal documents**, every block built from the
+  registry the page renders. **`SearchAction` is omitted** because there is no search endpoint and
+  `potentialAction` pointing at a URL that does not exist is a false declaration; **`installUrl` is
+  omitted** while MCS-34 D3 leaves the listings unpublished. `test/seo.test.ts` asserts both
+  omissions, `hreflang` reciprocity in both directions, that no unpublished locale is ever advertised
+  (written against `LOCALES` minus `WWW_LOCALES`, so re-enabling Tamil makes it pass with no edit),
+  and 100% sitemap route coverage. **OG cards render in English for every locale** — `next/og`
+  (satori) accepts TTF/OTF/WOFF and not WOFF2, and there is no Noto Sans Sinhala on this host in any
+  format; a broken card is worse than an English one, and that is recorded in `OgCard.tsx`.
+
+  **Next:** S20 — tests, CI and Lighthouse. It inherits: **`npm run a11y`, ready to wire into CI**;
+  **the red budget gate**, which stays red until MCS-36 is decided — do not make it pass by raising
+  the number; the LCP target (< 2.0s on a 3G-throttled mid-range Android) which S19 **did not**
+  measure under throttling and which S20 owns with the Lighthouse gate; and the `/screens` hydration
+  swap, still the one unmeasured CLS risk. **Still outstanding and unscheduled: native Sinhala review
+  (~16,600 words), Tamil translation (MCS-34 D2), the unreachable localised 404 (S13/S14 → S19, which
+  S19 also did not take — it is a decision about who emits `<html>`, not a missing line), and the
+  shared `Modal`'s background `aria-hidden` gap (S15).** **Go-live checklist rows still owed by D3,
+  D4 and D5** — store URLs, a contact address, and counsel's three documents.
+
+- **Component:** C134 www-informational-site — S20 (tests, CI, Lighthouse, visual regression) —
+  `build/prompts/C134-www/S20-tests-ci-lighthouse.md` — 2026-08-30
+- **Status:** PARTIAL. The suite, the gates and the housekeeping are all done and green; **one
+  threshold cannot be met and was not lowered.** `npm --prefix portals run lint` **exit 0** across
+  all eight workspaces. `run test --workspace @mageride/www` — **134 tests, 9 files** (was 105 in 7),
+  **exit 0**. The other workspaces are green independently: tailwind-preset 124, i18n 30, ui 39,
+  web-passenger 138 — **465 tests across the tree**. `next build` **exit 0**;
+  `scripts/check-bundle.mjs` still **exits 1** on S19's A34 budget, which is what makes the
+  component's `verify_cmd` red.
+- **Notes:**
+  **Two new test files, and the split between them is the point.** `test/content.test.ts` holds the
+  content registries to their sources, and `test/a11y.test.tsx` holds the components to their
+  behaviour. `test/fences.test.ts` gained five: `document.cookie` and the cookie-library sweep (A36 —
+  and `localStorage` is deliberately *not* banned, because the theme toggle uses it and D6′ I-29.1 is
+  about a surface holding a live ride), a build-time network fence over `scripts/`, and the two that
+  keep its exemption honest.
+
+  **The fee tiers are parsed out of the URD, never restated** — S20's sharpest fence, and it works:
+  the parse finds six Mode C tiers in
+  `specs/user-requirements-document.md#daily-platform-fee-structure-namma-yatri-methodology` and
+  matches `DAILY_FEE_TIERS` exactly (Rs 50/100/150/200/250/300 → 5000…30000 minor). It keys off the
+  **shape of the value** (`Rs N/day`) rather than a list of vehicle names, so a seventh tier in the
+  spec is a failure rather than a silent omission; and the vehicle key is a pure normalisation of the
+  URD's own label — `Three-wheeler` → `three_wheeler` — so there is **no mapping table** to become a
+  second source of truth. Mode A (free) and Mode B (monthly) sit in the same table and are asserted
+  *out* of the tiers: a parse taking every row would put a Rs 300 **daily** fee on a private vehicle,
+  a tenfold overstatement of somebody's costs on a public page. The cited anchor is checked against
+  the URD's real headings, because a citation pointing at a renamed heading looks verifiable and is
+  not.
+
+  **`a11y.test.tsx` runs no axe, on purpose, and that is the opposite of a gap.** The browser audit
+  (`npm run a11y`, S19) already runs axe and a contrast walk over the real built site — 48 page
+  loads. Running axe over a jsdom fragment would report on markup with no stylesheet, where every
+  contrast and target-size rule silently passes or silently does not apply: **the third
+  confident-and-wrong "pass" of this component**, after the stale server and the `oklab()` parse. So
+  this file takes the half a page scan is structurally blind to — a carousel that autoplays under
+  `prefers-reduced-motion` is pixel-identical to one that does not, and a dialog that never returns
+  focus looks exactly like one that does. Autoplay is asserted in **both** directions over ten
+  intervals, so it fails if the carousel stops moving for everyone; focus restore is driven through
+  the real controller, because the `requestAnimationFrame` ordering S15 found *is* the thing tested.
+  Writing it also caught a real ambiguity: the carousel renders **two** `region`s, and resolving the
+  track through a dot's `aria-controls` asserts the association a screen reader actually follows.
+
+  **Lighthouse: Accessibility 100 and SEO 100 on all six pages. Performance 59–88 against 95, on
+  every page, and the number was not lowered.** `/en` 71 · `/en/drivers` 88 · `/en/guide/...` 88 ·
+  `/si` **59** · `/si/drivers` 63 · `/si/guide/...` 66; LCP 2.4–4.4 s against A34's < 2.0 s. The
+  dominant term is Total Blocking Time — the main thread hydrating the bundle — and **every failure
+  has the same cause as S19's budget breach**: ~91 kB gzipped of resource tables, in the browser
+  because eleven client components take a `locale` and build a translator. **Sinhala is consistently
+  9–22 points worse than English**, so the surface's default locale is its slowest. All of it is
+  written into **MCS-36**, which now argues the case in blocking time rather than bytes; **D3** is
+  the decision that unblocks it. `.github/workflows/lighthouse.yml` holds the thresholds and is red.
+
+  **A caveat on that gate, because a threshold nobody trusts is worse than none.** Lighthouse
+  Performance is noisy here: `/si` measured TBT of **1,270 ms and 2,280 ms on two runs of the same
+  build**. Accessibility and SEO are deterministic and can be read as pass/fail today; Performance
+  should be re-checked for flap once it is inside the threshold, before anyone relies on it to block
+  a merge.
+
+  **Visual regression is in, and local only.** `npm run visual` — six frames at 375px, both
+  appearances, captured under `reducedMotion: 'reduce'` so the aurora and marquee are not caught
+  mid-flight, diffed with `sharp` (already a devDependency; `pixelmatch` would have been one more
+  dependency for a subtraction). **Not in CI, and A17 is the reason**: `test/fences.test.ts` refuses
+  any dependency whose postinstall downloads a browser, so wiring it in would mean installing one on
+  every portal push. Verified stable over five consecutive runs and verified to *bite* — swapping the
+  dark baseline over the light one reports 99.98% of pixels moved and writes `.visual/diff-*.png`.
+  Baselines are 732 kB committed under `test/visual/`. **When it fails, review the diff and
+  re-baseline in the same change as the styling edit; do not delete the test.**
+
+  **Housekeeping: the motion workbench is gone, and how it went is worth keeping.** S04's exemption
+  was a set of one, by exact name, with a second test asserting the exempted page still existed — so
+  deleting the directory turned *that* test red until the exemption went with it, exactly as designed.
+  Gone with it: 23 message keys in all three tables (867 → **844**, no orphans) and the `Disallow` in
+  `app/robots.ts` that named it — a `Disallow` for a 404 is worse than no rule, because `robots.txt`
+  is the one public file whose whole content is a list of URLs, so a stale entry *advertises* the
+  address it was added to hide.
+
+  **CI runs lint and build. It does not run `test` — say this out loud, which S20 asked for.** The
+  portal leg is `npm ci && run lint && run build`; the 134-test suite is C134's own `verify_cmd`.
+  **Do not read a green `main` as "the tests ran".** Measured, because S20 asked whether a fifth Next
+  build breaks the leg: **lint 123 s** across eight workspaces, **build 194 s**, of which www's
+  `next build` is **~20 s** warm — about **12% of the matrix job's 45-minute timeout**, so **no
+  matrix split was needed** and plan §A38's contingency stays unused.
+
+  **One finding S20 did not create but did surface: the red budget gate has a blast radius.**
+  `portals/package.json` has `pretest: npm run build`, so `npm --prefix portals run test` builds
+  every workspace first and www's deliberate A34 failure aborts it — **blocking all eight
+  workspaces' tests, not just this one**. Every other workspace is green when run directly. This is a
+  consequence of S19's choice rather than a new fault, and the fix is a decision: leave it until
+  MCS-36 is settled, or move the A34 budget out of `build` into its own script wired separately into
+  CI. **S20 did not take that decision** — moving a gate to make an unrelated command pass is the
+  shape of thing that needs asking about.
+
+  **A second measurement worth recording: Sinhala pages have CLS 0.07–0.083 where English has 0.**
+  Attributed by Lighthouse to the two Noto faces arriving after first paint — S04's documented
+  `preload: false` trade, taken so a Sinhala download does not sit in front of every English page.
+  All 28 images on `/si` carry explicit `width` and `height`, so the image contract is holding and
+  the font is the whole of it. CLAUDE.md says *"S19 owns revisiting this if per-locale preloading
+  ever becomes expressible"* — it still is not: `next/font` exposes no stable URL for a `<link
+  rel="preload">`, and the filenames are content-hashed. Still under Google's 0.1 "good" threshold.
+
+  **Next:** S21 — deploy, K8s and ingress. It inherits: **the two red gates**, both pending MCS-36
+  D3, and neither to be made green by moving a number; **`seo.test.ts`'s cache-header assertions**,
+  which S20 left unwritten because S21 is what sets them (A44 — the apex 301 and the cache headers
+  live at the ingress); and `npm run a11y` / `npm run lighthouse`, ready to point at a deployed host
+  with `MR_A11Y_BASE` / `MR_LH_BASE`. **Still outstanding and unscheduled: native Sinhala review
+  (~16,600 words), Tamil translation (MCS-34 D2), the unreachable localised 404 (S13/S14 → S19 → S20,
+  still not taken — it is a decision about who emits `<html>`, not a missing line), and the shared
+  `Modal`'s background `aria-hidden` gap (S15).** **Go-live checklist rows still owed by D3, D4 and
+  D5** — store URLs, a contact address, and counsel's three documents.
+
+- **Component:** C134 www-informational-site — S21 (container, catalog, ingress, apex redirect) —
+  `build/prompts/C134-www/S21-deploy-k8s-ingress.md` — 2026-08-30
+- **Status:** DONE. **C134's `verify_cmd` is green for the first time since S19** — lint **exit 0**,
+  `build --workspace @mageride/www` **exit 0**, `test --workspace @mageride/www` **139 tests, exit
+  0**. The image builds: `mageride/www-site:dev`, **346 MB**. `generate_manifests.py --check` reports
+  65 manifests current; `check_fences.py` is clean on all three overlays; `k8s-verify.sh` is
+  **38 passed, 0 failed, 2 skipped** (no cluster reachable).
+- **Notes:**
+  **D6 is Container**, confirmed on MCS-34's decision table, so this session's shape stands.
+
+  **The image could not be built, and fixing that was the session's one real decision.**
+  `Dockerfile.portal` runs `npm run build --workspace www`, which is `next build && check-bundle.mjs`
+  — and check-bundle was red on S19's A34 budget. Confirmed by running the build rather than
+  reasoning about it: it died at `Dockerfile.portal:73`. **With the user's decision, the A34 budget
+  moved out of `build` into `scripts/check-budget.mjs` (`npm run budget`), wired into CI's portal leg
+  as its own step.** `check-bundle.mjs` keeps the AL-52 fences and the screen budget, which *are*
+  artefact integrity and must block an image. **No number changed and nothing stopped being
+  enforced** — the split is about what a failure may stop. A byte budget should fail a *merge*, not
+  an *artefact*, and wiring it into `build` had been stopping the container image, S22, and (through
+  `pretest: npm run build`) **all eight workspaces' test suites**.
+
+  **That last one was hiding a real failure.** With the suites able to run again, `portals/fleet`'s
+  `test/trackers.test.ts` fails: it asserts `backend/src/ApiGateway/appsettings.json` contains the
+  route `/v1/fleets/{fleetId}/trackers/bulk`, and the route is **not there**. The file is untouched
+  by this session (`git status` clean; last touched by C127) so this **predates C134 and is not
+  ours** — but it has been invisible since S19, and it is C111's or the gateway's to resolve. Every
+  other workspace is green: **1,594 tests across the tree, 1 failing.**
+
+  **The generated Deployment would have broken MCS-34's fourth negative, and the catalog is where it
+  was fixed.** Every portal mounts `portal-config`, which carries `MAGERIDE_API_BASE_URL` — a gateway
+  address, on the one surface whose promise is that it has no gateway. S21 added **`reads_config`** to
+  `service-catalog.yaml` and `portal_env()` / `portal_probe_note()` to `generate_manifests.py`;
+  `www-site` sets it `false` and is the only portal that mounts no ConfigMap. **Default is `true`**,
+  so a new portal is configured unless it argues otherwise, and the three existing ones are byte-for-
+  byte unchanged. Verified on the running container: `docker exec … env` carries no `MAGERIDE_*` and
+  no `NEXT_PUBLIC_*`, and it runs as uid 1000.
+
+  **The probe is `/` and it answers 307 — verified, not assumed**, which is what S21 asked for. `/`
+  reads `Accept-Language`; the kubelet sends none, so a probe gets the platform default and any
+  2xx-3xx counts as success. `curl -sI localhost:3004/` against the real container → `307 → /si`. The
+  generated probe comment used to say "a redirect to /login counts", which is the three portals'
+  redirect and wrong here; `portal_probe_note()` now emits the accurate one for a surface with no
+  login.
+
+  **Four Ingress objects.** `www.mageride.lk` joins `mr-ingress-portals` with its own **`mr-tls-www`**
+  — the `passenger.` precedent, not the back-office one: unauthenticated public traffic gets its own
+  key, and this is the most-presented certificate on the platform. **`mr-ingress-apex` is separate**
+  for `mageride.lk` → **301** → `https://www.mageride.lk`, and it has to be: ingress-nginx
+  annotations are object-scoped, so `permanent-redirect` on the shared object would 301 the admin
+  console to the marketing site. That is the same argument that already split the file into three.
+  301 rather than 302 because every canonical, `hreflang` and sitemap entry is built on the `www`
+  host (S19 · A32/A43); its own `mr-tls-apex`, because the redirect is issued over TLS and the
+  handshake has to complete first.
+
+  **Cache headers went into `next.config.ts`, not the ingress, reversing what S03 assumed.** Which
+  response needs which policy is something Next knows and an nginx `location` regex does not:
+  `/_next/static/**` is content-hashed, `/screens/**` is committed, HTML is neither. The edge keeps
+  TLS, HSTS and the apex 301. `stale-while-revalidate=86400` is the *"renders with the backend down"*
+  fence extended one layer out — a cache that cannot reach the origin serves the page for a day, so
+  the site survives the **cluster** being down.
+
+  **The ordering of that block was wrong for one build and the response header is the only place it
+  showed.** Next applies every matching `source` and the *last* match wins for a header name, so the
+  catch-all must come **first**. Written specific-first, `/_next/static/*.css` and `/screens/*.avif`
+  both came back `s-maxage=300` instead of `immutable`. Found with `curl`, fixed, and pinned by a new
+  assertion in `test/seo.test.ts` — the config compiles and type-checks either way, so only a test
+  that reads the *order* can hold it. Verified against the container: HTML
+  `s-maxage=300, stale-while-revalidate=86400`; hashed asset and screen image
+  `max-age=31536000, immutable`.
+
+  **A build-host note.** The replica stack was **up** (23 containers) throughout, against the root
+  CLAUDE.md's "keep it down during waves 0–4". It was not brought up by this session and bringing it
+  down was not mine to do; the image build was attempted with ~17 GB available and completed twice
+  without pressure. If a later session sees a build OOM here, that is the first thing to check.
+
+  **Next:** S22 — replica DNS and smoke. It inherits: **a working image** (`mageride/www-site:dev`,
+  346 MB) and a green `verify_cmd`; the four Ingress objects, which S22 exercises through the
+  replica's edge; and `npm run a11y` / `npm run lighthouse`, both of which take `MR_A11Y_BASE` /
+  `MR_LH_BASE` and can be pointed at a deployed host. **Still red and still deliberate:
+  `npm run budget` (A34, 23.7 kB over) and `.github/workflows/lighthouse.yml` (Performance 59–88 of
+  95) — both pending MCS-36 D3, neither to be made green by moving a number.** **Not ours but now
+  visible: `portals/fleet`'s tracker-bulk gateway route.** **Still outstanding and unscheduled:
+  native Sinhala review (~16,600 words), Tamil translation (MCS-34 D2), the unreachable localised 404,
+  and the shared `Modal`'s background `aria-hidden` gap.** **Go-live rows still owed by D3, D4 and
+  D5** — store URLs, a contact address, and counsel's three documents.
+
+- **Component:** C134 www-informational-site — S22 (replica service, smoke checks, go-live rows,
+  close-out) — `build/prompts/C134-www/S22-replica-dns-smoke.md` — 2026-08-30
+- **Status:** PARTIAL — **and the single unmet item is A34's Lighthouse Performance threshold**,
+  which is unreachable for a reason MCS-36 exists to resolve. Everything else in the Definition of
+  Done is met. `npm --prefix portals run lint && … run build --workspace @mageride/www && … run
+  test --workspace @mageride/www` **exit 0** (**139 tests, 9 files**);
+  `generate_manifests.py --check` 65 manifests current; `bash -n infra/replica/smoke.sh` clean;
+  `haproxy -c` on the replica config **exit 0**.
+- **Notes:**
+  **The replica gains one container and it is the only one in that file with no `environment:`
+  block and no `depends_on`.** `www-site` copies `admin-portal`'s shape and removes what does not
+  apply — S22 is right that there is no `web-passenger` precedent to copy, because the profile
+  carries only the two portals. 384 MB / 0.25 vCPU, the same numbers as the DOKS catalog entry.
+  The comment says *why* the two absences are there, because the absence of a variable is exactly
+  what a later reader "fixes".
+
+  **Smoke went 24 → 38 checks**, in three steps that skip rather than fail when the optional
+  `portals` profile is not up — a replica brought up without it is a valid deployment and must not
+  report red for a container nobody asked for. The new checks read **the source** for what to
+  expect rather than hard-coding it: the rendered locales come from `WWW_PUBLISHED_MESSAGES`, the
+  route list from `routes.ts`, the chapter slug from `chapters.ts`. A hard-coded `si en ta` would
+  go red the day somebody re-enabled Tamil correctly.
+
+  **Every check's logic was run against a real edge, not just `bash -n`.** Rather than restart the
+  running replica's HAProxy — the stack was up and is not this session's to disrupt — S22 stood up
+  a **throwaway network with the www-site image and a second HAProxy loading the real replica
+  config**, and drove it. Results: `/si` and `/en` **200**, `/` **307** (the k8s probe path);
+  `/sitemap.xml` parses and carries **94 `<loc>`s covering every route in the table in both
+  locales**, with the chapter join present and **no unpublished locale advertised**; the guide
+  chapter serves its `"@type":"HowTo"` block through the edge.
+
+  **The apex rule is the part that needed testing rather than reasoning, and the replica is where
+  it is dangerous.** In DOKS it is a separate Ingress object because ingress-nginx annotations are
+  object-scoped. HAProxy has no object model, so it is an explicit rule — and the replica's
+  **default vhost is `replica.mageride.lk`, which routes to `api_gateway` by `default_backend`**.
+  A loosely matched apex would have 301'd **every API check in `smoke.sh`** to the marketing site.
+  So the match strips the port and requires the whole remaining host to equal `mageride.lk`:
+  `req.hdr(host),lower,field(1,:) -m str mageride.lk`. Verified both halves — `Host: mageride.lk`
+  and `Host: mageride.lk:443` both **301 to `https://www.mageride.lk` with the path preserved**,
+  and `admin.`, `fleet.`, `passenger.`, `www.` and the bare default host **all returned non-301**.
+  `smoke.sh` §10 asserts both directions for that reason.
+
+  **The "up while the platform is down" check was demonstrated in its strongest form.** §11 stops
+  `app-services` (Container 7 — the YARP gateway and all 22 domain services in one process),
+  asserts the site still answers 200, and restores it from a `trap` armed **before** the fault so
+  an interrupt still puts the stack back. In the test rig it was stronger than that: there was no
+  `app-services` in the network **at all**, and the site served 200 — not "the platform was
+  stopped" but "the platform was never there", which is what MCS-34's fourth negative actually
+  claims.
+
+  **Three go-live rows, and the numbering follows the file's own `5a`/`5b` convention** rather than
+  renumbering §A4: **15a** `www.mageride.lk` A/AAAA, **15b** the apex A/AAAA-or-ALIAS (*a redirect
+  needs something to fire from* — and a CNAME is not valid at a zone apex), **15c** `mr-tls-www`
+  and `mr-tls-apex` issued and renewing, gated with #10 and after 15a/15b because cert-manager's
+  DNS-01 challenge needs the records to exist. All three **OPEN**, owned by the infrastructure
+  owner. §B's T-5d cutover row now names `www.` and the apex and carries the `curl -sI` that proves
+  the 301.
+
+  **The Definition of Done, item by item.** (1) i18n parity green, 844 keys × 3 — **met**. (2) APG
+  carousel, keyboard-operable — **met**, asserted in `test/a11y.test.tsx`. (3) reduced motion stops
+  autoplay and every transform effect — **met**, asserted behaviourally in both directions over ten
+  intervals. (4) 34 chapters across URD Epics 1–27 — **met** (16 passenger + 18 driver). (5)
+  `fences.test.ts` proves no request-time network call — **met**, and now proven at the deployment
+  level too. (6) **Lighthouse ≥95 / 100 / ≥95 on `/`, `/drivers` and a guide chapter in all three
+  locales — NOT MET.** Accessibility **100** and SEO **100** on all six pages; Performance
+  **59–88**. Two clauses of that item are also amended by decisions on record: "all three locales"
+  is two, because **MCS-34 D2** defers Tamil. (7) `generate_manifests.py --check` clean and the
+  ingress serves `www.mageride.lk` with the apex 301 — **met**. **One unmet item keeps the
+  component `PARTIAL`**, which S22 asks for explicitly and which is the honest state rather than a
+  failure.
+
+  **What S22 did not do, and why.** The replica stack was **up** throughout (23 containers), against
+  the root CLAUDE.md's guidance for waves 0–4. It was not brought up by this session, and restarting
+  its edge or stopping its platform to run `smoke.sh` in place was not this session's call — the
+  throwaway rig gave the same evidence with no disruption. **Running `smoke.sh` against the live
+  replica remains for whoever owns that box**, and the five new checks are written to skip cleanly
+  if the portals profile is absent.
+
+  **Two things now visible that C134 did not cause.** `portals/fleet`'s `test/trackers.test.ts`
+  asserts `backend/src/ApiGateway/appsettings.json` carries `/v1/fleets/{fleetId}/trackers/bulk`
+  and the route is not there — the file is untouched by this component and was last modified by
+  C127, but the failure had been invisible since S19 because a red gate in `pretest` aborted every
+  workspace's suite before it ran. It is C111's or the gateway's. And the wave-4c gate already reads
+  **"all four web surfaces"** — S02's generator edit survived, checked as S22 asks.
+
+  **Next:** C134 is closed as `PARTIAL`. **To move it to `DONE`, exactly one thing has to happen:
+  a decision on MCS-36** — either A34's JS budget is restated against the measured framework floor,
+  or **D3** amends the client-boundary rule and a session converts the eleven islands, which
+  removes ~91 kB gzipped and takes Performance with it. Nothing else is outstanding in the
+  component's own scope. **Still owed from outside it: native Sinhala review (~16,600 words), the
+  Tamil corpus (MCS-34 D2), store URLs (D3), a contact address (D4) and counsel's three legal
+  documents (D5)** — the last three are go-live rows. **Known and unscheduled: the unreachable
+  localised 404** (a decision about who emits `<html>`, not a missing line) **and the shared
+  `Modal`'s background `aria-hidden` gap.**
+
+- **Addendum — MCS-36 D1 and D2 accepted** — 2026-08-30
+- **Status:** the spec/code divergence C134 opened is **closed**; the component stays `PARTIAL`.
+- **Notes:**
+  **D1 — A34's JS budget restated.** `docs/www-site-plan.md` §A34 (the only place A34 is stated)
+  now carries three figures instead of one: **first-party JS ≤ 90 KB gz**, **framework floor
+  reported**, **total ≤ 300 KB gz**. The 90 is A34's own number, unchanged, applied to the bytes
+  the surface controls. **This closed a live divergence**: `check-budget.mjs` had been applying 90
+  to first-party while the document said *total*, and under CLAUDE.md's first Universal Rule the
+  spec wins — so the code was in the wrong until the document caught up, which is exactly what a
+  micro-change-set is for.
+
+  **The 300 KB ceiling is new and is enforced in the same change**, because a first-party budget
+  alone has a hole: move code into a vendor chunk and the enforced number falls while the page gets
+  no faster. Measured **277.0 KB**, so the headroom is deliberate and small — it absorbs a framework
+  point release without a spec edit and refuses a second one. Adding a spec row without the check
+  would have opened a fresh gap of the same kind the delta was closing.
+
+  **D2 — the framework floor recorded as a measurement, not a constant.** §A34 states **163.4 KB
+  gzipped against Next 16.3.0 · React 19.2.8 · react-dom 19.2.8, Turbopack, 2026-08-30**, and says
+  to re-measure on a framework upgrade and record the new value with its date. A floor carried
+  forward without one is the number that section exists to stop anybody trusting.
+
+  **What this did not do.** No threshold moved and no byte moved. The site is exactly as fast as it
+  was, `npm run budget` is still red on first-party by **23.7 KB**, and `lighthouse.yml` is still
+  red on Performance. **MCS-36 D3 is open and is the only thing keeping either red** — the eleven
+  client components that take a `locale` and construct a translator, and the ~91 KB gz of resource
+  tables that follows them into every page. Also worth carrying forward: **removing them is worth
+  doing on its own merits but is not a guaranteed route to ≥95** — `/en/drivers` at 88 with 410 ms
+  TBT would likely clear, `/si` at 59 with 2,280 ms is further out, and the 163 KB framework floor
+  still has to hydrate.
+
+  A stale duplicated banner in `check-budget.mjs` went with this: it was the block comment from when
+  the code lived inside `check-bundle.mjs` and still said "the lines above" about fences that are no
+  longer in that file, and "until MCS-36 is accepted".
+
+- **Addendum — MCS-36 D3 accepted and executed** — 2026-08-30
+- **Status:** **the A34 budget now passes with 73 kB spare.** C134 stays `PARTIAL` — the unmet DoD
+  item is Lighthouse Performance, and see the caveat below. `verify_cmd` **exit 0**; **143 tests**
+  (was 139); `npm run budget` **exit 0** for the first time since S19.
+- **Notes:**
+  **First-party JS on `/`: 113.7 → 17.0 kB gzipped. Total a browser downloads: 277.0 → 185.2 kB.**
+  The resource tables are out of the client bundle entirely — verified twice, once by the budget
+  total and once by searching every chunk the document loads for a table value marker, because a
+  falling total is consistent with a chunk merely moving.
+
+  **Fourteen modules, not the eleven the change set estimated.** `ScreenImage`, `Callout` and
+  `GalleryBody` carry no `'use client'` of their own and were in the bundle *transitively*, pulled
+  in by components that do. That is also why the new fence walks the **import graph** from every
+  `'use client'` entry rather than checking a list of files: a fence written against the eleven
+  entry points would have missed the three that first put the tables there.
+
+  **Each component takes one typed `labels` object, not thirty props** — which was the rule's
+  original objection and the reason it stood for so long. A missing string is a compile error, the
+  same guarantee `en.ts` gives the table, at the place a reader would otherwise have met a blank
+  `aria-label`. Server-side builders: `headerLabels`, `chapterLabels`, `galleryLabels`,
+  `heroCarouselLabels`, `howItWorksLabels`, `showcaseLabels`.
+
+  **Three things that could not be props, each solved differently.** (1) `WWW_LOCALES` and
+  `HREFLANG` are needed by a *client* error boundary at module scope, so they moved to
+  `src/i18n/locales.ts`, which imports no table; S19's `WWW_LOCALES = Object.keys(tables)`
+  derivation inverted, and the invariant got **stronger** — the table map is now
+  `satisfies Record<WwwLocale, WwwMessages>`, so a published locale with no table is a compile
+  error rather than a runtime one. (2) `/screens` renders "Showing 12 of 70", where the count comes
+  from the URL; `src/i18n/substitute.ts` fills placeholders in nine lines and carries no table — the
+  *table* is what costs bytes, not the substitution. (3) `app/[locale]/error.tsx` has no server
+  parent at all, because Next instantiates an error boundary itself and hands it no params. Its four
+  strings are **generated** into `src/i18n/error-strings.ts` by `npm run i18n:error-strings`, the
+  same committed-generated-`.ts` pattern `screen-dimensions.ts` documents, with a parity test that
+  fails if a translator edits `si.ts` without regenerating.
+
+  **The measurement that made error.tsx worth solving properly.** After the other thirteen were
+  converted, first-party JS had moved only 113.7 → **108.3 kB** — a 90.3 kB chunk was still on every
+  page, held by that one file. A bundler cannot tree-shake four members out of an object literal.
+  Converting it took the figure to 17.0 kB.
+
+  **`npm run budget` caught one thing the type system could not**, which is the argument for the
+  fence existing: `src/lib/routes.ts` imported `WWW_LOCALES` from `@/i18n` and is in the client graph
+  via the nav's `localeRelativePath`. It compiles, renders and passes every other test; the only
+  symptom is 88 kB. It now imports from `@/i18n/locales`.
+
+  **The rule diverges from `web-passenger` on purpose, and the divergence is recorded there.** That
+  surface keeps `a client component takes a locale`, and should: 137 keys, **8.6 kB gzipped for all
+  three locales**, against www's 844 keys and 88 kB for two. The rule was right where it was written
+  and wrong on the surface that later grew a 34-chapter guide corpus. Both CLAUDE.md files say so,
+  so nobody "aligns" them without measuring.
+
+  **What this did NOT do, stated plainly: Lighthouse Performance did not visibly improve.** The gate
+  still reports 59–86 against 95. That is not evidence the change failed — **this box cannot measure
+  it right now.** It was carrying the 23-container replica at load average 6.25, and three runs of
+  the *same build* returned TBT of 780, 870 and 1,220 ms: a 56% spread, wider than any effect worth
+  attributing. LCP sat at a flat 4.0 s across all three, consistent with LCP here being gated by
+  render rather than hydration — something D3 was never going to touch. **Re-measure on a quiet
+  machine before concluding anything about Performance.** The byte result needs no such caveat: it
+  is deterministic and it is what D3 was accepted to do.
+
+  **So C134 stays `PARTIAL`**, and the remaining DoD item is now genuinely a *measurement* question
+  rather than an architectural one. Everything the component controls is done.
+
+- **Component:** C134 www-informational-site — S23 (fleet-owner guide, 6 chapters — the optional
+  session, MCS-34 **D7** = yes) — `build/prompts/C134-www/S23-optional-fleet-guide.md` — 2026-08-30
+- **Status:** DONE (the session). C134 itself is unchanged at `PARTIAL` — S23 adds content and does
+  not touch the one open DoD item, which is still S22's Lighthouse Performance measurement.
+  `npm --prefix portals run lint` **exit 0** (935 keys × 3 languages, complete and every one
+  rendered); `npm run build --workspace @mageride/www` **exit 0**; `npm run test` **147 tests**
+  (was 143); `check-i18n-parity.mjs` **exit 0**; `npm run budget` **exit 0** —
+  `public/screens` **5.7 MB of 12 MB**, 292 images from 73 registry entries.
+- **Notes:**
+  **S17's chapter component took the third audience with no modification at all**, which is the
+  question S23 was told to answer. `ChapterPage`, `ChapterBody`, `chapterLabels`, `Callout`,
+  `chapterSeo`, `chapterCrumbs`, `howTo` and `breadcrumbs` each take a `Chapter` and read
+  `audience` off it rather than branching on which of two guides they are in, so the third guide
+  cost a route segment and an OG route and nothing else. The one file that could not be shared is
+  the segment itself: the audience is a literal path in the App Router, and `chapterBySlug` has to
+  be told which guide `install-and-first-run` belongs to.
+
+  **Publishing the guide was one array member.** `Chapter['audience']` had admitted `'fleet'` since
+  S07 while `GUIDE_AUDIENCES` did not — a deliberate state, so that a written-but-unpublished
+  chapter published nothing rather than 404ing at an advertised URL. Adding `'fleet'` produced six
+  routes, **twelve sitemap entries (94 → 106 URLs)**, twelve reciprocal `hreflang` sets, six OG
+  cards and a deep link from `/fleets`, with no slug typed into `routes.ts`, `sitemap.ts` or
+  `seo.ts`. `test/routes.test.ts` now also asserts every audience in that array has a route segment
+  on disk, because *registered but deliberately unpublished* and *somebody forgot the array* are
+  otherwise the same observation.
+
+  **Screens: 70 → 73, `public/screens` 5.3 → 5.7 MB.** The six `SCR-FP-*` frames S05 curated for
+  `/fleets` gained their chapter refs; three were added — **SCR-FP-002** (organisation setup),
+  **SCR-FP-002a** (bank & payout, Owner-only) and **SCR-FP-006** (tracker binding). 002a is the one
+  that had to be added rather than attached: it is the screen behind the hardest gate in the fleet
+  flow and chapter 2 is a page about a form nobody would otherwise have seen. The remaining four
+  (008 scheduling, 009 analytics, 011 subscriptions, 012 the ledger) stay out — they are the
+  daily-use half of the portal and the guide is the get-it-right-once half. Captured with
+  `capture-screens.mjs --only`, which preserves the other 70 raws; `git status --porcelain specs/`
+  clean, as the read-only fence requires.
+
+  **The sub-role capability read, which S23 asked for by name.** **Owner** can act on all six
+  chapters; **Manager** on 3, 4 and 5 (vehicles, documents, drivers, trackers) but not on 2 or 6;
+  **Viewer** on none of them. Two sources agree and neither alone is enough: US-13.A5 defines the
+  three (*Owner = full org control + billing; Manager = onboarding/assignment/scheduling/monitoring,
+  no billing; Viewer = read-only fleet map & analytics*), and **`specs/wireframes/web_fleet.html`
+  tags each frame's caption with its roles** — SCR-FP-002 and 002a `Owner`; 004, 005, 006
+  `Owner / Manager`; 010 `Owner`. That per-screen tagging is what turns a three-line role definition
+  into a per-chapter answer, and it is worth knowing it is there.
+
+  **Where the specs are silent, and the copy therefore does not say.** (1) Whether a Viewer can
+  *see* — as opposed to change — the billing page or the subscriber ledger. US-13.A5 grants
+  "read-only fleet map & analytics"; the wireframe leaves SCR-FP-003, 007 and 009 untagged, which is
+  consistent with either reading. The chapter states what each role can **do**. (2) The exact
+  on-screen outcome of revoking a driver mid-trip — Walkthrough Scenario 72 flags this as an open
+  spec gap itself, so chapter 5 says only what every source agrees on (the driver immediately loses
+  the ability to start a *new* session) and describes no screen. (3) **D1 carries no fleet flow
+  group** beyond the Epic 27 addendum's F-31.1 and F-31.2; sections A and B are passenger and driver
+  only. The Walkthrough's Section E (Scenarios 67–86) is the flow-level source, and it is what these
+  chapters were written from.
+
+  **No rupee figure is in any fleet chapter's prose** — d13's rule, applied to a second fee model,
+  and additionally right here because the URD says *approximately* Rs 300 in all four places it
+  states the Mode B monthly charge. **One caught in the built HTML rather than in review:** chapter
+  6's FAQ subset originally included `mode-b-price`, whose answer carries "around Rs 300 per
+  vehicle" — so a rupee amount rendered at the foot of the one chapter whose entire fence is that
+  two fee models must not blur, in the section the chapter does not write. It moved to chapter 2,
+  where the subject genuinely is what a subscriber pays. Chapter 6 keeps `why-free` and `daily-fee`,
+  both of which *reinforce* the separation by being explicitly about the on-demand driver's fee.
+  The fleet monthly and the driver daily share no sentence anywhere; `f06`'s two callouts are
+  separate for exactly that reason.
+
+  **A convention divergence, recorded rather than resolved.** The six fleet chapters' spec anchors
+  **resolve to real headings** and are asserted to, by a new suite in `test/content.test.ts` that
+  reuses `DAILY_FEE_SOURCE`'s own slugger. **The other 34 chapters' do not** — 88 distinct anchors
+  across S08–S11 spell a dotted section number as `us-19-1` and `1-a-service-modes` where a Markdown
+  renderer produces `us-191` and `1a-service-modes`. None of them is wrong about *which* section it
+  means; they are spelled for a reader rather than for a linker. S23 did not rewrite 34 files in
+  passing, so the new test is scoped to the fleet six and says in its own comment why. **Widening it
+  is a real improvement and a session of its own**, with the convention chosen deliberately rather
+  than inherited from whichever list got a test first.
+
+  **Tamil follows D2, unchanged.** All 87 new keys are in `ta.ts`, typed and complete, behind
+  `TODO(ta)` markers — 676 → **840** strings the parity script counts on every build. `/ta` is still
+  unpublished, so none of it is served under a Tamil `lang` attribute. Sinhala is real and is
+  **first-pass, not reviewed by a native speaker**, the same caveat S12 recorded for the other 34.
+
+  **`/fleets` no longer links to a 404, and never did.** `guideEntryPath('fleet')` resolved to the
+  guide index while the chapters did not exist and became a deep link to
+  `guide/fleet/registering-your-organisation` the moment they did — the property S16 built and S17
+  first exercised. The only edit was `roles.ts` naming the audience instead of `'contact'`, and the
+  CTA label with it; `www.page.fleets.talkToUs` is gone from all three tables and the parity script
+  confirms no orphan.

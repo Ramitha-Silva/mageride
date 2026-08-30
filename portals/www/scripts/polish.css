@@ -1,0 +1,281 @@
+/*
+ * The capture polish stylesheet — injected into `specs/wireframes/*.html` by
+ * `capture-screens.mjs`, immediately before a screenshot, and nowhere else.
+ *
+ * ## This file is not part of the site
+ *
+ * It is a build-tool asset, like a Playwright config. It is never imported by
+ * `app/` or `src/`, never processed by PostCSS, and never reaches a bundle — so
+ * AL-52's "one compiled stylesheet" still holds, and `test/fences.test.ts`'s
+ * `has exactly one stylesheet` assertion (which walks `app/` and `src/`) is
+ * deliberately not weakened to accommodate it. It lives in `scripts/` for exactly
+ * that reason, and a second fence test asserts nothing under `app/`/`src/` ever
+ * imports it.
+ *
+ * ## What it is allowed to do
+ *
+ * MCS-34 D10 renders marketing images from the team-approved wireframes. Those
+ * wireframes are the approved **structural and functional** baseline: which
+ * controls exist, and where. This stylesheet lifts fidelity — type, elevation,
+ * radii, rendering quality — and **must not move, add or remove a control**. A
+ * screenshot showing a button the app does not have is a false public claim.
+ *
+ * That fence is enforced mechanically. `capture-screens.mjs` measures every
+ * control's box, relative to the frame's own origin, before and after injecting
+ * PART 2 below, and fails the run if any of them moves more than a rounding
+ * tolerance.
+ *
+ * ## Why this file is in two parts
+ *
+ * The split is what makes the fence meaningful rather than merely loose.
+ *
+ * **PART 1 changes text metrics, on purpose, and is the baseline the fence measures
+ * from.** The wireframes ask for `font-family: 'Inter', system-ui, …`; neither Inter
+ * nor Outfit is installed on the Contabo build host, so they render in DejaVu Sans.
+ * Pinning the real faces is therefore *honouring* the wireframe's own declaration,
+ * not deviating from it — and it is also the only way the pipeline is reproducible,
+ * since otherwise every machine renders different pixels. Inter's metrics differ
+ * from DejaVu's, so some text rewraps: measured across all 69 frames, the median
+ * control does not move at all, but a handful of content-sized chips and
+ * bottom-anchored sheets shift by up to ~90px where a label wraps to a different
+ * number of lines. That is what the approved screens look like in their intended
+ * typeface.
+ *
+ * **PART 2 must change no metric at all.** Shadows, radii, colour and hiding the
+ * contact-sheet chrome all paint without touching the box model, and the fence
+ * holds them to a 1px tolerance. If a change to PART 2 starts failing that check,
+ * the change is wrong — or it is a wireframe change and needs a change set.
+ *
+ * The script splits this file at the standalone split-marker comment that opens
+ * PART 2 below, and injects the two halves separately. **Keep every
+ * metric-affecting rule above that marker.** The marker token is written exactly
+ * once in this file, on its own line, and `capture-screens.mjs` refuses to run if
+ * it finds it zero times or more than once — a marker that also appeared in this
+ * paragraph would split the file here, in the middle of a comment, which is both
+ * the wrong place and malformed CSS.
+ *
+ * Every value is quoted from `portals/tailwind-preset/src/tokens.ts`, which is "the
+ * ONLY place a D2 §0.2 value is spelled on the web".
+ */
+
+/* ===========================================================================
+ * PART 1 — type. Changes metrics; establishes the fence's baseline.
+ * ======================================================================== */
+
+/*
+ * The two D2 families, self-hosted from `@fontsource-variable/*` in node_modules.
+ * `capture-screens.mjs` rewrites these two `src:` URLs to absolute `file://` paths
+ * before injecting, because a stylesheet added with `addStyleTag` resolves relative
+ * URLs against the *page* — a wireframe in `specs/`, not this directory.
+ *
+ * `font-display: block` rather than `swap`: a swap would let a frame paint in the
+ * fallback face and restyle a moment later, which is a race against the screenshot.
+ * The script also awaits `document.fonts.ready`.
+ */
+@font-face {
+  font-family: 'MR Inter';
+  src: url('inter-latin-wght-normal.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'MR Outfit';
+  src: url('outfit-latin-wght-normal.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+
+body,
+.phone,
+.browser,
+.mweb {
+  font-family: 'MR Inter', 'Inter', system-ui, -apple-system, sans-serif !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-synthesis: none;
+}
+
+/*
+ * D2: "Outfit = display/headline, Inter = body". The wireframes carry the roles as
+ * classes — `.h-display` is D2's `display` role, `.h-headline` its `headline` — so
+ * the family lands on exactly the two roles D2 assigns it, plus the app bar and the
+ * portal page title, which are headline furniture by role.
+ *
+ * Sizes and line-heights are deliberately NOT imposed. D2's 16px body over the
+ * wireframe's 14px would not produce bigger type inside a frame fixed at 320 × 680
+ * with `overflow: hidden` — it would produce clipped controls, in a picture that
+ * still looks plausible.
+ */
+.h-display,
+.h-headline,
+.appbar,
+.ttl,
+.brand {
+  font-family: 'MR Outfit', 'Outfit', 'MR Inter', system-ui, sans-serif !important;
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
+}
+
+/* D2 §0.2 table 3: display 700, headline 700, title 600, subtitle 600. The
+ * wireframes already agree; restated so the roles are visibly accounted for. */
+.h-display,
+.h-headline {
+  font-weight: 700 !important;
+}
+
+.h-title,
+.t-sub {
+  font-weight: 600 !important;
+}
+
+/*
+ * Tabular figures wherever a number is read as a quantity — fares, wallet balances,
+ * counts, OTP boxes. Not a D2 value: it is a rendering choice, and misaligned
+ * currency columns are the most obvious tell of a mockup. In PART 1 because it is a
+ * metric change, however small.
+ */
+.val,
+.otp .b,
+.kv,
+.stat,
+.money,
+.lab {
+  font-variant-numeric: tabular-nums;
+}
+
+/* @CAPTURE-SPLIT@ */
+
+/* ===========================================================================
+ * PART 2 — everything below this point must change no metric. The capture
+ * script injects it after taking its baseline, and fails the run if any control
+ * moves more than 1px.
+ * ======================================================================== */
+
+/*
+ * Contact-sheet chrome. The wireframe files are contact sheets: a dark sticky
+ * header, an amber note bar, cluster headings, a caption above each frame and a
+ * `.states` note below it. None of it is part of a screen, and all of it is cropped
+ * out anyway — the screenshot is clipped to the frame element's own box. Hidden so
+ * that a sticky header can never overlap the top of a frame mid-capture.
+ *
+ * This moves every frame on the page by 200–430px, which is exactly why the fence
+ * measures each control **relative to its frame's origin** rather than the viewport.
+ *
+ * `visibility` rather than `display` for `.cap`: it sits immediately before the
+ * frame and is how the script *finds* the frame. Collapsing it would be a layout
+ * change; hiding it is not.
+ */
+.page-header,
+.note-bar,
+.cluster,
+.states {
+  display: none !important;
+}
+
+.cap {
+  visibility: hidden !important;
+}
+
+/* The backdrop behind the frames. Neutral, so no colour bleeds into a rounded
+ * corner when S06 composites the frame onto its own plate. */
+body {
+  background: #ffffff !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * Elevation — D2 §0.2's ladder, replacing the wireframes' hand-picked shadows.
+ *
+ * Shadows paint outside the box model and move nothing. The wireframes use
+ * `rgba(0,0,0,.26)` on the phone shell and `.12`–`.16` elsewhere, tuned per
+ * element; D2 anchors the whole ladder on `elevation-3` = `0 2px 8px / 0.12` and
+ * scales from it.
+ * ------------------------------------------------------------------------- */
+
+/* The device shell is presentation, not a D2 surface. Softer and wider than the
+ * ladder's top step, because S06 composites this onto a gradient plate where a
+ * tight dark shadow reads as a cut-out. */
+.phone {
+  box-shadow: 0 18px 48px rgb(0 0 0 / 0.18) !important;
+}
+
+.browser,
+.mweb {
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.14) !important;
+}
+
+/* elevation-3 (6 dp) — D2 pairs it with "elevated cards". */
+.card,
+.sheet {
+  box-shadow: 0 2px 8px 0 rgb(0 0 0 / 0.12) !important;
+}
+
+/* elevation-4 (8 dp) — a floating action button sits above cards. */
+.fab {
+  box-shadow: 0 3px 10px 0 rgb(0 0 0 / 0.12) !important;
+}
+
+/* elevation-1 (1 dp) — a resting control, not a floating one. */
+.iconbtn,
+.chip {
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.12) !important;
+}
+
+/* elevation-2 (3 dp), and only where the wireframe already draws a raised bar. */
+.appbar.elev {
+  box-shadow: 0 1px 4px 0 rgb(0 0 0 / 0.12) !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * Corner radii — D2 §0.2: sm 8 (buttons, chips) · md 12 (fields, sheet tops)
+ * · lg 16 (modals) · card 24 (elevated cards, bottom sheets).
+ *
+ * The wireframes already declare these as `--rSm`/`--rMd`/`--rLg`/`--rCard` with
+ * D2's values, so this corrects only the places that bypass the variables with a
+ * literal. A radius changes no metric: the border box is unchanged and only the
+ * painted corner moves.
+ * ------------------------------------------------------------------------- */
+
+.card {
+  border-radius: 12px !important;
+}
+
+/* A pill, which D2's `sm` does not describe — kept as the wireframe draws it. */
+.chip {
+  border-radius: 18px !important;
+}
+
+.iconbtn {
+  border-radius: 8px !important;
+}
+
+.avatar {
+  border-radius: 50% !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * Determinism.
+ *
+ * Motion is stopped rather than paused: a capture of a half-run animation differs
+ * run to run. The browser context already forces `prefers-reduced-motion: reduce`,
+ * and this is the second of two belts — several of these wireframes animate with
+ * plain `animation:` declarations that no media query stops.
+ * ------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  animation: none !important;
+  transition: none !important;
+  caret-color: transparent !important;
+}
+
+/* The map's tile grid is drawn with repeating gradients; without this it renders a
+ * faint moiré at deviceScaleFactor 3 that looks like a compression artefact. */
+.map {
+  image-rendering: auto;
+  background-attachment: local !important;
+}

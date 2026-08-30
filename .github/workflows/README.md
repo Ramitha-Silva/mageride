@@ -20,6 +20,7 @@ SHA, rollback — **landed in C124** and is the six workflows in [Delivery](#del
 | `migrations` | `ubuntu-latest` | `infra/scripts/migrate-verify.sh` — apply, re-apply, re-apply without the journal | C003–C006 |
 | `compose` | `ubuntu-latest` | `infra/scripts/slim-verify.sh` | C009 |
 | `plan` | `ubuntu-latest` | decides whether `ios` is in the matrix at all | — |
+| `lighthouse (www)` | `ubuntu-latest` | `lighthouse.yml` — build, serve, audit six pages under mobile throttling | C134, and **only** C134 |
 
 ## The `ios` leg runs on demand
 
@@ -87,6 +88,42 @@ generator. C124 gave them two homes:
 | `k6 run load/…` (C129) | `nightly.yml`, probing |
 | `bash chaos/run-drills.sh` (C130) | `nightly.yml`, probing |
 | `bash acceptance/sg/run.sh` (C131) | `nightly.yml`, probing — and it warns that a GitHub runner is not in Singapore |
+
+### `lighthouse.yml` — the eighth shape, and the one that is a *product* requirement
+
+C134's `www.mageride.lk` is the only MageRide surface written to be found by strangers on their own
+phones, so it is the only one whose field performance is a requirement rather than an operational
+nicety. A34 states the target against the Sri Lankan median device, and S20 turns it into a job:
+**≥95 Performance / 100 Accessibility / ≥95 SEO** on `/`, `/drivers` and one guide chapter in every
+rendered locale, under Lighthouse's default mobile throttling.
+
+It is its own workflow rather than a step in `build (portal)` for two reasons. It needs a *served*
+build plus six throttled page loads, which would put a browser on the critical path of every backend
+push through a shared 45-minute matrix timeout; and it is the noisiest measurement in the repository
+— the same build measured Total Blocking Time of 1,270 ms and 2,280 ms on two consecutive runs of
+the same page. It runs on pull requests that touch `portals/www/` or the three workspaces it inherits
+styling and strings from, and on demand.
+
+**It is red today, on Performance only, and deliberately.** Accessibility and SEO are 100 on all six
+pages. Performance is 59–88 against 95, and every failure has one cause — the main thread hydrating
+92 kB gzipped of resource tables. That is the same finding `portals/www/scripts/check-bundle.mjs`
+reports as an A34 breach, and
+`build/prompts/MCS-36-a34-js-budget-below-the-framework-floor.md` **D3** asks for the decision that
+unblocks it. S20's fence is *"fix the page, do not lower the number"*.
+
+**Note what this job does *not* run.** C134's Vitest suite is not in CI at all — see below.
+
+### C134's tests are the component's gate, not CI's
+
+`build (portal)` runs `npm ci && run lint && run build` and **not `run test`**. Adding `www` to
+`portals/package.json`'s `workspaces` put this surface in CI's lint and build with no workflow edit,
+which is what `docs/www-site-plan.md` §A38 predicted — but the 132-test Vitest suite is enforced by
+C134's own `verify_cmd`, not by a green `main`.
+
+That is a deliberate division and it is why the fences live where they do: **anything that must never
+regress on `main` is in `lint` or `build`** — the ESLint rules, `check-al52.mjs`,
+`check-i18n-parity.mjs`, `check-bundle.mjs` — and the Vitest suite is the component's own
+definition of done. **Do not read a green `main` as "the tests ran".**
 
 "Probing" means the job checks for its own script and skips with a `::notice::` when the component
 that owns it has not landed — the same pattern the `android` leg uses for the wave-1 Gradle modules,

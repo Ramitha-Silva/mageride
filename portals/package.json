@@ -15,7 +15,8 @@
     "ui",
     "admin",
     "fleet",
-    "web-passenger"
+    "web-passenger",
+    "www"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

@@ -398,6 +398,72 @@ def render_service(cat: dict, svc: dict) -> str:
     return head + body + tail
 
 
+def portal_env(p: dict) -> str:
+    """
+    The `envFrom` block, or a stated reason there is none.
+
+    Three of the four Next.js surfaces are a Next SERVER that holds the session and calls
+    the gateway itself, so they mount `portal-config` for `MAGERIDE_API_BASE_URL` — without
+    it `src/config/env.ts` throws and every request answers 503.
+
+    **C134's `www-site` is the fourth and it is a different kind of thing.** MCS-34 states
+    four negatives about it and the last is that it has *no API dependency at request time*:
+    it renders with the entire platform down. Mounting `portal-config` would hand it
+    `MAGERIDE_API_BASE_URL` — a gateway address, on the one surface whose promise is that it
+    has no gateway — and `portals/www/CLAUDE.md` fences it against reading any environment
+    variable at all, enforced by its own `test/fences.test.ts` and `check-bundle.mjs`. The
+    variable would be inert today and would be the first step to breaking the fence, which
+    is how a negative erodes: nobody adds a dependency, somebody just stops removing the
+    thing that makes one easy.
+
+    `NODE_ENV`, `TZ` and `NEXT_TELEMETRY_DISABLED` are the ConfigMap's other three keys and
+    the Dockerfile already sets all three as `ENV`, so a surface that opts out loses nothing
+    it was using.
+
+    Opt out with `reads_config: false` in `service-catalog.yaml`. The default mounts it, so
+    a new portal is configured unless it argues otherwise.
+    """
+    if p.get("reads_config", True):
+        return (
+            "          envFrom:\n"
+            "            # No Secret is ever mounted into a portal pod. NOT because a portal is a\n"
+            "            # browser bundle — it is a Next SERVER that holds the session and calls the\n"
+            "            # gateway itself — but because it has never needed one: it authenticates\n"
+            "            # with the caller's own bearer, not a credential of its own.\n"
+            "            - configMapRef: { name: portal-config }\n"
+        )
+    return (
+        "          # NO envFrom, and the absence is the point (MCS-34, `reads_config: false`).\n"
+        "          # This surface has no API dependency at request time — it renders with the whole\n"
+        "          # platform down — so it is given no gateway address to read. Mounting\n"
+        "          # `portal-config` would put MAGERIDE_API_BASE_URL in the one pod whose promise is\n"
+        "          # that it has no upstream. Its own fences refuse to read any environment variable,\n"
+        "          # and the Dockerfile already sets NODE_ENV, TZ and the telemetry flag.\n"
+    )
+
+
+def portal_probe_note(p: dict) -> str:
+    """
+    The comment above the probes. `/login` is the three portals' redirect and is wrong for a
+    surface with no login: `www-site` redirects `/` to a negotiated locale instead. Both are
+    3xx and the kubelet counts any 2xx-3xx as success, so the probe path is `/` either way —
+    only the explanation differs.
+    """
+    if p.get("reads_config", True):
+        return (
+            "          # The Dockerfile's own healthcheck, as a probe: Next.js serves `/` as soon as\n"
+            "          # the standalone server is listening, and a redirect to /login counts (kubelet\n"
+            "          # treats any 2xx-3xx as success).\n"
+        )
+    return (
+        "          # The Dockerfile's own healthcheck, as a probe. `/` is the one dynamic response\n"
+        "          # this surface serves: it reads Accept-Language and answers **307** to the\n"
+        "          # negotiated locale. The kubelet sends no Accept-Language, so a probe gets the\n"
+        "          # platform default — and any 2xx-3xx counts as success, so the redirect satisfies\n"
+        "          # the probe. Verified against the running container rather than assumed (S21).\n"
+    )
+
+
 def render_portal(cat: dict, p: dict) -> str:
     name = p["name"]
     port = p["port"]
@@ -438,17 +504,10 @@ def render_portal(cat: dict, p: dict) -> str:
         f"          image: {image}\n"
         "          imagePullPolicy: IfNotPresent\n"
         + ports_block("          ", "http", port, [])
-        + "          envFrom:\n"
-          "            # No Secret is ever mounted into a portal pod. NOT because a portal is a\n"
-          "            # browser bundle — it is a Next SERVER that holds the session and calls the\n"
-          "            # gateway itself — but because it has never needed one: it authenticates\n"
-          "            # with the caller's own bearer, not a credential of its own.\n"
-          "            - configMapRef: { name: portal-config }\n"
+        + portal_env(p)
         + resources(res)
-        + "          # The Dockerfile's own healthcheck, as a probe: Next.js serves `/` as soon as\n"
-          "          # the standalone server is listening, and a redirect to /login counts (kubelet\n"
-          "          # treats any 2xx-3xx as success).\n"
-          "          readinessProbe:\n            httpGet: { path: /, port: http }\n"
+        + portal_probe_note(p)
+        + "          readinessProbe:\n            httpGet: { path: /, port: http }\n"
           "            initialDelaySeconds: 10\n            periodSeconds: 10\n            timeoutSeconds: 3\n            failureThreshold: 3\n"
           "          livenessProbe:\n            httpGet: { path: /, port: http }\n"
           "            initialDelaySeconds: 20\n            periodSeconds: 15\n            timeoutSeconds: 3\n            failureThreshold: 6\n"
