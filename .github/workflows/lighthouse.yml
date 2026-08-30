@@ -82,13 +82,25 @@ jobs:
       - name: install
         run: npm --prefix portals ci
 
-      # `next build` and not the workspace's own `build` script: that script chains
-      # `check-bundle.mjs`, which is red on the A34 budget by design (S19). Running it
-      # here would fail this job before a single page was measured, and would report
-      # the byte finding twice under a name that is about something else. The bundle
-      # gate belongs to `ci`'s portal leg, where it already runs.
+      # The workspace's own `build` script, and **not** `npx next build portals/www`.
+      #
+      # It was the latter, with a reason that has since expired twice over: that the
+      # script chains `check-bundle.mjs`, which was red on the A34 budget by design
+      # (S19), so running it here would fail the job before a page was measured. **S21
+      # moved the byte budget out of `build` into `npm run budget`** — `check-bundle`
+      # now enforces the AL-52 fences and the screen budget, both green — and MCS-36 D3
+      # took the byte figure inside its threshold anyway.
+      #
+      # What the shortcut cost was the whole job. Invoking `next build` directly skips
+      # npm's lifecycle, so `prebuild` — `portals/scripts/ensure-workspace-deps.mjs` —
+      # never ran, and the shared packages' `dist/` is **gitignored**: on a clean runner
+      # `@mageride/ui` does not exist to resolve, and the build died with 22 copies of
+      # `Module not found`. It cannot reproduce locally, because a developer's `dist/`
+      # is already there from the last `npm run lint`.
+      #
+      # Any invocation here must go through an npm script for that reason alone.
       - name: build the site
-        run: npx --prefix portals next build portals/www
+        run: npm --prefix portals run build --workspace @mageride/www
 
       - name: serve and audit
         run: |
