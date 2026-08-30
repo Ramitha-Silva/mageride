@@ -1,0 +1,141 @@
+/**
+ * Records the pixel size of every composited plate, so pages can render them
+ * through `next/image` with **explicit `width` and `height`** without guessing.
+ *
+ * ## Why this exists rather than a constant
+ *
+ * `portals/www/CLAUDE.md`'s `next/image` contract says it in as many words: *"a
+ * phone is 416 × 777 at 1× and a portal frame is 1040 wide with a per-screen
+ * height — read the real numbers rather than assuming a constant."* S14 measured
+ * the committed output and found the warning is not hypothetical even inside one
+ * frame kind: `pa-010-the-live-map` is **416 × 777** and `pa-015-your-ride-in-progress`
+ * is **416 × 776**. The plate is the capture plus `SPACING.xxl` on each side, and
+ * the captures are element screenshots of wireframes whose content height is not
+ * identical to the pixel, so a one-pixel spread is normal and permanent.
+ *
+ * One pixel is invisible. Getting it wrong is not: `width`/`height` on
+ * `next/image` are what reserve the box before the bytes arrive, so a wrong pair
+ * is a wrong aspect ratio, and a wrong aspect ratio is either a squashed
+ * screenshot or a layout shift — on a page whose budget (A34) is written against
+ * a 3G-throttled mid-range Android, where the shift is the expensive one.
+ *
+ * ## Why a separate script and not part of `compose-frames.mjs`
+ *
+ * It could be folded into that script's `manifest.json`, and then the numbers
+ * would only exist after a full `screens:refresh` — which needs a browser, the
+ * wireframes and ~280 image writes. This reads the **committed** 1× WebPs, which
+ * are in the repo, so it is idempotent, needs no browser, and can be re-run by
+ * anybody at any time to prove the map still matches the images. It is wired into
+ * `screens:refresh` after `screens:compose` so the two cannot drift.
+ *
+ * WebP and not AVIF as the source of truth: both are written from the same
+ * `sharp` pipeline at the same size, and WebP decodes faster for a metadata read.
+ * The check below asserts the AVIF agrees, so "read the WebP" is a convenience
+ * rather than an assumption.
+ *
+ * Output: `src/content/screen-dimensions.ts`, imported by `src/content/screens.ts`.
+ *
+ * **A `.ts` module and not a `.json` file**, which was the first attempt. Three
+ * toolchains import this: Next's bundler, `tsc --noEmit`, and raw Node ESM — which
+ * is how `scripts/check-bundle.mjs` reads the registry. Node requires
+ * `with { type: 'json' }` on a JSON import and the bundler does not need it, so a
+ * `.json` file is an import that works in two of the three and fails the build in
+ * the third. A generated TypeScript module is imported identically by all of them
+ * and types the map on the way in.
+ */
+
+import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import sharp from 'sharp';
+
+const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const screensDir = join(appRoot, 'public/screens');
+const outputFile = join(appRoot, 'src/content/screen-dimensions.ts');
+
+/** Every 1× WebP stem in the output directory. `@2x` and AVIF are derived. */
+async function stems() {
+  const names = await readdir(screensDir);
+  return names
+    .filter((name) => name.endsWith('.webp') && !name.includes('@2x'))
+    .map((name) => name.slice(0, -'.webp'.length))
+    .sort();
+}
+
+const dimensions = {};
+const problems = [];
+
+for (const stem of await stems()) {
+  const { width, height } = await sharp(join(screensDir, `${stem}.webp`)).metadata();
+
+  if (!width || !height) {
+    problems.push(`${stem}: sharp reported no dimensions`);
+    continue;
+  }
+
+  // The AVIF is the format most readers actually get, so it is the one that must
+  // match the numbers a page reserves space with.
+  const avif = await sharp(join(screensDir, `${stem}.avif`)).metadata();
+  if (avif.width !== width || avif.height !== height) {
+    problems.push(
+      `${stem}: webp is ${width}×${height} but avif is ${avif.width}×${avif.height} — ` +
+        'one of them was written by something other than `screens:compose`',
+    );
+  }
+
+  // `@2x` must be exactly double, or `next/image`'s srcset picks a frame that
+  // does not fit the box reserved from the 1× numbers.
+  const retina = await sharp(join(screensDir, `${stem}@2x.webp`)).metadata();
+  if (retina.width !== width * 2 || retina.height !== height * 2) {
+    problems.push(
+      `${stem}: @2x is ${retina.width}×${retina.height}, expected ${width * 2}×${height * 2}`,
+    );
+  }
+
+  dimensions[stem] = { width, height };
+}
+
+if (problems.length > 0) {
+  process.stderr.write(
+    `screen dimensions: ${problems.length} problem(s) — run \`npm run screens:refresh\`:\n\n` +
+      problems.map((problem) => `  ${problem}\n`).join('') +
+      '\n',
+  );
+  process.exit(1);
+}
+
+const entries = Object.entries(dimensions)
+  .map(([stem, { width, height }]) => `  '${stem}': { width: ${width}, height: ${height} },`)
+  .join('\n');
+
+const payload = `/**
+ * GENERATED by \`scripts/screen-dimensions.mjs\` from the committed 1x WebPs.
+ * Do not edit by hand — \`npm run screens:refresh\` overwrites it.
+ *
+ * Committed on purpose: pages need explicit width/height to reserve an image's box
+ * before its bytes arrive, and the plate height is **not** a constant — 416x777 and
+ * 416x776 both occur among the phone frames, and there are eight distinct sizes in
+ * all. See \`plateSize()\` in \`./screens\`.
+ */
+
+export interface PlateSize {
+  readonly width: number;
+  readonly height: number;
+}
+
+/** Keyed by \`ScreenEntry.file\` — the output stem, no density and no extension. */
+export const SCREEN_DIMENSIONS: Readonly<Record<string, PlateSize>> = {
+${entries}
+};
+`;
+
+const next = payload;
+const previous = await readFile(outputFile, 'utf8').catch(() => null);
+
+await writeFile(outputFile, next);
+
+process.stdout.write(
+  `screens: ${Object.keys(dimensions).length} plate dimensions recorded` +
+    `${previous === next ? ' (unchanged)' : ''}.\n`,
+);

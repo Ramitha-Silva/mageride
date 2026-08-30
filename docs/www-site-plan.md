@@ -599,10 +599,56 @@ content; 44×44 touch targets; no keyboard trap in the lightbox; reduced motion 
 ### A34 · Performance budget
 
 Target **LCP < 2.0s on a 3G-throttled mid-range Android**, because that is the actual Sri Lankan
-median device. Budget: JS ≤ 90 KB gzipped on `/`, CSS ≤ 25 KB, hero image ≤ 120 KB AVIF, and zero
-render-blocking third-party requests (there are none — no analytics, no CDN fonts, no map on this
-surface). Enforced by `scripts/check-bundle.mjs` at build, the same pattern as
-`portals/web-passenger/scripts/check-bundle.mjs`.
+median device.
+
+| Budget | Limit | Measured 2026-08-30 |
+|---|---|---|
+| **First-party JS on `/`** | **≤ 90 KB gzipped** | 113.7 KB — **over by 23.7 KB** |
+| **Framework floor** | *reported, not budgeted* | 163.4 KB gzipped |
+| **Total JS a browser downloads for `/`** | **≤ 300 KB gzipped** | 277.1 KB |
+| CSS on `/` | ≤ 25 KB gzipped | 9.8 KB |
+| Hero image | ≤ 120 KB AVIF | 36 KB (largest hero plate, 2×) |
+| Render-blocking third-party requests | 0 | 0 |
+
+**The JS budget is two numbers because one number could not be met by any build of this surface,
+and the shortfall is not ours** (MCS-36, raised from C134 · S19/S20). This was a single
+`JS ≤ 90 KB gzipped on /`. Measured against the C134 build, before one line of the site's own code
+loads: `react-dom` 69.8 KB gzipped, Next's app-router client 42.5 KB, React and the scheduler
+32.9 KB, the Turbopack runtime and bootstrap 18.2 KB. **An empty App Router page breaches 90 KB by
+73 KB.** 90 is a good figure for a hand-written page and a familiar one from guidance written
+before the App Router; it reads as carried over rather than measured against this stack.
+
+So the number itself is unchanged and is applied to **the bytes this surface controls**, which is
+the half a session can actually regress. Three properties that shape does and a single figure does
+not: it cannot be gamed by moving code into a vendor chunk (the classifier keys off this surface's
+own string literals, which minification preserves and vendor code cannot contain); it still fails
+on our regressions, which is what a budget is for; and a framework upgrade that adds 20 KB surfaces
+as a **changed floor**, reviewed once, rather than as a mysteriously smaller allowance. The
+300 KB total is the ceiling that stops the split being used to hide growth.
+
+**The framework floor is a measurement, not a constant, and it belongs to a dependency set.**
+163.4 KB gzipped, measured 2026-08-30 against **Next 16.3.0 · React 19.2.8 · react-dom 19.2.8**,
+built with Turbopack. It moves when one of those moves and at no other time. Re-measure it on a
+framework upgrade and record the new value here with its date; a floor carried forward without one
+is the number this section exists to stop anybody trusting.
+
+Two measurement rules, because they are the difference between a real figure and a comfortable one.
+**Gzip**, which is what a CDN serves and roughly a third of the raw byte totals a bundler reports.
+And the **`noModule` polyfill chunk is excluded** — 38.6 KB that no browser built this decade
+fetches; counting it would inflate every figure here by a third for bytes nobody receives.
+
+Enforced per page against the prerendered HTML — literally what a browser is handed — by
+`portals/www/scripts/check-budget.mjs` (`npm run budget`), which runs in CI's portal leg beside
+`lint` and `build`. **Deliberately not inside `npm run build`**: `infra/docker/Dockerfile.portal`
+runs that, so a budget wired into it stopped the container image, S22's smoke tests, and — through
+`pretest` — all eight portal workspaces' test suites. A performance finding should fail a *merge*,
+not an *artefact*. `scripts/check-bundle.mjs` keeps the AL-52 fences and the screen-size budget,
+which are artefact integrity and must block an image.
+
+**The first-party row is red, and the rule is that it stays red until the bytes go.** ~91 KB of the
+113.7 is the si + en resource tables, in the browser because eleven client components take a
+`locale` and construct a translator. **MCS-36 D3** is the open decision that removes them. Do not
+raise a threshold to make a build pass.
 
 ### A35 · Dark mode
 

@@ -263,6 +263,179 @@ case "$s3_code" in
 esac
 
 # =====================================================================================
+step "9. the public informational site (MCS-34 / C134) answers through the edge"
+# =====================================================================================
+# `--profile portals` is optional in this stack, so every check below skips rather than fails
+# when the container is not up. A replica brought up without the portals profile is a valid
+# deployment and must not report red for a container nobody asked for.
+
+# curl through the edge with an arbitrary vhost. The base CURL array bakes in the default
+# Host header; this rebuilds it rather than string-substituting, which is what §8 does and
+# which breaks the moment a host name contains a regex-ish character.
+curl_host() {
+  local host="$1"; shift
+  curl -sS -k --max-time 20 -H "Host: ${host}" "$@" 2>/dev/null || true
+}
+
+WWW_HOST="www.${HOSTHDR}"
+
+if ! docker compose -f "$COMPOSE" ps --services --filter status=running 2>/dev/null | grep -qx "www-site"; then
+  skip_ "www-site is not running (optional, \`--profile portals\`) — 6 checks skipped"
+else
+  # --- 9.1 the rendered locales -------------------------------------------------------
+  # Read from the source rather than listed here: `WWW_LOCALES` in portals/www/src/i18n is the
+  # one constant that decides which locales publish, and MCS-34 D2 defers Tamil. A hard-coded
+  # `si en ta` here would go red the day somebody re-enabled Tamil correctly.
+  www_locales=$(grep -oE "^const WWW_PUBLISHED_MESSAGES = \{|^  (si|ta|en): www(Si|Ta|En)," \
+                  portals/www/src/i18n/index.ts | grep -oE "^  (si|ta|en):" | tr -d ' :' | tr '\n' ' ')
+  www_locales="${www_locales:-si en}"
+
+  for loc in $www_locales; do
+    code=$(curl_host "$WWW_HOST" -o /dev/null -w '%{http_code}' "${EDGE}/${loc}")
+    if [ "$code" = "200" ]; then
+      ok "/${loc} answered 200 through the edge"
+    else
+      bad "/${loc} answered ${code}; the site's own locale is not serving"
+    fi
+  done
+
+  # `/` is the one dynamic response on the whole surface — it reads Accept-Language and
+  # redirects. This is also the container's Kubernetes probe path (S21), so a non-3xx here is
+  # a pod that would never become ready.
+  root_code=$(curl_host "$WWW_HOST" -o /dev/null -w '%{http_code}' "${EDGE}/")
+  case "$root_code" in
+    30[1278]) ok "/ negotiated a locale and redirected (${root_code}) — the k8s probe path" ;;
+    *) bad "/ answered ${root_code}; k8s readiness probes this path and accepts only 2xx-3xx" ;;
+  esac
+
+  # --- 9.2 the sitemap lists every route in the table ---------------------------------
+  # The route table and the chapter slug list are the two sources `app/sitemap.ts` reads, and
+  # they are read here the same way — so this asserts the DEPLOYED sitemap agrees with the
+  # source in the tree, which is the deployment question. That the generator covers 100% of the
+  # table is `portals/www/test/seo.test.ts`'s job and is a different claim.
+  sitemap=$(curl_host "$WWW_HOST" "${EDGE}/sitemap.xml")
+
+  if printf '%s' "$sitemap" | python3 -c "import sys,xml.etree.ElementTree as E; E.fromstring(sys.stdin.read())" 2>/dev/null; then
+    ok "/sitemap.xml is well-formed XML"
+
+    missing=""
+    routes=$(grep -oE "path: '[^']*'" portals/www/src/lib/routes.ts | sed "s/path: '//;s/'//")
+    slugs=$(grep -oE "^ +'[a-z0-9-]+',$" portals/www/src/content/chapters.ts | tr -d " ',")
+    for loc in $www_locales; do
+      for r in $routes; do
+        printf '%s' "$sitemap" | grep -q "<loc>https://www.mageride.lk/${loc}${r:+/$r}</loc>" \
+          || missing="${missing} /${loc}/${r}"
+      done
+    done
+    # One chapter under each audience rather than all 34 x N: the slug list is the same source
+    # the sitemap reads, so a spot check catches a broken join and a full sweep only catches it
+    # 68 more times at the cost of a slow smoke run.
+    for loc in $www_locales; do
+      first_slug=$(printf '%s\n' "$slugs" | head -1)
+      printf '%s' "$sitemap" | grep -qE "<loc>https://www\.mageride\.lk/${loc}/guide/(passenger|driver)/${first_slug}</loc>" \
+        || missing="${missing} /${loc}/guide/*/${first_slug}"
+    done
+
+    locs=$(printf '%s' "$sitemap" | grep -c '<loc>' || true)
+    if [ -z "$missing" ]; then
+      ok "the sitemap carries every route in the table, in every rendered locale (${locs} URLs)"
+    else
+      bad "the sitemap is missing:${missing}"
+    fi
+
+    # Nothing may be advertised for a locale that does not render (MCS-34 D2). A sitemap entry
+    # for /ta is a crawler — and every Tamil reader it then serves — sent to a 404.
+    unpublished=""
+    for loc in si ta en; do
+      case " $www_locales " in *" $loc "*) continue ;; esac
+      printf '%s' "$sitemap" | grep -q "mageride.lk/${loc}/" && unpublished="${unpublished} ${loc}"
+    done
+    [ -z "$unpublished" ] \
+      && ok "the sitemap advertises no unpublished locale" \
+      || bad "the sitemap advertises${unpublished}, which does not render"
+  else
+    bad "/sitemap.xml did not parse as XML"
+  fi
+
+  # --- 9.3 a guide chapter carries its HowTo block ------------------------------------
+  # A FIXED chapter, not a random one: a flaky smoke check gets ignored, and this slug is in
+  # `chapters.ts`'s published contract, so renaming it is a deliberate act that should also
+  # update this line.
+  chapter_body=$(curl_host "$WWW_HOST" "${EDGE}/en/guide/driver/the-daily-platform-fee")
+  if printf '%s' "$chapter_body" | grep -q '"@type":"HowTo"'; then
+    ok "a guide chapter serves its HowTo JSON-LD (S19) through the edge"
+  else
+    bad "a guide chapter served no HowTo block; structured data is not reaching a crawler"
+  fi
+
+  # =====================================================================================
+  step "10. the apex 301, and the three hosts it must not catch"
+  # =====================================================================================
+  # The replica's default vhost IS `${HOSTHDR}` and routes to `api_gateway`, so an apex rule
+  # matched loosely would 301 every API check in this file to the marketing site. Both halves
+  # are asserted for that reason — the redirect firing is half the requirement.
+  apex_loc=$(curl_host "mageride.lk" -o /dev/null -w '%{redirect_url}' "${EDGE}/drivers")
+  apex_code=$(curl_host "mageride.lk" -o /dev/null -w '%{http_code}' "${EDGE}/drivers")
+
+  if [ "$apex_code" = "301" ] && [ "$apex_loc" = "https://www.mageride.lk/drivers" ]; then
+    ok "the apex 301s to www and preserves the path (${apex_loc})"
+  else
+    bad "the apex answered ${apex_code} -> '${apex_loc}'; expected 301 -> https://www.mageride.lk/drivers"
+  fi
+
+  caught=""
+  for h in "admin.${HOSTHDR}" "fleet.${HOSTHDR}" "${WWW_HOST}" "${HOSTHDR}"; do
+    c=$(curl_host "$h" -o /dev/null -w '%{http_code}' "${EDGE}/")
+    [ "$c" = "301" ] && caught="${caught} ${h}"
+  done
+  [ -z "$caught" ] \
+    && ok "the apex rule catches neither the portals, nor www., nor the default API vhost" \
+    || bad "the apex redirect also caught:${caught} — it would 301 those hosts to the marketing site"
+
+  # =====================================================================================
+  step "11. the site is up while the platform is down (MCS-34's load-bearing negative)"
+  # =====================================================================================
+  # **The most valuable check in this file**, and the only one that proves C134's second fence
+  # at the DEPLOYMENT level rather than in a unit test: no `depends_on`, no gateway variable,
+  # no request at render time — so stopping the platform must change nothing a reader sees.
+  #
+  # `app-services` is Container 7: the YARP gateway and all 22 domain services in one process.
+  # Stopping it is stopping the platform as far as every other container is concerned.
+  if ! docker compose -f "$COMPOSE" ps --services --filter status=running 2>/dev/null | grep -qx "app-services"; then
+    skip_ "app-services is not running, so 'up while the platform is down' proves nothing here"
+  else
+    restore_app_services() {
+      docker compose -f "$COMPOSE" start app-services >/dev/null 2>&1 || true
+    }
+    # Armed BEFORE the fault, so an interrupt or a failing assertion still restores the stack.
+    trap restore_app_services EXIT INT TERM
+
+    if docker compose -f "$COMPOSE" stop app-services >/dev/null 2>&1; then
+      down_code=$(curl_host "$WWW_HOST" -o /dev/null -w '%{http_code}' "${EDGE}/en")
+      api_code=$(code_of /v1/health 2>/dev/null || echo "000")
+
+      if [ "$down_code" = "200" ]; then
+        ok "the site answered 200 with app-services stopped (the platform was ${api_code:-down})"
+      else
+        bad "the site answered ${down_code} with app-services stopped; it has acquired a dependency"
+      fi
+
+      restore_app_services
+      trap - EXIT INT TERM
+      # Give the gateway a moment back, so a later run of this script does not start red.
+      for _ in $(seq 1 30); do
+        [ "$(code_of /health/ready 2>/dev/null)" = "200" ] && break
+        sleep 1
+      done
+      ok "app-services restored"
+    else
+      trap - EXIT INT TERM
+      skip_ "could not stop app-services; the platform-down check did not run"
+    fi
+  fi
+fi
+
+# =====================================================================================
 echo
 echo "==============================================================================="
 printf '%d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skip"

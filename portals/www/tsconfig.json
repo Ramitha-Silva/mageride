@@ -1,0 +1,27 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "noEmit": true,
+    "allowJs": true,
+    "incremental": true,
+    "resolveJsonModule": true,
+    // `src/content/screen-dimensions.ts` is generated and imported with its
+    // extension, because three toolchains read `src/content/screens.ts`: Next's
+    // bundler, `tsc`, and **raw Node ESM** (`scripts/check-bundle.mjs` and
+    // `scripts/check-i18n-parity.mjs` import the modules directly, so a check
+    // cannot drift from what the app loads). Node's type-stripping resolves a
+    // value import literally and will not infer `.ts`; every other sibling import
+    // in that directory is type-only and therefore erased before Node sees it.
+    "allowImportingTsExtensions": true,
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "plugins": [{ "name": "next" }]
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules", ".next", "out"]
+}

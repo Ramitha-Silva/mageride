@@ -127,6 +127,22 @@ a second genuine emergency twenty minutes later is not a replay of the first.
   error; the lint rule stops a literal reaching JSX.
 - **A client component takes a `locale`, not label props.** React cannot serialise a function across
   the boundary, and thirty strings is not a prop list.
+
+  **`portals/www` amended this rule for itself in 2026-08-30 (MCS-36 D3) and it still holds here.
+  The difference is measured, not stylistic.** Building a translator in a client component pulls the
+  resource tables into the bundle, so the rule's cost is the size of the tables — and the two
+  surfaces are not close:
+
+  | | keys | tables in the bundle, gzipped |
+  |---|---|---|
+  | `web-passenger` | 137 | **8.6 kB** — all *three* locales |
+  | `www` | 844 | **88 kB** — two locales, three-quarters of it guide prose |
+
+  This surface is six no-login tracking pages with no long-form content; 8.6 kB for a translator
+  that always works is a good trade, and A34's byte budget does not apply here anyway. `www` grew a
+  34-chapter guide corpus after the rule was written, and every word of it was landing in the bundle
+  of a reader looking at the privacy page. **Do not "align" the two without measuring: the rule is
+  right here and was wrong there for a reason that is about content, not architecture.**
 - **`sm:` is 375px, `md:` 768px, `lg:` 1024px.** Mobile-first: the base styles *are* the phone.
   `test/fences.test.ts` fails on any fixed width above 375px and on `w-screen`.
 - **The map is `LazyTrackMap`, never `TrackMap` directly.** MapLibre is larger than the rest of the

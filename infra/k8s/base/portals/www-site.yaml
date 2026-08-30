@@ -1,0 +1,163 @@
+# GENERATED FILE — do not edit.
+# Source: infra/k8s/service-catalog.yaml
+# Regenerate: python3 infra/k8s/tools/generate_manifests.py
+#
+# www-site  ·  portals/www  ·  infra/docker/Dockerfile.portal  ·  www.mageride.lk
+#
+# MCS-34. The public informational site — the platform's fifth surface. Static content
+# only: no API dependency at request time, so it stays up when the platform does not.
+# Lower memory than the three portals because it holds no session, opens no upstream
+# connection and renders no map. D7' §2.1 lists it as OPTIONAL and that is not a hedge —
+# it is the first container evicted from a constrained box, because it is the only one
+# whose absence costs no platform function.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: www-site
+  labels:
+    app: www-site
+    app.kubernetes.io/name: www-site
+    app.kubernetes.io/component: portal
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  progressDeadlineSeconds: 600
+  minReadySeconds: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels: { app: www-site }
+  template:
+    metadata:
+      labels:
+        app: www-site
+        app.kubernetes.io/name: www-site
+        app.kubernetes.io/component: portal
+        app.kubernetes.io/part-of: mageride
+    spec:
+      serviceAccountName: mageride
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: www-site }
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: www-site }
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: www-site
+          image: ghcr.io/ramitha-silva/www-site:sha-0000000
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 3004, protocol: TCP }
+          # NO envFrom, and the absence is the point (MCS-34, `reads_config: false`).
+          # This surface has no API dependency at request time — it renders with the whole
+          # platform down — so it is given no gateway address to read. Mounting
+          # `portal-config` would put MAGERIDE_API_BASE_URL in the one pod whose promise is
+          # that it has no upstream. Its own fences refuse to read any environment variable,
+          # and the Dockerfile already sets NODE_ENV, TZ and the telemetry flag.
+          resources:
+            requests: { cpu: "100m", memory: 192Mi }
+            limits: { cpu: "500m", memory: 384Mi }
+          # The Dockerfile's own healthcheck, as a probe. `/` is the one dynamic response
+          # this surface serves: it reads Accept-Language and answers **307** to the
+          # negotiated locale. The kubelet sends no Accept-Language, so a probe gets the
+          # platform default — and any 2xx-3xx counts as success, so the redirect satisfies
+          # the probe. Verified against the running container rather than assumed (S21).
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            # Next.js writes its image-optimisation cache under .next/cache at runtime.
+            - { name: next-cache, mountPath: /app/portals/www/.next/cache }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+        - { name: next-cache, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: www-site
+  labels:
+    app: www-site
+    app.kubernetes.io/name: www-site
+    app.kubernetes.io/component: service
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  type: ClusterIP
+  selector: { app: www-site }
+  ports:
+    - { name: http, port: 80, targetPort: http, protocol: TCP }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: www-site
+  labels:
+    app: www-site
+    app.kubernetes.io/name: www-site
+    app.kubernetes.io/component: autoscaling
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: www-site }
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }
+  behavior:
+    # Scale up fast, down slowly. A dispatch round that lost a pod mid-offer is a
+    # rider watching a spinner; a pod that lived five minutes too long is pennies.
+    scaleUp: { stabilizationWindowSeconds: 30 }
+    scaleDown: { stabilizationWindowSeconds: 300 }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: www-site
+  labels:
+    app: www-site
+    app.kubernetes.io/name: www-site
+    app.kubernetes.io/component: policy
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: { app: www-site }

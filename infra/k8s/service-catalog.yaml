@@ -492,6 +492,30 @@ portals:
       AL-44's six no-login SCR-WT pages, served in front of public-bff. Port 3003 is a
       choice, not a spec value: D7' §2.1's table predates AL-44 and lists only 3001/3002.
 
+  - name: www-site
+    portal: www
+    port: 3004
+    host: www.mageride.lk
+    # The only portal that mounts no ConfigMap. MCS-34's fourth negative is that this
+    # surface has NO API dependency at request time, so it is given no gateway address to
+    # read — `portal-config` carries MAGERIDE_API_BASE_URL, and handing that to the one pod
+    # whose promise is that it has no upstream is the first step to breaking the promise.
+    # Its own fences refuse to read any environment variable at all; the Dockerfile already
+    # sets NODE_ENV, TZ and the telemetry flag. See `portal_env` in the generator.
+    reads_config: false
+    replicas: 2
+    autoscale: { min: 2, max: 6 }
+    resources:
+      requests: { cpu: 100m, memory: 192Mi }
+      limits: { cpu: 500m, memory: 384Mi }
+    why: >-
+      MCS-34. The public informational site — the platform's fifth surface. Static content
+      only: no API dependency at request time, so it stays up when the platform does not.
+      Lower memory than the three portals because it holds no session, opens no upstream
+      connection and renders no map. D7' §2.1 lists it as OPTIONAL and that is not a hedge —
+      it is the first container evicted from a constrained box, because it is the only one
+      whose absence costs no platform function.
+
 # --- The one-shot migration runner (D7' §3, gated pre-deploy per D7' §7) -----------
 # Not a service: a Job. Its image is built by the same pipeline and promoted by the same
 # SHA, because a migration that does not match the code it is gating is not a gate.

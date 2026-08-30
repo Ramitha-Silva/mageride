@@ -537,6 +537,23 @@ jobs:
           npm --prefix portals run lint
           npm --prefix portals run build
 
+          # C134's A34 byte budget (S19), split out of `build` in S21 so a performance
+          # finding stops a MERGE rather than an ARTEFACT — `Dockerfile.portal` runs
+          # `npm run build`, so leaving it there meant the marketing site could not produce
+          # a deployable image, and `pretest: npm run build` meant it aborted all eight
+          # workspaces' test suites. It is still enforced, still on this leg, and the
+          # numbers are unchanged. Only @mageride/www has this script.
+          #
+          # GREEN, and it was red for two sessions before it was. A34's 90 kB is below the
+          # App Router's own 163 kB floor, so the number is applied to the bytes this
+          # surface controls and a 300 kB total ceiling stops the split hiding growth;
+          # see build/prompts/MCS-36-a34-js-budget-below-the-framework-floor.md. **D3 is
+          # what made it pass, and it passed by shipping fewer bytes rather than by moving
+          # a threshold** — fourteen client components stopped building a translator and
+          # took resolved strings instead, which took first-party JS on `/` from 113.7 kB
+          # to 18.6 kB. Do not close a future overage by raising the number.
+          npm --prefix portals run budget --workspace @mageride/www
+
   # ===================================================================================
   # C007 — the OpenAPI contracts are the source of truth for 262 operations and for the
   # gateway route table, so they are linted on their own rather than inside a matrix leg.

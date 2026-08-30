@@ -2,7 +2,7 @@
 # Source: infra/k8s/service-catalog.yaml
 # Regenerate: python3 infra/k8s/tools/generate_manifests.py
 #
-# dev: the promoted image tag for all 34 images (D7' §7 —
+# dev: the promoted image tag for all 35 images (D7' §7 —
 # "dev->staging->prod promotion by image SHA tag").
 #
 # Every image carries the SAME tag, because a deploy is one commit's worth of
@@ -84,5 +84,7 @@ images:
     newTag: sha-05e81e7
   - name: ghcr.io/ramitha-silva/web-passenger
     newTag: sha-05e81e7
+  - name: ghcr.io/ramitha-silva/www-site
+    newTag: sha-0000000
   - name: ghcr.io/ramitha-silva/migrate
     newTag: sha-05e81e7
