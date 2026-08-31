@@ -444,9 +444,26 @@ public sealed class ModeBSubscriptionPaymentScenario(
 
             Assert.True(dueAfter > dueBefore, "The settled month rolls the cycle on once.");
 
-            Assert.Equal(
-                dueBefore!.Value.AddMonths(1),
-                dueAfter!.Value);
+            // ONE cycle and not two — which is what "exactly once" means for the two deliveries
+            // above — asserted as a period LENGTH rather than as a date.
+            //
+            // This was `Assert.Equal(dueBefore.Value.AddMonths(1), dueAfter.Value)`, and adding a
+            // month to the previous due date is not the rule the platform implements.
+            // `SubscriptionCycles.Advance` re-derives the anniversary from `join_day` every time,
+            // deliberately: a subscriber who joined on the 31st has no anniversary in February, and
+            // advancing from the clamped 28th would pin them to the 28th for ever. The two readings
+            // agree on most days and diverge whenever the join day is the 28th, 29th or 30th —
+            // **13 days of a year**. This scenario subscribes at "now", so it was a test that failed
+            // on those 13 and passed on the other 352, which is how it came to block an unrelated
+            // merge on 30 August 2026 having last run green on the 27th.
+            //
+            // The arithmetic is not this test's to check, and is already covered against PINNED
+            // dates — February and the 31st-joiner included — by
+            // `Subscription.Api.Tests/Unit/SubscriptionCycleTests.cs`. What is genuinely
+            // end-to-end here is that the webhook path applied that rule ONCE across two deliveries
+            // of the same callback. One cycle spans 28-31 days and two would span 56-62, so the two
+            // ranges cannot be confused and the bound needs no date in order to be true.
+            Assert.InRange(dueAfter!.Value.DayNumber - dueBefore!.Value.DayNumber, 28, 31);
 
             // Unsigned credits nothing here either: the money it would falsely settle is the fleet
             // owner's, which is why there is no accept-unsigned mode on this rail.
