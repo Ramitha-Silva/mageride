@@ -321,19 +321,45 @@ else
     missing=""
     routes=$(grep -oE "path: '[^']*'" portals/www/src/lib/routes.ts | sed "s/path: '//;s/'//")
     slugs=$(grep -oE "^ +'[a-z0-9-]+',$" portals/www/src/content/chapters.ts | tr -d " ',")
+
+    # MATCHED IN THE SHELL, not through `printf ... | grep -q`, and the difference is not
+    # style — the pipeline version reports URLs missing that are demonstrably present.
+    #
+    # `grep -q` exits the instant it matches. That closes the pipe while `printf` is still
+    # writing the 46 kB sitemap, `printf` takes SIGPIPE, and **`set -o pipefail` (line 25)
+    # makes the pipeline's status 141**. The `||` then records a route as missing because
+    # the grep succeeded too early. It is a race, so it fires on a different arbitrary
+    # subset every run and never on a quiet shell: 300 iterations in isolation passed, and
+    # inside the full suite it failed 4 runs out of 4, on `/si/drivers`, then
+    # `/si/guide /si/contact /en/fleets /en/contact`, then `/si/legal/terms`, then
+    # `/si/vision /si/drivers /si/legal/pdpa`. Instrumenting it settled the question: at the
+    # moment of failure the variable held 106 `<loc>` entries and `grep -c` found every one
+    # of the "missing" URLs exactly once.
+    #
+    # A shell `case` needs no subprocess and no pipe, so there is nothing to race. It is
+    # also ~50x faster over 26 lookups, which matters on a box this loaded.
     for loc in $www_locales; do
       for r in $routes; do
-        printf '%s' "$sitemap" | grep -q "<loc>https://www.mageride.lk/${loc}${r:+/$r}</loc>" \
-          || missing="${missing} /${loc}/${r}"
+        case "$sitemap" in
+          *"<loc>https://www.mageride.lk/${loc}${r:+/$r}</loc>"*) ;;
+          *) missing="${missing} /${loc}/${r}" ;;
+        esac
       done
     done
-    # One chapter under each audience rather than all 34 x N: the slug list is the same source
+    # One chapter under each audience rather than all 40 x N: the slug list is the same source
     # the sitemap reads, so a spot check catches a broken join and a full sweep only catches it
-    # 68 more times at the cost of a slow smoke run.
+    # 78 more times at the cost of a slow smoke run.
+    #
+    # Two `case` arms rather than a regex alternation, for the same no-pipe reason. The two
+    # app guides share `install-and-first-run` as their first slug, so either arm matching is
+    # the join working.
     for loc in $www_locales; do
       first_slug=$(printf '%s\n' "$slugs" | head -1)
-      printf '%s' "$sitemap" | grep -qE "<loc>https://www\.mageride\.lk/${loc}/guide/(passenger|driver)/${first_slug}</loc>" \
-        || missing="${missing} /${loc}/guide/*/${first_slug}"
+      case "$sitemap" in
+        *"<loc>https://www.mageride.lk/${loc}/guide/passenger/${first_slug}</loc>"*) ;;
+        *"<loc>https://www.mageride.lk/${loc}/guide/driver/${first_slug}</loc>"*) ;;
+        *) missing="${missing} /${loc}/guide/*/${first_slug}" ;;
+      esac
     done
 
     locs=$(printf '%s' "$sitemap" | grep -c '<loc>' || true)

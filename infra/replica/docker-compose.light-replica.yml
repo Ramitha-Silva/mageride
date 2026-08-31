@@ -723,6 +723,36 @@ services:
     deploy:
       resources:
         limits: { memory: 384M, cpus: "0.25" }
+    #
+    # A LONGER GRACE THAN THE OTHER TWO PORTALS, and it is the direct cost of having no
+    # `depends_on` above.
+    #
+    # `Dockerfile.portal` gives all three portals one probe — spawn node, `fetch` the
+    # root — with `start_period: 20s`, `timeout: 5s`, 3 retries. That is comfortable for
+    # `admin-portal` and `fleet-portal`, which wait on `app-services: service_healthy` and
+    # therefore start LAST, on a box that has already finished the expensive part of the
+    # deploy.
+    #
+    # This one waits for nothing, so compose starts it in the FIRST wave — alongside
+    # postgres, redpanda, emqx, minio and app-services' 22 services all booting at once,
+    # which is the single most contended moment on a 24 GB box. Spawning a Node runtime
+    # and completing an HTTP round trip inside 5 seconds is not reliable there. Measured on
+    # sha-dad08b4: four consecutive `Health check exceeded timeout (5s)`, the container
+    # marked unhealthy about a minute in, and `up --wait` aborting the whole deploy the
+    # moment it saw that — while the site itself was fine and answered normally ~40s later.
+    #
+    # So the grace is widened rather than the probe cheapened, because the probe is shared
+    # and correct: 90s of start_period absorbs a saturated first wave without counting a
+    # failure, and 10s of timeout absorbs a Node start under load. Nothing else changes —
+    # once warm this container answers in milliseconds, and a real failure still trips
+    # three retries at 15s.
+    #
+    # **Do not fix this by giving www-site a `depends_on`.** Starting it after the platform
+    # would contradict the negative it exists to demonstrate, which `smoke.sh` §11 asserts
+    # by stopping app-services and requiring the site to keep answering 200.
+    healthcheck:
+      start_period: 90s
+      timeout: 10s
     networks: [internal]
 
   # ===================================================================================
