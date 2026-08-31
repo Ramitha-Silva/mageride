@@ -223,8 +223,16 @@ bold "4b/6  reload the edge"
 docker compose -f "$COMPOSE" exec -T haproxy haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg \
   || die "haproxy.replica.cfg is not valid — the edge was left running its previous config"
 
-docker compose -f "$COMPOSE" "${profile_args[@]}" up -d --no-build --force-recreate --no-deps haproxy \
-  || die "haproxy would not come back after its config was reloaded"
+# `--wait`, and it is not optional here. Without it this returns the moment the container
+# is STARTED, and step 6's smoke runs while haproxy is still inside its healthcheck
+# start_period — where `docker compose ps` reports it as `starting`, which the smoke's own
+# container-health check counts as not healthy. Observed on sha-570db71: every other check
+# passed, including all seven of the site's, and the run still failed on
+# `not healthy: haproxy(starting)` — a deploy reported broken because this step had just
+# done its job a second earlier.
+docker compose -f "$COMPOSE" "${profile_args[@]}" up -d --no-build --force-recreate --no-deps \
+  --wait --wait-timeout 120 haproxy \
+  || die "haproxy would not come back healthy after its config was reloaded"
 ok "the edge is running the routing table from this commit"
 
 # -------------------------------------------------------------------------------------
