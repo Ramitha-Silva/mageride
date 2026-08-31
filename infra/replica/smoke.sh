@@ -462,6 +462,67 @@ else
 fi
 
 # =====================================================================================
+step "12. the certificate actually covers the names the edge answers on"
+# =====================================================================================
+# EVERY OTHER CHECK IN THIS FILE USES `curl -k`, and that is correct for them: the box
+# answers on 127.0.0.1 with a Host header, so the name in the URL is never the name being
+# tested and validation would fail on all of them for a reason that is not a finding.
+#
+# The cost of that is what this step exists to pay. On 2026-08-31 this suite reported
+# **35 passed, 0 failed** while `https://www.mageride.lk` was unreachable in a browser:
+# C134 added the `www.` vhost and the apex 301 to HAProxy, both of which routed perfectly,
+# but the Let's Encrypt certificate was still the five-name one issued before the site
+# existed. A browser got a hostname mismatch and never reached the routing that every
+# other check had just proved correct. `-k` is precisely what hid it.
+#
+# So this asserts the one property `-k` throws away, and it is deliberately about the
+# CERTIFICATE rather than about connectivity: open a real TLS session per vhost with SNI,
+# read the presented certificate, and check the name is in the SAN list. No HTTP request,
+# no dependency on what the backend answers, and it runs against 127.0.0.1 like everything
+# else — so it works on a box whose DNS does not resolve its own public names yet.
+#
+# It is last because it is the only check whose failure means "the routing is fine and
+# nobody can reach it", which reads better after the routing has been shown to be fine.
+if ! command -v openssl >/dev/null 2>&1; then
+  skip_ "openssl is not installed — the certificate SAN check did not run"
+else
+  # The apex and www come from C134; the others predate it. `mqtt.` is on the same
+  # certificate but is served on 8883 by a different frontend, so it is not listed here.
+  #
+  # **A name with no DNS record is skipped rather than failed**, and `s3.` is why the
+  # distinction had to be drawn: HAProxy routes it (step 8 proves that) but it resolves
+  # nowhere, so it is reachable only by sending a Host header to this box. Let's Encrypt
+  # cannot issue for it either — HTTP-01 has no address to validate against. Asserting a
+  # SAN for a name no browser can look up would be demanding a certificate that cannot
+  # exist, and since `pull-deploy.sh` dies on a smoke failure it would block every deploy.
+  #
+  # The skip is not a permanent exemption: the moment somebody publishes an A record for
+  # `s3.`, it stops being skipped and starts being checked, with no edit here.
+  for name in "mageride.lk" "www.${HOSTHDR#*.}" "admin.${HOSTHDR#*.}" "fleet.${HOSTHDR#*.}" "s3.${HOSTHDR#*.}" "$HOSTHDR"; do
+    if ! getent hosts "$name" >/dev/null 2>&1; then
+      skip_ "${name} publishes no DNS record — Host-header-only vhost, no certificate is possible"
+      continue
+    fi
+
+    sans=$(echo | openssl s_client -connect "127.0.0.1:${EDGE_PORT}" -servername "$name" 2>/dev/null \
+             | openssl x509 -noout -ext subjectAltName 2>/dev/null | tr -d ' ' | tr ',' '\n' | sed -n 's/^DNS://p')
+
+    if [ -z "$sans" ]; then
+      bad "no certificate was presented for SNI ${name}"
+      continue
+    fi
+
+    # Exact match or a single-label wildcard, which is what a browser accepts.
+    parent="*.${name#*.}"
+    if printf '%s\n' "$sans" | grep -qxF "$name" || printf '%s\n' "$sans" | grep -qxF "$parent"; then
+      ok "the certificate covers ${name}"
+    else
+      bad "the certificate does NOT cover ${name} — a browser will refuse it however well the edge routes. Re-issue with every vhost in the SAN list."
+    fi
+  done
+fi
+
+# =====================================================================================
 echo
 echo "==============================================================================="
 printf '%d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skip"
