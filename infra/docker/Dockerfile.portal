@@ -104,7 +104,36 @@ EXPOSE ${PORT}
 
 # Next.js answers / once the server is listening. No wget in node:alpine, so the check runs
 # in node itself.
-HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+# --- The timeout is 15s because the probe spawns a Node runtime inside a 0.25-CPU cgroup ---
+#
+# It was 5s, and that is not enough for any portal on the replica. Measured on the Contabo
+# box, running this exact command against a warm, idle, correctly-serving container:
+# fleet-portal 6.9s, admin-portal 12.8s, www-site 14.5s. Memory was at 10% of the limit and
+# the containers answered 200 to a direct request throughout.
+#
+# The cause is `cpus: "0.25"` in the replica compose — `NanoCpus=250000000`, a hard quarter
+# of a core. `node -e` is a cold start of a whole JavaScript runtime, and it competes with
+# the server process for that same quarter core. So the probe is expensive precisely where
+# the budget is smallest, and a 5s bound was never reachable rather than occasionally
+# missed: it is structural, not load-dependent flakiness.
+#
+# What it cost, before it was measured: `pull-deploy.sh` runs `up -d --wait`, which aborts
+# the moment any container reports unhealthy. So the deploy failed on whichever portal
+# happened to exhaust its three retries first — www-site on sha-dad08b4, fleet-portal on
+# sha-2296346 — each time reporting a broken deploy for a container that was serving
+# correctly. www-site is the usual first casualty because it has no `depends_on` and starts
+# in the first wave, but nothing about it is special; all three inherit this probe.
+#
+# `start_period` is 90s for the same reason, and it is the half that actually matters: a
+# failure inside it does not count toward the retries, which is what a saturated first wave
+# needs. Once warm these containers answer in milliseconds, and a genuinely dead one still
+# trips three retries at 15s.
+#
+# **Kubernetes ignores this line entirely** — it uses the pod spec's own `readinessProbe`
+# and `livenessProbe`, which are `httpGet` and cost the kubelet one request with no runtime
+# to start. Those stay at 3s. This widening is for the Compose environments only: the
+# replica, and the slim dev stack.
+HEALTHCHECK --interval=15s --timeout=15s --start-period=90s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["/bin/sh", "-c", "exec node portals/$PORTAL/server.js"]
