@@ -85,6 +85,6 @@ images:
   - name: ghcr.io/ramitha-silva/web-passenger
     newTag: sha-05e81e7
   - name: ghcr.io/ramitha-silva/www-site
-    newTag: sha-0000000
+    newTag: sha-05e81e7
   - name: ghcr.io/ramitha-silva/migrate
     newTag: sha-05e81e7
