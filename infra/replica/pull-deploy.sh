@@ -192,6 +192,42 @@ docker compose -f "$COMPOSE" "${profile_args[@]}" up -d --no-build --wait --wait
 ok "every container healthy"
 
 # -------------------------------------------------------------------------------------
+# haproxy re-reads its configuration ONLY because it is recreated here, and it has to be.
+#
+# `up -d` above recreates a service when its *definition* changes — image, env, ports,
+# volumes. haproxy's definition never changes: it is pinned to `haproxy:2.9-alpine` and
+# bind-mounts `haproxy.replica.cfg`. Editing that file changes the bytes the container can
+# SEE and not the configuration the running process has PARSED, which it did once, at
+# start. So compose leaves it alone and the edge keeps serving whatever routing table it
+# was started with.
+#
+# This is not hypothetical. C134 added `www.` and the apex 301 to the config; the deploy
+# pulled and started `www-site` correctly, the container was healthy, and every request
+# for the site 404'd through `default_backend api_gateway` because haproxy had been up for
+# **two weeks** and had never seen the `www_site` backend. Seven smoke checks failed and
+# the container they were about was fine. A config-only change to the edge was, until
+# this block, invisible to continuous delivery.
+#
+# It is unconditional rather than conditional on the file having changed. Detecting the
+# change is the part that does not work: `git checkout` rewrites the file's mtime on every
+# deploy, so an mtime test recreates every time anyway, and a content hash needs state
+# kept somewhere that survives a box rebuild in order to be more accurate than this. The
+# cost of being unconditional is one sub-second restart of a stateless process, inside a
+# deploy that has just recreated every other container on the box.
+#
+# **Validated first, and inside the container**, so a config error fails the deploy while
+# the OLD edge is still serving. `haproxy -c` from a throwaway container cannot do this —
+# the `bind ... ssl crt` line needs the certificates, which live on this box and are
+# mounted into that container and no other.
+bold "4b/6  reload the edge"
+docker compose -f "$COMPOSE" exec -T haproxy haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg \
+  || die "haproxy.replica.cfg is not valid — the edge was left running its previous config"
+
+docker compose -f "$COMPOSE" "${profile_args[@]}" up -d --no-build --force-recreate --no-deps haproxy \
+  || die "haproxy would not come back after its config was reloaded"
+ok "the edge is running the routing table from this commit"
+
+# -------------------------------------------------------------------------------------
 bold "5/6  what actually landed"
 running=$(docker inspect --format '{{.Config.Image}}' mageride-replica-app-services-1 2>/dev/null || echo unknown)
 echo "  app-services image: $running"
